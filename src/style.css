@@ -1,0 +1,80 @@
+/* ===== 全局禁止滚动 ===== */
+html, body, #app {
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* 全局禁止选中文字 */
+* {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  box-sizing: border-box;
+}
+
+/* 允许输入框和按钮选中 */
+input, button, textarea {
+  user-select: auto !important;
+  -webkit-user-select: auto !important;
+}
+
+/* 强制隐藏滚动条 */
+::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+/* 全局滚动条隐藏（Firefox） */
+* {
+  scrollbar-width: none;
+}
+/* ===== 全局禁止滚动 ===== */
+html, body, #app {
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* 全局禁止选中文字 */
+* {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  box-sizing: border-box;
+}
+
+/* 允许输入框和按钮选中 */
+input, button, textarea, select {
+  user-select: auto !important;
+  -webkit-user-select: auto !important;
+}
+
+/* 强制隐藏滚动条 */
+::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+/* 全局滚动条隐藏（Firefox） */
+* {
+  scrollbar-width: none;
+}
+
+/* ===== 深色模式基础样式 ===== */
+:root.dark {
+  color-scheme: dark;
+}
+
+:root.dark body {
+  background: #1a1a2e;
+  color: #eaeaea;
+}

@@ -1,0 +1,116 @@
+import { defineStore } from 'pinia'
+import { ref, watch } from 'vue'
+
+type Theme = 'light' | 'dark' | 'system'
+type CloseAction = 'minimize' | 'exit' | 'ask'
+type NotifyType = 'all' | 'important' | 'none'
+
+export const useSettingsStore = defineStore('settings', () => {
+  // ===== 主题设置 =====
+  const theme = ref<Theme>((localStorage.getItem('theme') as Theme) || 'system')
+  
+  // ===== 消息提醒 =====
+  const notifications = ref<NotifyType>((localStorage.getItem('notifications') as NotifyType) || 'all')
+  const soundEnabled = ref(localStorage.getItem('soundEnabled') !== 'false')
+  
+  // ===== 窗口行为 =====
+  const closeAction = ref<CloseAction>((localStorage.getItem('closeAction') as CloseAction) || 'ask')
+  
+  // ===== 数据设置 =====
+  const autoBackup = ref(localStorage.getItem('autoBackup') === 'true')
+  const backupInterval = ref(Number(localStorage.getItem('backupInterval')) || 7)
+  
+  // ===== 隐私设置 =====
+  const lockOnLeave = ref(localStorage.getItem('lockOnLeave') === 'true')
+  const lockTimeout = ref(Number(localStorage.getItem('lockTimeout')) || 5)
+
+  // 监听变化并保存
+  watch([theme, notifications, soundEnabled, closeAction, autoBackup, backupInterval, lockOnLeave, lockTimeout], () => {
+    localStorage.setItem('theme', theme.value)
+    localStorage.setItem('notifications', notifications.value)
+    localStorage.setItem('soundEnabled', String(soundEnabled.value))
+    localStorage.setItem('closeAction', closeAction.value)
+    localStorage.setItem('autoBackup', String(autoBackup.value))
+    localStorage.setItem('backupInterval', String(backupInterval.value))
+    localStorage.setItem('lockOnLeave', String(lockOnLeave.value))
+    localStorage.setItem('lockTimeout', String(lockTimeout.value))
+  }, { deep: true })
+
+  // 应用主题
+  const applyTheme = (t: Theme) => {
+    const root = document.documentElement
+    const isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    
+    if (isDark) {
+      root.classList.add('dark')
+    } else {
+      root.classList.remove('dark')
+    }
+  }
+
+  // 初始化主题（只调用一次，在 App.vue 的 onMounted 中）
+  let systemListenerAdded = false
+  
+  const initTheme = () => {
+    applyTheme(theme.value)
+    
+    // 只添加一次系统主题监听器，防止重复
+    if (!systemListenerAdded) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (theme.value === 'system') {
+          applyTheme('system')
+        }
+      })
+      systemListenerAdded = true
+    }
+  }
+
+  // 设置主题
+  const setTheme = (t: Theme) => {
+    theme.value = t
+    applyTheme(t)
+  }
+
+  // 设置关闭行为
+  const setCloseAction = (action: CloseAction) => {
+    closeAction.value = action
+  }
+
+  // 设置通知
+  const setNotifications = (type: NotifyType) => {
+    notifications.value = type
+  }
+
+  // 切换声音
+  const toggleSound = () => {
+    soundEnabled.value = !soundEnabled.value
+  }
+
+  // 切换自动备份
+  const toggleAutoBackup = () => {
+    autoBackup.value = !autoBackup.value
+  }
+
+  // 切换离开锁定
+  const toggleLockOnLeave = () => {
+    lockOnLeave.value = !lockOnLeave.value
+  }
+
+  return {
+    theme,
+    notifications,
+    soundEnabled,
+    closeAction,
+    autoBackup,
+    backupInterval,
+    lockOnLeave,
+    lockTimeout,
+    setTheme,
+    initTheme,
+    setCloseAction,
+    setNotifications,
+    toggleSound,
+    toggleAutoBackup,
+    toggleLockOnLeave
+  }
+})
