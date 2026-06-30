@@ -393,7 +393,7 @@ const initSocket = () => {
     socket.value.disconnect()
   }
 
-  const newSocket = io('http://your-server-ip:3001', {
+  const newSocket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001', {
     transports: ['websocket'],
     reconnection: true,
     reconnectionAttempts: 5,
