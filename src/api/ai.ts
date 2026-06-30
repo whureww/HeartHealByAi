@@ -28,7 +28,8 @@ export const chatWithAIStream = (
   const token = localStorage.getItem('token') || ''
   
   // 由于 EventSource 不支持 POST，我们用 fetch + ReadableStream
-  return fetch('http://162.211.183.129:3001/api/ai/chat-stream', {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'
+  return fetch(`${apiBaseUrl}/ai/chat-stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

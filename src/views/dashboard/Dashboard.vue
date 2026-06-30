@@ -514,7 +514,7 @@ const initSocket = () => {
     socket.value.disconnect()
   }
 
-  socket.value = io('http://162.211.183.129:3001', {
+  socket.value = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001', {
     transports: ['websocket'],
     reconnection: true,
     reconnectionAttempts: 5,
