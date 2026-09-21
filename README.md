@@ -17,13 +17,18 @@
 
 ## 技术栈
 
-| 端 | 技术 |
-| --- | --- |
-| 前端 | Vue 3 + TypeScript + Pinia + Vue Router + Vite |
-| 桌面端 | Tauri 2（Windows） |
-| 后端 | Node.js + Express + TypeScript + Socket.IO |
-| 数据库 | MySQL + Redis |
-| AI | DeepSeek API |
+| 层级 | 技术 | 版本 |
+|------|------|------|
+| 桌面框架 | Tauri | 2.x |
+| 前端框架 | Vue | 3.5+ |
+| 语言 | TypeScript | 5.6+ |
+| 构建工具 | Vite | 6.0+ |
+| 后端语言 | Rust | 2021 |
+| 数据库 | SQLite | (rusqlite 0.32) |
+| 状态管理 | Pinia | 3.0+ |
+| 路由 | Vue Router | 4.6+ |
+| 实时通信 | Socket.io | 4.8+ |
+| HTTP请求 | Axios | 1.16+ |
 
 前后端通过 HTTP + Socket.IO 通信。
 
