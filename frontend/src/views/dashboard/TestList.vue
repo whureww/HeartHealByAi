@@ -67,9 +67,6 @@ const loadTests = async () => {
   errorMsg.value = ''
   try {
     const res = await getTestList()
-    console.log('API 返回:', res)
-    console.log('res.data:', res?.data)
-
 
     if (res && res.data) {
       tests.value = res.data

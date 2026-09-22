@@ -106,6 +106,8 @@ fn exit_app(app: tauri::AppHandle) {
 
 fn main() {
     tauri::Builder::default()
+        // 系统通知插件：消息提醒走 Windows 通知中心真实弹窗
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             secure_write,
             secure_read,

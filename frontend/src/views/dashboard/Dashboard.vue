@@ -156,13 +156,14 @@
 
       <!-- 5. 个人中心页面 -->
       <div v-if="currentPage === 'user'" class="page show">
-        <div class="card user-card">
+        <div class="settings-page">
+
           <!-- 用户信息头部 - 可点击编辑 -->
-          <div class="user-info-top" @click="showEditProfile">
+          <div class="settings-profile" @click="showEditProfile">
             <div class="user-avatar">
-              <img 
-                v-if="userStore.userInfo?.avatar" 
-                :src="userStore.userInfo.avatar" 
+              <img
+                v-if="userStore.userInfo?.avatar"
+                :src="userStore.userInfo.avatar"
                 class="avatar-img"
                 alt="头像"
               />
@@ -177,10 +178,10 @@
             <span class="edit-icon"><AppIcon name="edit" :size="16" /></span>
           </div>
 
-
           <!-- 普通用户统计 -->
-          <template v-if="userStore.userInfo?.role === 1">
-            <h3>我的数据统计</h3>
+          <div v-if="userStore.userInfo?.role === 1" class="settings-group">
+            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>我的数据统计</h3></div>
+            <div class="settings-group-body">
             <div v-if="loading.stats" class="loading-text">加载中...</div>
             <div v-else class="user-data-list">
               <div class="data-item">
@@ -200,11 +201,13 @@
                 <div class="text">生成分析报告</div>
               </div>
             </div>
-          </template>
+            </div>
+          </div>
 
           <!-- 专家统计 -->
-          <template v-if="userStore.userInfo?.role === 2">
-            <h3>专家工作台统计</h3>
+          <div v-if="userStore.userInfo?.role === 2" class="settings-group">
+            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>专家工作台统计</h3></div>
+            <div class="settings-group-body">
             <div v-if="loading.stats" class="loading-text">加载中...</div>
             <div v-else class="user-data-list expert-stats">
               <div class="data-item">
@@ -224,11 +227,13 @@
                 <div class="text">累计服务用户</div>
               </div>
             </div>
-          </template>
+            </div>
+          </div>
 
           <!-- 管理员统计 -->
-          <template v-if="userStore.userInfo?.role === 3">
-            <h3>平台数据统计</h3>
+          <div v-if="userStore.userInfo?.role === 3" class="settings-group">
+            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>平台数据统计</h3></div>
+            <div class="settings-group-body">
             <div v-if="loading.stats" class="loading-text">加载中...</div>
             <div v-else class="user-data-list admin-stats">
               <div class="data-item">
@@ -248,11 +253,13 @@
                 <div class="text">测评完成数</div>
               </div>
             </div>
-          </template>
+            </div>
+          </div>
 
           <!-- 外观设置 -->
-          <h3>外观设置</h3>
-          <div class="setting-list">
+          <div class="settings-group">
+            <div class="settings-group-head"><AppIcon name="sun" :size="15" /><h3>外观设置</h3></div>
+            <div class="settings-group-body">
             <div class="setting-item">
               <div class="setting-item-left">
                 <span>外观主题</span>
@@ -272,15 +279,17 @@
                 </div>
               </div>
             </div>
+            </div>
           </div>
 
           <!-- 通知设置 -->
-          <h3>通知设置</h3>
-          <div class="setting-list">
+          <div class="settings-group">
+            <div class="settings-group-head"><AppIcon name="bell" :size="15" /><h3>通知设置</h3></div>
+            <div class="settings-group-body">
             <div class="setting-item">
               <div class="setting-item-left">
                 <span>消息提醒</span>
-                <span class="setting-desc">选择接收通知的类型</span>
+                <span class="setting-desc">新消息将通过系统通知中心弹出提醒</span>
               </div>
               <div class="setting-item-right">
                 <select v-model="settingsStore.notifications" @change="settingsStore.setNotifications(settingsStore.notifications)" class="setting-select">
@@ -301,11 +310,22 @@
                 </div>
               </div>
             </div>
+            <div class="setting-item" @click="sendTestNotification">
+              <div class="setting-item-left">
+                <span>测试系统通知</span>
+                <span class="setting-desc">发送一条 Windows 通知中心弹窗验证效果</span>
+              </div>
+              <div class="setting-item-right">
+                <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
+              </div>
+            </div>
+            </div>
           </div>
 
           <!-- 窗口行为 -->
-          <h3>窗口行为</h3>
-          <div class="setting-list">
+          <div class="settings-group">
+            <div class="settings-group-head"><AppIcon name="monitor" :size="15" /><h3>窗口行为</h3></div>
+            <div class="settings-group-body">
             <div class="setting-item">
               <div class="setting-item-left">
                 <span>关闭窗口时</span>
@@ -319,11 +339,13 @@
                 </select>
               </div>
             </div>
+            </div>
           </div>
 
           <!-- 数据管理 -->
-          <h3>数据管理</h3>
-          <div class="setting-list">
+          <div class="settings-group">
+            <div class="settings-group-head"><AppIcon name="fileText" :size="15" /><h3>数据管理</h3></div>
+            <div class="settings-group-body">
             <div class="setting-item" @click="exportData">
               <div class="setting-item-left">
                 <span>导出完整数据备份</span>
@@ -377,11 +399,13 @@
                 </select>
               </div>
             </div>
+            </div>
           </div>
 
           <!-- 隐私安全 -->
-          <h3>隐私安全</h3>
-          <div class="setting-list">
+          <div class="settings-group">
+            <div class="settings-group-head"><AppIcon name="shield" :size="15" /><h3>隐私安全</h3></div>
+            <div class="settings-group-body">
             <div class="setting-item" @click="settingsStore.toggleLockOnLeave()">
               <div class="setting-item-left">
                 <span>离开自动锁定</span>
@@ -407,11 +431,13 @@
                 </select>
               </div>
             </div>
+            </div>
           </div>
 
           <!-- 账号安全 -->
-          <h3>账号安全</h3>
-          <div class="setting-list">
+          <div class="settings-group">
+            <div class="settings-group-head"><AppIcon name="lock" :size="15" /><h3>账号安全</h3></div>
+            <div class="settings-group-body">
             <div class="setting-item" @click="showChangePassword">
               <div class="setting-item-left">
                 <span>修改密码</span>
@@ -430,16 +456,19 @@
                 <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
               </div>
             </div>
+            </div>
           </div>
 
           <!-- 关于 -->
-          <h3>关于</h3>
-          <div class="setting-list">
+          <div class="settings-group">
+            <div class="settings-group-head"><AppIcon name="info" :size="15" /><h3>关于</h3></div>
+            <div class="settings-group-body">
             <div class="setting-item">
               <div class="setting-item-left">
                 <span>版本信息</span>
                 <span class="setting-desc">心愈 AI心理系统 v1.1.0 (Powered by DeepSeek)</span>
               </div>
+            </div>
             </div>
           </div>
         </div>
@@ -506,6 +535,7 @@ import UserAppointmentList from '../expert/UserAppointmentList.vue'
 import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
 import AppIcon from '@/components/AppIcon.vue'
+import { showToast } from '@/utils/notify'
 
 const streamingContent = ref('')
 const isStreaming = ref(false)    
@@ -671,6 +701,11 @@ const stripHtml = (html: string): string => {
   const tmp = document.createElement('div')
   tmp.innerHTML = html
   return tmp.textContent || tmp.innerText || ''
+}
+
+// 发送一条真实系统通知，验证通知中心效果
+const sendTestNotification = () => {
+  showToast('心愈提醒', '这是一条测试系统通知——窗口最小化时你也能在通知中心看到它', true)
 }
 
 // 显示修改密码弹窗
@@ -1831,32 +1866,43 @@ const scrollToBottom = () => {
   color: var(--text-primary);
 }
 
-.user-card {
+/* ===== 个人中心/设置页：分组卡片布局 ===== */
+.settings-page {
+  width: 100%;
+  height: 100%;
   overflow-y: auto;
-  max-width: 700px;
+  max-width: 720px;
+  padding: 18px 22px 32px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-/* ===== 用户信息头部样式（可点击编辑） ===== */
-.user-info-top {
+.settings-page::-webkit-scrollbar {
+  width: 0;
+  background: transparent;
+}
+
+/* ===== 用户信息头部卡片（可点击编辑） ===== */
+.settings-profile {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 10px 16px;
-  margin: 0 -10px 16px;
-  border-radius: var(--radius-ctl);
-  box-sizing: border-box;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
   flex-shrink: 0;
   cursor: pointer;
-  transition: background-color 0.2s var(--ease-out);
-  /* 分割线用背景层绘制：宽度只到内容边缘，不随高亮外扩 */
-  background-image: linear-gradient(var(--border-color), var(--border-color));
-  background-size: calc(100% - 20px) 1px;
-  background-position: 10px 100%;
-  background-repeat: no-repeat;
+  transition: border-color 0.2s var(--ease-out);
 }
 
-.user-info-top:hover {
-  background-color: var(--accent-soft);
+.settings-profile:hover {
+  border-color: var(--border-strong);
 }
 
 .user-avatar {
@@ -1907,16 +1953,16 @@ const scrollToBottom = () => {
   transition: opacity 0.2s;
 }
 
-.user-info-top:hover .edit-icon {
+.settings-profile:hover .edit-icon {
   opacity: 1;
 }
 
+/* ===== 统计 ===== */
 .user-data-list {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  margin-bottom: 20px;
-  flex-shrink: 0;
+  padding: 16px 18px;
 }
 
 .data-item {
@@ -1939,17 +1985,46 @@ const scrollToBottom = () => {
   color: var(--text-secondary);
 }
 
-.setting-list {
+/* ===== 设置分组卡片 ===== */
+.settings-group {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
   flex-shrink: 0;
 }
 
+.settings-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 18px 11px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settings-group-head svg {
+  color: var(--accent);
+}
+
+.settings-group-head h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+/* 条目自带左右内边距：hover 高亮铺满整行，不再出现贴文字的残缺色块 */
 .setting-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
+  gap: 18px;
+  padding: 13px 18px;
   border-bottom: 1px solid var(--border-color);
   cursor: pointer;
+  transition: background-color 0.15s var(--ease-out);
 }
 
 .setting-item:last-child {
@@ -1960,15 +2035,22 @@ const scrollToBottom = () => {
   background: var(--accent-soft);
 }
 
+/* 悬浮时条目标题同步染上琥珀色，形成明确的方向感 */
+.setting-item:hover .setting-item-left span:first-child {
+  color: var(--accent);
+}
+
 .setting-item-left {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .setting-item-left span:first-child {
   font-size: 14px;
   color: var(--text-primary);
+  transition: color 0.15s var(--ease-out);
 }
 
 .setting-desc {
@@ -1979,6 +2061,7 @@ const scrollToBottom = () => {
 .setting-item-right {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .setting-select {
@@ -2066,7 +2149,6 @@ const scrollToBottom = () => {
   color: var(--text-muted);
 }
 
-.user-card::-webkit-scrollbar,
 .scroll-content::-webkit-scrollbar,
 .chat-box::-webkit-scrollbar,
 .menu-list::-webkit-scrollbar {

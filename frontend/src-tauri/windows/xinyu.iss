@@ -44,6 +44,11 @@ Source: "{#MyAppRoot}\windows\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}";
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\xinyu.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\xinyu.ico"; Tasks: desktopicon
 
+; 注册 AUMID：系统通知横幅显示「心愈」名称与应用图标（Tauri 通知插件以 identifier 作为 AUMID）
+[Registry]
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.xinyu.heart"; ValueType: string; ValueName: "DisplayName"; ValueData: "心愈"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.xinyu.heart"; ValueType: string; ValueName: "IconUri"; ValueData: "{app}\xinyu.ico"; Flags: uninsdeletekey
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 

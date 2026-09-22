@@ -68,6 +68,12 @@ request.interceptors.response.use(
     const message = err.response?.data?.message || err.message || '请求失败'
 
     if (status === 401) {
+      // 认证类接口自身的 401（如登录时密码错误）是业务结果，不是会话过期：
+      // 透传服务器原始文案（如"邮箱或密码错误"），不触发登出/跳转
+      const url: string = err.config?.url || ''
+      if (/\/(login|register|send-code|reset)$/.test(url)) {
+        return Promise.reject(new Error(message))
+      }
       void handleSessionExpired()
       return Promise.reject(new Error('登录已过期'))
     }
