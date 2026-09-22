@@ -1,19 +1,19 @@
-<<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <div>
-        <h2>📋 问卷管理</h2>
+        <h2>问卷管理</h2>
         <p class="subtitle">管理系统心理测评问卷</p>
       </div>
       <button class="btn-primary" @click="$router.push('/admin/tests/edit')">
-        <span class="btn-icon">+</span>
+        <AppIcon name="plus" :size="15" />
         新建问卷
       </button>
     </div>
 
     <div class="filter-bar">
-      <button 
-        v-for="tab in tabs" 
+      <button
+        v-for="tab in tabs"
         :key="tab.value ?? 'all'"
         :class="{ active: currentStatus === tab.value }"
         @click="currentStatus = tab.value; loadTests()"
@@ -22,7 +22,7 @@
       </button>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-card">
       <table class="data-table">
         <thead>
           <tr>
@@ -47,7 +47,7 @@
             <td>
               <span class="category-tag">{{ categoryText(test.category) }}</span>
             </td>
-            <td>{{ test.total_questions }} 题</td>
+            <td class="num-cell">{{ test.total_questions }} 题</td>
             <td>
               <span :class="['status-tag', `status-${test.status}`]">
                 {{ statusText(test.status) }}
@@ -56,44 +56,52 @@
             <td class="date-cell">{{ formatDate(test.created_at) }}</td>
             <td>
               <div class="action-btns">
-                <button 
-                  v-if="test.status === 0" 
-                  class="btn-action btn-approve" 
+                <button
+                  v-if="test.status === 0"
+                  class="btn-action"
                   @click="updateStatus(test.id, 1)"
                 >
-                  ✓ 上架
+                  <AppIcon name="upload" :size="13" />
+                  上架
                 </button>
-                <button 
-                  v-if="test.status === 1" 
-                  class="btn-action btn-reject" 
+                <button
+                  v-if="test.status === 1"
+                  class="btn-action"
                   @click="updateStatus(test.id, 2)"
                 >
-                  ↓ 下架
+                  <AppIcon name="download" :size="13" />
+                  下架
                 </button>
-                <button 
-                  v-if="test.status === 2" 
-                  class="btn-action btn-approve" 
+                <button
+                  v-if="test.status === 2"
+                  class="btn-action"
                   @click="updateStatus(test.id, 1)"
                 >
-                  ↻ 重新上架
+                  <AppIcon name="refresh" :size="13" />
+                  重新上架
                 </button>
-                <button 
-                  class="btn-action btn-edit" 
+                <button
+                  class="btn-action"
                   @click="$router.push(`/admin/tests/edit/${test.id}`)"
                 >
-                  ✎ 编辑
+                  <AppIcon name="edit" :size="13" />
+                  编辑
                 </button>
-                <button 
-                  class="btn-action btn-delete" 
+                <button
+                  class="btn-action btn-action-danger"
                   @click="deleteTest(test.id)"
                 >
-                  🗑 删除
+                  <AppIcon name="trash" :size="13" />
+                  删除
                 </button>
               </div>
             </td>
           </tr>
           <tr v-if="tests.length === 0">
-            <td colspan="7" class="empty-cell">暂无问卷数据</td>
+            <td colspan="7" class="empty-cell">
+              <AppIcon name="list" :size="28" />
+              <p>暂无问卷数据</p>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -105,6 +113,7 @@
 import { ref, onMounted } from 'vue'
 import request from '@/api/request'
 import { confirm, success, error } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 const tests = ref<any[]>([])
 const currentStatus = ref<number | undefined>(undefined)
@@ -122,11 +131,11 @@ const statusText = (status: number) => {
 }
 
 const categoryText = (cat: string) => {
-  const map: Record<string, string> = { 
-    emotion: '情绪测评', 
-    stress: '压力测评', 
-    personality: '人格测评', 
-    cognitive: '认知测评' 
+  const map: Record<string, string> = {
+    emotion: '情绪测评',
+    stress: '压力测评',
+    personality: '人格测评',
+    cognitive: '认知测评'
   }
   return map[cat] || cat
 }
@@ -139,7 +148,7 @@ const loadTests = async () => {
   try {
     const params: any = {}
     if (currentStatus.value !== undefined) params.status = currentStatus.value
-    
+
     const res = await request.get('/admin/tests', { params }) as any
     tests.value = res.data
   } catch (e: any) {
@@ -160,7 +169,7 @@ const updateStatus = async (id: number, status: number) => {
 const deleteTest = async (id: number) => {
   const ok = await confirm('确定删除该问卷？此操作不可恢复。', '确认删除')
   if (!ok) return
-  
+
   try {
     await request.delete(`/admin/tests/${id}`)
     await success('删除成功')
@@ -175,117 +184,118 @@ onMounted(loadTests)
 
 <style scoped>
 .page-container {
-  background: #fff;
-  border-radius: 20px;
-  padding: 32px;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+  max-width: 1080px;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+  align-items: flex-start;
+  margin: 8px 0 20px;
 }
 
 .page-header h2 {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
+  color: var(--text-primary);
+  margin: 0 0 4px;
 }
 
 .subtitle {
-  color: #9ca3af;
-  font-size: 14px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  margin: 0;
 }
 
 .btn-primary {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  gap: 6px;
+  padding: 9px 18px;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: background 0.2s var(--ease-out);
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(115, 169, 216, 0.3);
-}
-
-.btn-icon {
-  font-size: 18px;
-  font-weight: 300;
+  background: var(--accent-strong);
 }
 
 .filter-bar {
   display: flex;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .filter-bar button {
-  padding: 10px 24px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  border-radius: 20px;
+  padding: 7px 18px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 13px;
-  color: #6b7280;
-  transition: all 0.25s;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
 }
 
 .filter-bar button:hover {
-  border-color: #73a9d8;
-  color: #73a9d8;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .filter-bar button.active {
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
   border-color: transparent;
-  box-shadow: 0 4px 12px rgba(115, 169, 216, 0.3);
 }
 
-.table-wrap {
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid #f0f0f0;
+.table-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  color: var(--text-secondary);
 }
 
 .data-table th {
-  padding: 16px;
+  padding: 13px 16px;
   text-align: left;
-  background: #f9fafb;
-  color: #6b7280;
+  color: var(--text-muted);
   font-weight: 500;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
 .data-table td {
-  padding: 16px;
+  padding: 13px 16px;
   text-align: left;
-  border-bottom: 1px solid #f3f4f6;
-  color: #4b5563;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13.5px;
+}
+
+.data-table tbody tr {
+  transition: background 0.15s var(--ease-out);
 }
 
 .data-table tbody tr:hover {
-  background: #fafbfc;
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
 }
 
 .data-table tbody tr:last-child td {
@@ -293,107 +303,114 @@ onMounted(loadTests)
 }
 
 .id-cell {
-  font-family: monospace;
-  color: #9ca3af;
-  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 12.5px;
 }
 
 .test-name {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .test-code {
   font-size: 12px;
-  color: #9ca3af;
-  font-family: monospace;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .category-tag {
-  padding: 4px 12px;
-  background: #e0f2fe;
-  color: #0369a1;
-  border-radius: 20px;
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+  border-radius: 999px;
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.num-cell {
+  font-variant-numeric: tabular-nums;
 }
 
 .status-tag {
-  padding: 6px 14px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-.status-0 { background: #fef3c7; color: #92400e; }
-.status-1 { background: #d1fae5; color: #065f46; }
-.status-2 { background: #fee2e2; color: #991b1b; }
+.status-0 {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.status-1 {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.status-2 {
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-muted);
+}
 
 .date-cell {
-  color: #9ca3af;
-  font-size: 13px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .action-btns {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .btn-action {
-  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-ctl);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s var(--ease-out);
   font-weight: 500;
+  font-family: var(--font-ui);
+  background: transparent;
+  color: var(--text-secondary);
 }
 
-.btn-approve { 
-  background: #e0f2fe; 
-  color: #0369a1; 
+.btn-action:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
-.btn-approve:hover {
-  background: #73a9d8;
-  color: #fff;
+.btn-action-danger {
+  color: var(--danger);
 }
 
-.btn-reject { 
-  background: #fef3c7; 
-  color: #92400e; 
-}
-
-.btn-reject:hover {
-  background: #f59e0b;
-  color: #fff;
-}
-
-.btn-edit {
-  background: #f3f4f6;
-  color: #4b5563;
-}
-
-.btn-edit:hover {
-  background: #6b7280;
-  color: #fff;
-}
-
-.btn-delete { 
-  background: #fee2e2; 
-  color: #dc2626; 
-}
-
-.btn-delete:hover {
-  background: #ef4444;
-  color: #fff;
+.btn-action-danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 .empty-cell {
   text-align: center;
-  padding: 60px;
-  color: #9ca3af;
-  font-size: 14px;
+  padding: 56px 16px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.empty-cell svg {
+  opacity: 0.55;
+}
+
+.empty-cell p {
+  margin: 10px 0 0;
 }
 </style>

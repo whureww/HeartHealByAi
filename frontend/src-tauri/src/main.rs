@@ -9,7 +9,11 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use tauri::Manager;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Emitter, Manager,
+};
 
 // 应用内置密钥（AES-256-GCM，32 字节）
 // 说明：密钥编译进二进制，可防止数据文件被随意读取/篡改，但无法对抗深度逆向
@@ -94,9 +98,70 @@ fn secure_delete(app: tauri::AppHandle, name: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 真正退出应用（前端“直接退出”选项走此命令，绕过关闭拦截）
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![secure_write, secure_read, secure_delete])
+        .invoke_handler(tauri::generate_handler![
+            secure_write,
+            secure_read,
+            secure_delete,
+            exit_app
+        ])
+        // 拦截一切关闭请求（标题栏按钮、Alt+F4、任务栏关闭），
+        // 统一交给前端按“关闭行为”设置处理：询问 / 最小化到托盘 / 直接退出
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.emit("close-requested", ());
+            }
+        })
+        .setup(|app| {
+            // 系统托盘：左键单击唤起窗口，菜单提供“显示心愈 / 退出心愈”
+            let show = MenuItem::with_id(app, "show", "显示心愈", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "退出心愈", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+
+            let mut tray = TrayIconBuilder::with_id("xinyu-tray")
+                .tooltip("心愈 · 心理健康系统")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                });
+
+            if let Some(icon) = app.default_window_icon().cloned() {
+                tray = tray.icon(icon);
+            }
+            tray.build(app)?;
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

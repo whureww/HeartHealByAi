@@ -20,27 +20,33 @@
       <button class="btn-retry" @click="loadTests">刷新</button>
     </div>
 
-    <div v-else class="test-grid">
-      <div 
-        v-for="test in tests" 
-        :key="test.id" 
-        class="test-card"
+    <div v-else class="test-list">
+      <div
+        v-for="test in tests"
+        :key="test.id"
+        class="test-row"
         @click="onStartTest(test.id)"
       >
-        <div class="test-icon">📝</div>
-        <h3>{{ test.name }}</h3>
-        <p class="desc">{{ test.description }}</p>
-        <div class="test-meta">
-          <span class="tag">{{ test.total_questions }}题</span>
-          <span class="tag">约{{ test.estimated_minutes }}分钟</span>
-          <span class="tag category">{{ test.category }}</span>
+        <div class="test-icon"><AppIcon name="clipboard" :size="19" /></div>
+        <div class="test-body">
+          <h3>{{ test.name }}</h3>
+          <p class="desc">{{ test.description }}</p>
+          <div class="test-meta">
+            <span class="tag">{{ test.total_questions }}题</span>
+            <span class="tag">约{{ test.estimated_minutes }}分钟</span>
+            <span class="tag category">{{ test.category }}</span>
+          </div>
         </div>
-        <button class="btn-start">开始测评</button>
+        <div class="test-actions">
+          <button class="btn-start" @click.stop="onStartTest(test.id)">开始测评</button>
+          <AppIcon name="chevronRight" :size="16" class="row-arrow" />
+        </div>
       </div>
     </div>
 
     <div class="history-link" @click="onViewHistory">
-      <span>查看测评历史 →</span>
+      <span>查看测评历史</span>
+      <AppIcon name="chevronRight" :size="15" />
     </div>
   </div>
 </template>
@@ -48,6 +54,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getTestList } from '@/api/tests'
+import AppIcon from '@/components/AppIcon.vue'
 
 const emit = defineEmits(['view-history', 'start-test'])
 
@@ -60,10 +67,10 @@ const loadTests = async () => {
   errorMsg.value = ''
   try {
     const res = await getTestList()
-    console.log('API 返回:', res)         
-    console.log('res.data:', res?.data)    
-    
-    
+    console.log('API 返回:', res)
+    console.log('res.data:', res?.data)
+
+
     if (res && res.data) {
       tests.value = res.data
     } else if (Array.isArray(res)) {
@@ -111,19 +118,20 @@ const onViewHistory = () => {
 
 
 .header {
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .header h2 {
-  font-size: 24px;
+  font-size: 20px;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin: 0 0 6px;
   font-weight: 600;
 }
 
 .header p {
-  font-size: 14px;
-  color: var(--text-secondary);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0;
 }
 
 .status-msg {
@@ -133,11 +141,11 @@ const onViewHistory = () => {
   justify-content: center;
   padding: 80px 20px;
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .status-msg.error {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .status-msg.empty {
@@ -145,10 +153,10 @@ const onViewHistory = () => {
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: 3px solid var(--border-color);
-  border-top-color: #73a9d8;
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
@@ -161,125 +169,143 @@ const onViewHistory = () => {
 .btn-retry {
   margin-top: 16px;
   padding: 8px 24px;
-  background: #73a9d8;
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-ctl);
   font-size: 14px;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: background 0.2s var(--ease-out), opacity 0.2s;
 }
 
 .btn-retry:hover {
-  opacity: 0.9;
+  background: var(--accent-strong);
 }
 
-.test-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.test-card {
+.test-list {
   background: var(--card-bg);
-  border-radius: 16px;
-  padding: 24px;
-  cursor: pointer;
-  transition: all 0.25s ease;
   border: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: 20px;
 }
 
-.test-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
-  border-color: #73a9d8;
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background 0.2s var(--ease-out);
+}
+
+.test-row:last-child {
+  border-bottom: none;
+}
+
+.test-row:hover {
+  background: var(--accent-soft);
 }
 
 .test-icon {
-  font-size: 40px;
-  margin-bottom: 16px;
-  line-height: 1;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.test-card h3 {
-  font-size: 17px;
+.test-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.test-row h3 {
+  font-size: 14.5px;
   color: var(--text-primary);
-  margin-bottom: 10px;
+  margin: 0 0 4px;
   font-weight: 600;
   line-height: 1.4;
 }
 
 .desc {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 16px;
+  line-height: 1.5;
+  margin: 0 0 8px;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  flex: 1;
 }
 
 .test-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 16px;
 }
 
 .tag {
   font-size: 12px;
   color: var(--text-muted);
-  background: var(--menu-bg);
-  padding: 4px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 2px 10px;
   border-radius: 20px;
 }
 
 .tag.category {
-  background: #e3f0fc;
-  color: #73a9d8;
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.test-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.row-arrow {
+  color: var(--text-muted);
 }
 
 .btn-start {
-  width: 100%;
-  height: 40px;
-  background: #73a9d8;
-  color: #fff;
+  padding: 8px 18px;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 500;
+  border-radius: var(--radius-ctl);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s var(--ease-out);
 }
 
 .btn-start:hover {
-  background: #5a94c7;
+  background: var(--accent-strong);
 }
 
 .history-link {
-  text-align: center;
-  padding: 20px;
-  color: #73a9d8;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px;
+  color: var(--accent);
+  font-size: 13.5px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s var(--ease-out);
 }
 
 .history-link:hover {
-  text-decoration: underline;
-}
-
-:deep(html.dark) .test-card:hover {
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
-}
-
-:deep(html.dark) .tag.category {
-  background: #1e3a5f;
-  color: #73a9d8;
+  color: var(--accent-strong);
 }
 </style>

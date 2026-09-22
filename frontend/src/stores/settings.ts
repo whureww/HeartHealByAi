@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { secureSet } from '@/utils/secureStore'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { secureSet, isTauri } from '@/utils/secureStore'
 
 type Theme = 'light' | 'dark' | 'system'
 type CloseAction = 'minimize' | 'exit' | 'ask'
@@ -52,11 +53,16 @@ export const useSettingsStore = defineStore('settings', () => {
   const applyTheme = (t: Theme) => {
     const root = document.documentElement
     const isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-    
+
     if (isDark) {
       root.classList.add('dark')
     } else {
       root.classList.remove('dark')
+    }
+
+    // 同步原生窗口主题：深色时窗口边框/标题栏跟随，避免出现系统白框
+    if (isTauri()) {
+      getCurrentWindow().setTheme(isDark ? 'dark' : 'light').catch(() => {})
     }
   }
 

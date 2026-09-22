@@ -4,6 +4,9 @@
    ============================================================ */
 
 :root {
+  /* 自绘标题栏高度 */
+  --titlebar-h: 38px;
+
   /* ----- 表面 ----- */
   --bg-primary: #f3eee5;
   --bg-secondary: #fbf8f2;
@@ -40,10 +43,10 @@
   --menu-active: var(--accent);
   --shadow: rgba(51, 46, 39, 0.14);
 
-  /* ----- 高程（带偏移软阴影）----- */
-  --shadow-sm: 0 1px 2px rgba(51, 46, 39, 0.05), 0 1px 3px rgba(51, 46, 39, 0.07);
-  --shadow-md: 0 2px 4px rgba(51, 46, 39, 0.05), 0 6px 16px rgba(51, 46, 39, 0.09);
-  --shadow-lg: 0 4px 8px rgba(51, 46, 39, 0.05), 0 18px 44px rgba(51, 46, 39, 0.13);
+  /* ----- 高程（带偏移软阴影，暖色温）----- */
+  --shadow-sm: 0 1px 2px rgba(84, 58, 22, 0.05), 0 1px 3px rgba(84, 58, 22, 0.07);
+  --shadow-md: 0 2px 4px rgba(84, 58, 22, 0.05), 0 6px 16px rgba(84, 58, 22, 0.09);
+  --shadow-lg: 0 4px 8px rgba(84, 58, 22, 0.05), 0 18px 44px rgba(84, 58, 22, 0.14);
 
   /* ----- 形状 / 字体 / 动效 ----- */
   --radius-card: 16px;
@@ -52,8 +55,10 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* ----- 台灯光晕（氛围层）----- */
-  --lamp-layer: radial-gradient(1200px 620px at 50% -180px, rgba(242, 185, 92, 0.2), transparent 70%);
-  --lamp-floor: radial-gradient(900px 420px at 85% 108%, rgba(196, 138, 66, 0.07), transparent 70%);
+  --lamp-layer: radial-gradient(1200px 620px at 50% -180px, rgba(242, 185, 92, 0.26), transparent 70%),
+    radial-gradient(640px 360px at 50% -60px, rgba(247, 205, 128, 0.22), transparent 75%);
+  --lamp-floor: radial-gradient(900px 420px at 85% 108%, rgba(196, 138, 66, 0.09), transparent 70%);
+  --lamp-vignette: radial-gradient(140% 110% at 50% 30%, transparent 55%, rgba(84, 58, 22, 0.1) 100%);
 }
 
 html.dark {
@@ -67,7 +72,7 @@ html.dark {
   --border-strong: rgba(237, 230, 218, 0.16);
 
   --text-primary: #ede6da;
-  --text-secondary: #a79e90;
+  --text-secondary: #b5ac9e;
   --text-muted: #6e6659;
 
   --accent: #e4a44c;
@@ -87,10 +92,12 @@ html.dark {
   --menu-active: var(--accent);
   --shadow: rgba(0, 0, 0, 0.55);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 8px 20px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.4), 0 20px 48px rgba(0, 0, 0, 0.55);
+  --shadow-sm: 0 1px 2px rgba(24, 14, 2, 0.42), 0 1px 3px rgba(24, 14, 2, 0.34);
+  --shadow-md: 0 2px 4px rgba(20, 12, 0, 0.45), 0 8px 20px rgba(24, 14, 2, 0.55);
+  --shadow-lg: 0 4px 8px rgba(20, 12, 0, 0.5), 0 20px 48px rgba(26, 15, 2, 0.68);
 
-  --lamp-layer: radial-gradient(1200px 620px at 50% -180px, rgba(228, 164, 76, 0.13), transparent 70%);
-  --lamp-floor: radial-gradient(900px 420px at 85% 108%, rgba(228, 164, 76, 0.05), transparent 70%);
+  --lamp-layer: radial-gradient(1200px 620px at 50% -180px, rgba(228, 164, 76, 0.22), transparent 70%),
+    radial-gradient(640px 380px at 50% -40px, rgba(242, 185, 92, 0.16), transparent 75%);
+  --lamp-floor: radial-gradient(900px 420px at 85% 108%, rgba(228, 164, 76, 0.06), transparent 70%);
+  --lamp-vignette: radial-gradient(135% 105% at 50% 28%, transparent 48%, rgba(0, 0, 0, 0.42) 100%);
 }

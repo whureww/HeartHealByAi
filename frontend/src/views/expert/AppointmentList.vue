@@ -1,13 +1,18 @@
 <template>
   <div class="appointment-list">
     <div class="list-header">
-      <h3>📋 预约管理</h3>
+      <h3>
+        <AppIcon name="clipboard" :size="17" />
+        预约管理
+      </h3>
       <div class="header-actions">
         <span class="online-indicator" :class="{ online: isSocketConnected }">
-          {{ isSocketConnected ? '🟢 实时连接' : '🔴 离线' }}
+          <span class="status-dot" :class="{ online: isSocketConnected }"></span>
+          {{ isSocketConnected ? '实时连接' : '离线' }}
         </span>
         <button class="btn-refresh" @click="loadAppointments" :disabled="loading">
-          {{ loading ? '刷新中...' : '🔄 刷新' }}
+          <AppIcon name="refresh" :size="14" />
+          {{ loading ? '刷新中...' : '刷新' }}
         </button>
       </div>
     </div>
@@ -18,7 +23,8 @@
     </div>
 
     <div v-else-if="appointments.length === 0" class="empty-state">
-      暂无预约记录
+      <AppIcon name="list" :size="28" />
+      <p>暂无预约记录</p>
     </div>
 
     <div v-else class="appointment-table">
@@ -29,9 +35,9 @@
         <span>状态</span>
         <span>操作</span>
       </div>
-      
-      <div 
-        v-for="item in appointments" 
+
+      <div
+        v-for="item in appointments"
         :key="item.id"
         class="table-row"
         :class="{ 'status-changed': recentlyUpdated.has(item.id) }"
@@ -40,37 +46,38 @@
           <span class="user-name">{{ item.user_name }}</span>
           <span class="user-email">{{ item.user_email }}</span>
         </div>
-        
+
         <div class="cell contact">
           <span>{{ item.user_phone || '未填写' }}</span>
         </div>
-        
+
         <div class="cell time">
           {{ formatDate(item.created_at) }}
         </div>
-        
+
         <div class="cell status">
           <span :class="['status-badge', `status-${item.status}`]">
             {{ statusText(item.status) }}
           </span>
         </div>
-        
+
         <div class="cell actions">
-          <button 
+          <button
             v-if="item.status === 'pending'"
             class="btn-action confirm"
             @click.stop="handleConfirm(item.id)"
           >
             确认
           </button>
-          <button 
+          <button
             v-else-if="item.status === 'confirmed'"
             class="btn-action chat"
             @click.stop="emit('view-detail', item.id)"
           >
-            💬 进入聊天
+            <AppIcon name="chat" :size="13" />
+            进入聊天
           </button>
-          <button 
+          <button
             v-else-if="item.status === 'completed'"
             class="btn-action view"
             @click.stop="emit('view-detail', item.id)"
@@ -90,7 +97,9 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getExpertAppointments, updateAppointmentStatus } from '@/api/expert'
 import { success, error } from '@/utils/dialog'
+import { showToast } from '@/utils/notify'
 import { useUserStore } from '@/stores/user'
+import AppIcon from '@/components/AppIcon.vue'
 
 const emit = defineEmits<{
   (e: 'view-detail', id: number): void
@@ -150,7 +159,7 @@ const updateLocalStatus = (appointmentId: number, status: string) => {
   if (index !== -1) {
     appointments.value[index].status = status
     appointments.value[index].updated_at = new Date().toISOString()
-    
+
     recentlyUpdated.value.add(appointmentId)
     setTimeout(() => {
       recentlyUpdated.value.delete(appointmentId)
@@ -160,7 +169,7 @@ const updateLocalStatus = (appointmentId: number, status: string) => {
 
 const initSocket = () => {
   const globalSocket = (window as any).__globalSocket__ as Socket | undefined
-  
+
   if (globalSocket && globalSocket.connected) {
     socket.value = globalSocket
     isSocketConnected.value = true
@@ -174,7 +183,7 @@ const initSocket = () => {
     reconnectionAttempts: 5,
     reconnectionDelay: 1000
   })
-  
+
   ;(window as any).__globalSocket__ = newSocket
   socket.value = newSocket
 
@@ -200,6 +209,7 @@ const setupListeners = (sock: Socket) => {
     console.log('收到预约更新:', data)
     if (data.updaterId !== userStore.userInfo?.id) {
       loadAppointments()
+      showToast('预约状态更新', `预约 #${data.appointmentId} 状态变更为「${data.status}」`, true)
     } else {
       updateLocalStatus(data.appointmentId, data.status)
     }
@@ -246,16 +256,19 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .list-header h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .header-actions {
@@ -265,32 +278,58 @@ onUnmounted(() => {
 }
 
 .online-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  color: #ef4444;
+  color: var(--text-muted);
   padding: 4px 10px;
-  background: #fef2f2;
-  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
   transition: all 0.3s;
 }
 
 .online-indicator.online {
-  color: #10b981;
-  background: #ecfdf5;
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.status-dot.online {
+  background: var(--success);
 }
 
 .btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 6px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: transparent;
   font-size: 13px;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
 }
 
-.btn-refresh:hover {
-  background: #f9fafb;
-  border-color: #73a9d8;
+.btn-refresh:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.btn-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .loading-state {
@@ -299,17 +338,18 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 60px;
-  color: #6b7280;
+  color: var(--text-muted);
   gap: 12px;
+  font-size: 13.5px;
 }
 
 .spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #73a9d8;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2.5px solid var(--accent-soft);
+  border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.9s linear infinite;
 }
 
 @keyframes spin {
@@ -317,45 +357,61 @@ onUnmounted(() => {
 }
 
 .empty-state {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 60px;
-  color: #9ca3af;
-  font-size: 14px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  gap: 4px;
+}
+
+.empty-state svg {
+  opacity: 0.55;
+  margin-bottom: 6px;
+}
+
+.empty-state p {
+  margin: 0;
 }
 
 .appointment-table {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .table-header {
   display: grid;
-  grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1.5fr 1fr 1fr 1.2fr;
   gap: 12px;
-  padding: 10px 16px;
-  background: #f9fafb;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #6b7280;
+  padding: 12px 18px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .table-row {
   display: grid;
-  grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1.5fr 1fr 1fr 1.2fr;
   gap: 12px;
-  padding: 14px 16px;
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #f3f4f6;
+  padding: 14px 18px;
   align-items: center;
-  transition: all 0.3s;
+  transition: background 0.2s var(--ease-out);
+}
+
+.table-row + .table-row {
+  border-top: 1px solid var(--border-color);
 }
 
 .table-row:hover {
-  border-color: #e3f0fc;
-  box-shadow: 0 2px 8px rgba(115, 169, 216, 0.08);
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
 }
 
 .table-row.status-changed {
@@ -363,13 +419,18 @@ onUnmounted(() => {
 }
 
 @keyframes highlight {
-  0% { background: #ecfdf5; border-color: #10b981; }
-  100% { background: #fff; border-color: #f3f4f6; }
+  0% {
+    background: color-mix(in srgb, var(--success) 12%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 .cell {
-  font-size: 13px;
-  color: #374151;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  min-width: 0;
 }
 
 .user-info {
@@ -380,59 +441,90 @@ onUnmounted(() => {
 
 .user-name {
   font-weight: 500;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .user-email {
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .status-badge {
   display: inline-block;
-  padding: 4px 12px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-.status-pending { background: #fef3c7; color: #92400e; }
-.status-confirmed { background: #d1fae5; color: #065f46; }
-.status-completed { background: #e0f2fe; color: #0369a1; }
-.status-cancelled { background: #fee2e2; color: #991b1b; }
+.status-pending {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.status-confirmed {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.status-completed {
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+}
+
+.status-cancelled {
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-start;
+}
 
 .btn-action {
-  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
   border: none;
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: var(--radius-ctl);
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-action.confirm {
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
-.btn-action.chat {
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+.btn-action.confirm:hover {
+  background: var(--accent-strong);
 }
 
-.btn-action.view {
-  background: #f3f4f6;
-  color: #6b7280;
+.btn-action.chat:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
-.btn-action:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+.btn-action.view:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .status-tip {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 </style>

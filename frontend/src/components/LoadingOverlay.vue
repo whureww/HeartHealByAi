@@ -1,11 +1,7 @@
 <template>
   <transition name="fade">
     <div v-if="visible" class="loading-overlay">
-      <div class="spinner">
-        <div class="dot"></div>
-        <div class="dot"></div>
-        <div class="dot"></div>
-      </div>
+      <div class="spinner"></div>
       <p class="text">{{ text }}</p>
     </div>
   </transition>
@@ -25,7 +21,7 @@ defineProps<{
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(59, 130, 246, 0.95);
+  background: rgba(20, 21, 28, 0.45);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -34,31 +30,22 @@ defineProps<{
 }
 
 .spinner {
-  display: flex;
-  gap: 8px;
-}
-
-.dot {
-  width: 12px;
-  height: 12px;
-  background: #fff;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2.5px solid var(--accent-soft);
+  border-top-color: var(--accent);
   border-radius: 50%;
-  animation: bounce 1.4s infinite ease-in-out both;
+  animation: spin 0.9s linear infinite;
 }
 
-.dot:nth-child(1) { animation-delay: -0.32s; }
-.dot:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .text {
-  color: #fff;
+  color: rgba(255, 255, 255, 0.92);
   font-size: 14px;
-  margin-top: 20px;
-  opacity: 0.9;
+  margin-top: 16px;
 }
 
 .fade-enter-active,

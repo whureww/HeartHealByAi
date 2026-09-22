@@ -2,7 +2,7 @@
   <div class="expert-layout">
     <aside class="expert-sidebar">
       <div class="logo-box">
-        <div class="logo-mark"><AppIcon name="stethoscope" :size="18" /></div>
+        <div class="logo-mark"><AppIcon name="brand" :size="18" /></div>
         <div class="logo-text">
           <h2>专家工作台</h2>
           <p>心愈 · 咨询师端</p>
@@ -48,14 +48,14 @@ const goToUserCenter = () => {
 .expert-layout {
   display: flex;
   width: 100vw;
-  height: calc(100vh - 38px);
+  height: calc(100vh - var(--titlebar-h));
   overflow: hidden;
 }
 
 .expert-sidebar {
   width: 224px;
   min-width: 224px;
-  height: calc(100vh - 38px);
+  height: calc(100vh - var(--titlebar-h));
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-color);
   color: var(--text-primary);
@@ -143,7 +143,7 @@ nav a.active {
 
 .expert-main {
   flex: 1;
-  height: calc(100vh - 38px);
+  height: calc(100vh - var(--titlebar-h));
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--bg-primary);

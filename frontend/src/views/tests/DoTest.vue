@@ -1,19 +1,28 @@
-<<template>
+<template>
   <div class="do-test-page">
     <div class="test-header">
-      <button class="btn-back" @click="router.back()">← 返回</button>
+      <button class="btn-back" @click="router.back()">
+        <AppIcon name="back" :size="15" />
+        返回
+      </button>
       <h3>{{ testInfo?.name }}</h3>
       <span class="progress">{{ currentIndex + 1 }} / {{ questions.length }}</span>
+    </div>
+    <div class="progress-track">
+      <div
+        class="progress-fill"
+        :style="{ transform: 'scaleX(' + (questions.length ? (currentIndex + 1) / questions.length : 0) + ')' }"
+      ></div>
     </div>
 
     <div class="question-area" v-if="currentQuestion">
       <div class="question-card">
         <div class="question-number">第 {{ currentIndex + 1 }} 题</div>
         <div class="question-content">{{ currentQuestion.content }}</div>
-        
+
         <div class="options">
-          <div 
-            v-for="option in currentQuestion.options" 
+          <div
+            v-for="option in currentQuestion.options"
             :key="option.score"
             class="option"
             :class="{ selected: answers[currentIndex] === option.score }"
@@ -21,19 +30,25 @@
           >
             <div class="option-score">{{ option.score }}分</div>
             <div class="option-text">{{ option.text }}</div>
+            <AppIcon
+              v-if="answers[currentIndex] === option.score"
+              name="check"
+              :size="16"
+              class="option-check"
+            />
           </div>
         </div>
       </div>
 
       <div class="nav-buttons">
-        <button 
-          class="btn-nav" 
+        <button
+          class="btn-nav"
           :disabled="currentIndex === 0"
           @click="prevQuestion"
         >
           上一题
         </button>
-        <button 
+        <button
           v-if="currentIndex < questions.length - 1"
           class="btn-nav btn-primary"
           :disabled="answers[currentIndex] === undefined"
@@ -41,7 +56,7 @@
         >
           下一题
         </button>
-        <button 
+        <button
           v-else
           class="btn-nav btn-primary"
           :disabled="answers[currentIndex] === undefined || submitting"
@@ -55,7 +70,7 @@
     <!-- 结果弹窗 -->
     <div v-if="showResult" class="result-modal">
       <div class="result-card">
-        <div class="result-icon">✅</div>
+        <div class="result-icon"><AppIcon name="check" :size="28" /></div>
         <h3>测评完成</h3>
         <div class="result-score">得分：{{ resultData?.total_score }}</div>
         <div class="result-level" :class="resultLevelClass">{{ resultData?.result_level }}</div>
@@ -71,6 +86,7 @@ import { getTestQuestions, submitTest as submitTestApi } from '@/api/tests'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { error, success } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 
 const route = useRoute()
@@ -154,7 +170,7 @@ const handleSubmit = async () => {
 
 const closeResult = () => {
   showResult.value = false
-  router.push('/dashboard')             
+  router.push('/dashboard')
 }
 </script>
 
@@ -170,24 +186,35 @@ const closeResult = () => {
 .test-header {
   display: flex;
   align-items: center;
-  padding: 16px 24px;
+  padding: 14px 24px;
   background: var(--card-bg);
   border-bottom: 1px solid var(--border-color);
 }
 
 .btn-back {
-  background: none;
-  border: none;
-  color: #73a9d8;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 13px;
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 7px 14px;
+  border-radius: var(--radius-ctl);
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-back:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .test-header h3 {
   flex: 1;
   text-align: center;
   font-size: 16px;
+  font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
@@ -195,6 +222,22 @@ const closeResult = () => {
 .progress {
   font-size: 13px;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  height: 3px;
+  background: var(--accent-soft);
+  flex-shrink: 0;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  transform-origin: left center;
+  transition: transform 0.3s var(--ease-out);
 }
 
 .question-area {
@@ -205,15 +248,17 @@ const closeResult = () => {
 
 .question-card {
   background: var(--card-bg);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   padding: 24px;
   margin-bottom: 20px;
   border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .question-number {
-  font-size: 12px;
-  color: #73a9d8;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
   margin-bottom: 12px;
 }
 
@@ -233,41 +278,45 @@ const closeResult = () => {
 .option {
   display: flex;
   align-items: center;
-  padding: 14px 16px;
+  padding: 13px 16px;
   background: var(--input-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
-  transition: all 0.2s;
-  border: 2px solid transparent;
+  transition: all 0.2s var(--ease-out);
+  border: 1px solid var(--border-color);
 }
 
 .option:hover {
-  background: #e3f0fc;
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
 }
 
 .option.selected {
-  border-color: #73a9d8;
-  background: #e3f0fc;
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .option-score {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #73a9d8;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: bold;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   margin-right: 14px;
   flex-shrink: 0;
 }
 
 .option-text {
+  flex: 1;
   font-size: 14px;
   color: var(--text-primary);
+}
+
+.option-check {
+  color: var(--accent);
+  flex-shrink: 0;
 }
 
 .nav-buttons {
@@ -279,23 +328,35 @@ const closeResult = () => {
 .btn-nav {
   flex: 1;
   height: 44px;
-  border-radius: 12px;
-  border: none;
-  font-size: 15px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border-color);
+  font-size: 14px;
   cursor: pointer;
-  background: var(--menu-bg);
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-nav:hover:not(:disabled) {
+  background: var(--accent-soft);
   color: var(--text-primary);
-  transition: opacity 0.2s;
 }
 
 .btn-nav:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .btn-primary {
-  background: #73a9d8;
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  color: var(--on-accent);
 }
 
 .result-modal {
@@ -313,7 +374,9 @@ const closeResult = () => {
 
 .result-card {
   background: var(--card-bg);
-  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
   padding: 32px;
   width: 90%;
   max-width: 360px;
@@ -321,52 +384,67 @@ const closeResult = () => {
 }
 
 .result-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
 }
 
 .result-card h3 {
   font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 16px;
+  margin: 0 0 16px;
 }
 
 .result-score {
   font-size: 36px;
-  font-weight: bold;
-  color: #73a9d8;
-  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 10px;
 }
 
 .result-level {
-  font-size: 18px;
-  font-weight: bold;
-  padding: 8px 20px;
-  border-radius: 20px;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 7px 20px;
+  border-radius: 16px;
   display: inline-block;
   margin-bottom: 16px;
 }
 
-.level-normal { background: #d4edda; color: #155724; }
-.level-mild { background: #fff3cd; color: #856404; }
-.level-moderate { background: #ffe0b2; color: #e65100; }
-.level-severe { background: #f8d7da; color: #721c24; }
+.level-normal { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+.level-mild { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+.level-moderate { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.level-severe { background: color-mix(in srgb, var(--danger) 28%, transparent); color: var(--danger); }
 
 .result-desc {
   font-size: 14px;
   color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 24px;
+  line-height: 1.7;
+  margin: 0 0 24px;
 }
 
 .btn-close {
   width: 100%;
   height: 44px;
-  background: #73a9d8;
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-ctl);
   font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.2s var(--ease-out);
+}
+
+.btn-close:hover {
+  background: var(--accent-strong);
 }
 </style>

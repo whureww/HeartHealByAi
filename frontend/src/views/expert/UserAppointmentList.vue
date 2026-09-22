@@ -1,13 +1,18 @@
 <template>
   <div class="user-appointment-list">
     <div class="list-header">
-      <h3>📅 我的预约</h3>
+      <h3>
+        <AppIcon name="calendar" :size="17" />
+        我的预约
+      </h3>
       <div class="header-actions">
         <span class="online-indicator" :class="{ online: isSocketConnected }">
-          {{ isSocketConnected ? '🟢 实时连接' : '🔴 离线' }}
+          <span class="status-dot" :class="{ online: isSocketConnected }"></span>
+          {{ isSocketConnected ? '实时连接' : '离线' }}
         </span>
         <button class="btn-refresh" @click="loadAppointments" :disabled="loading">
-          {{ loading ? '刷新中...' : '🔄 刷新' }}
+          <AppIcon name="refresh" :size="14" />
+          {{ loading ? '刷新中...' : '刷新' }}
         </button>
       </div>
     </div>
@@ -18,12 +23,13 @@
     </div>
 
     <div v-else-if="appointments.length === 0" class="empty-state">
-      暂无预约记录，快去预约专家吧～
+      <AppIcon name="list" :size="28" />
+      <p>暂无预约记录，快去预约专家吧</p>
     </div>
 
     <div v-else class="appointment-cards">
-      <div 
-        v-for="item in appointments" 
+      <div
+        v-for="item in appointments"
         :key="item.id"
         class="appointment-card"
         :class="{ 'status-changed': recentlyUpdated.has(item.id) }"
@@ -38,24 +44,25 @@
             {{ statusText(item.status) }}
           </span>
         </div>
-        
+
         <div class="card-body">
           <div class="info-row">
             <span class="label">预约时间：</span>
-            <span>{{ formatDate(item.created_at) }}</span>
+            <span class="time-value">{{ formatDate(item.created_at) }}</span>
           </div>
           <div class="info-row">
             <span class="label">当前状态：</span>
             <span class="status-desc">{{ statusDesc(item.status) }}</span>
           </div>
         </div>
-        
+
         <div class="card-footer">
-          <button 
+          <button
             v-if="item.status === 'confirmed'"
             class="btn-chat"
           >
-            💬 进入聊天
+            <AppIcon name="chat" :size="14" />
+            进入聊天
           </button>
           <span v-else class="status-tip">
             {{ statusTip(item.status) }}
@@ -71,7 +78,9 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getUserAppointments } from '@/api/user'
+import { showToast } from '@/utils/notify'
 import { useUserStore } from '@/stores/user'
+import AppIcon from '@/components/AppIcon.vue'
 
 const emit = defineEmits<{
   (e: 'view-detail', id: number): void
@@ -146,7 +155,7 @@ const updateLocalStatus = (appointmentId: number, status: string) => {
   if (index !== -1) {
     appointments.value[index].status = status
     appointments.value[index].updated_at = new Date().toISOString()
-    
+
     recentlyUpdated.value.add(appointmentId)
     setTimeout(() => {
       recentlyUpdated.value.delete(appointmentId)
@@ -156,7 +165,7 @@ const updateLocalStatus = (appointmentId: number, status: string) => {
 
 const initSocket = () => {
   const globalSocket = (window as any).__globalSocket__ as Socket | undefined
-  
+
   if (globalSocket && globalSocket.connected) {
     socket.value = globalSocket
     isSocketConnected.value = true
@@ -170,7 +179,7 @@ const initSocket = () => {
     reconnectionAttempts: 5,
     reconnectionDelay: 1000
   })
-  
+
   ;(window as any).__globalSocket__ = newSocket
   socket.value = newSocket
 
@@ -198,6 +207,7 @@ const setupListeners = (sock: Socket) => {
     // 只处理自己的预约
     if (data.userId === userStore.userInfo?.id) {
       updateLocalStatus(data.appointmentId, data.status)
+      showToast('预约状态更新', `你的预约状态变更为「${data.status}」`, true)
     }
   })
 
@@ -209,6 +219,7 @@ const setupListeners = (sock: Socket) => {
   }) => {
     if (data.updaterId !== userStore.userInfo?.id) {
       updateLocalStatus(data.appointmentId, data.status)
+      showToast('预约状态更新', `预约 #${data.appointmentId} 状态变更为「${data.status}」`, true)
     }
   })
 }
@@ -238,16 +249,19 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .list-header h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .header-actions {
@@ -257,32 +271,58 @@ onUnmounted(() => {
 }
 
 .online-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  color: #ef4444;
+  color: var(--text-muted);
   padding: 4px 10px;
-  background: #fef2f2;
-  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
   transition: all 0.3s;
 }
 
 .online-indicator.online {
-  color: #10b981;
-  background: #ecfdf5;
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.status-dot.online {
+  background: var(--success);
 }
 
 .btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 6px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: transparent;
   font-size: 13px;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
 }
 
-.btn-refresh:hover {
-  background: #f9fafb;
-  border-color: #73a9d8;
+.btn-refresh:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.btn-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .loading-state {
@@ -291,17 +331,18 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 60px;
-  color: #6b7280;
+  color: var(--text-muted);
   gap: 12px;
+  font-size: 13.5px;
 }
 
 .spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #73a9d8;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2.5px solid var(--accent-soft);
+  border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.9s linear infinite;
 }
 
 @keyframes spin {
@@ -309,10 +350,22 @@ onUnmounted(() => {
 }
 
 .empty-state {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 60px;
-  color: #9ca3af;
-  font-size: 14px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  gap: 4px;
+}
+
+.empty-state svg {
+  opacity: 0.55;
+  margin-bottom: 6px;
+}
+
+.empty-state p {
+  margin: 0;
 }
 
 .appointment-cards {
@@ -328,17 +381,18 @@ onUnmounted(() => {
 }
 
 .appointment-card {
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #f3f4f6;
+  background: var(--card-bg);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
   padding: 16px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.3s var(--ease-out);
 }
 
 .appointment-card:hover {
-  border-color: #e3f0fc;
-  box-shadow: 0 2px 12px rgba(115, 169, 216, 0.1);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 
 .appointment-card.status-changed {
@@ -346,8 +400,14 @@ onUnmounted(() => {
 }
 
 @keyframes highlight {
-  0% { background: #ecfdf5; border-color: #10b981; }
-  100% { background: #fff; border-color: #f3f4f6; }
+  0% {
+    background: color-mix(in srgb, var(--success) 12%, var(--card-bg));
+    border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  }
+  100% {
+    background: var(--card-bg);
+    border-color: var(--border-color);
+  }
 }
 
 .card-header {
@@ -366,25 +426,41 @@ onUnmounted(() => {
 .expert-name {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .expert-title {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .status-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-.status-pending { background: #fef3c7; color: #92400e; }
-.status-confirmed { background: #d1fae5; color: #065f46; }
-.status-completed { background: #e0f2fe; color: #0369a1; }
-.status-cancelled { background: #fee2e2; color: #991b1b; }
+.status-pending {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.status-confirmed {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.status-completed {
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+}
+
+.status-cancelled {
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-muted);
+}
 
 .card-body {
   display: flex;
@@ -392,22 +468,26 @@ onUnmounted(() => {
   gap: 8px;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .info-row {
   display: flex;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .info-row .label {
-  color: #9ca3af;
+  color: var(--text-muted);
   margin-right: 4px;
 }
 
+.time-value {
+  font-variant-numeric: tabular-nums;
+}
+
 .status-desc {
-  color: #73a9d8;
+  color: var(--accent);
   font-weight: 500;
 }
 
@@ -417,23 +497,27 @@ onUnmounted(() => {
 }
 
 .btn-chat {
-  padding: 8px 20px;
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-ctl);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: background 0.2s var(--ease-out);
 }
 
 .btn-chat:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  background: var(--accent-strong);
 }
 
 .status-tip {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 </style>

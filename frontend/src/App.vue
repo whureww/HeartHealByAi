@@ -8,19 +8,38 @@
     </router-view>
   </div>
   <LoadingOverlay :visible="loadingStore.visible" :text="loadingStore.text" />
+  <LockScreen v-if="isLocked" :timeout-minutes="settingsStore.lockTimeout" @unlock="isLocked = false" />
   <CustomDialog ref="dialogRef" />
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import TitleBar from './components/TitleBar.vue'
 import LoadingOverlay from './components/LoadingOverlay.vue'
+import LockScreen from './components/LockScreen.vue'
 import CustomDialog from './components/CustomDialog.vue'
 import { useLoadingStore } from './stores/loading'
+import { useSettingsStore } from './stores/settings'
 import { setDialogInstance } from './utils/dialog'
 
 const loadingStore = useLoadingStore()
+const settingsStore = useSettingsStore()
 const dialogRef = ref()
+
+// ===== 离开自动锁定：闲置超时后显示锁屏（pointerdown/keydown 任意活动即重置） =====
+const isLocked = ref(false)
+let idleTimer: number | undefined
+
+function resetIdle() {
+  window.clearTimeout(idleTimer)
+  if (isLocked.value) return
+  if (!settingsStore.lockOnLeave || !settingsStore.lockTimeout) return
+  idleTimer = window.setTimeout(() => {
+    isLocked.value = true
+  }, settingsStore.lockTimeout * 60 * 1000)
+}
+
+watch(() => [settingsStore.lockOnLeave, settingsStore.lockTimeout], resetIdle)
 
 onMounted(() => {
   setDialogInstance(dialogRef.value)
@@ -28,7 +47,15 @@ onMounted(() => {
   document.body.style.overflow = 'hidden'
   document.documentElement.style.height = '100vh'
   document.body.style.height = '100vh'
-  
+  window.addEventListener('pointerdown', resetIdle, true)
+  window.addEventListener('keydown', resetIdle, true)
+  resetIdle()
+})
+
+onUnmounted(() => {
+  window.clearTimeout(idleTimer)
+  window.removeEventListener('pointerdown', resetIdle, true)
+  window.removeEventListener('keydown', resetIdle, true)
 })
 document.addEventListener('contextmenu', (e) => {
   e.preventDefault();
@@ -51,6 +78,52 @@ input, textarea {
   -moz-user-select: text;
   -ms-user-select: text;
   user-select: text;
+}
+
+/* ===== 应用内轻提示（消息通知） ===== */
+#xinyu-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 9500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.xinyu-toast {
+  min-width: 220px;
+  max-width: 320px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-ctl);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s var(--ease-out), transform 0.25s var(--ease-out);
+}
+
+.xinyu-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.xinyu-toast-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.xinyu-toast-body {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  word-break: break-all;
 }
 
 /* 允许特定区域文字选中 */
@@ -81,7 +154,7 @@ html {
 
 .app-container {
   width: 100vw;
-  height: calc(100vh - 38px);
+  height: calc(100vh - var(--titlebar-h));
   margin-top: 38px;
   overflow: hidden !important;
   position: relative;
@@ -92,7 +165,7 @@ html {
   content: '';
   position: absolute;
   inset: 0;
-  background: var(--lamp-layer), var(--lamp-floor);
+  background: var(--lamp-layer), var(--lamp-floor), var(--lamp-vignette);
   pointer-events: none;
   z-index: 0;
 }

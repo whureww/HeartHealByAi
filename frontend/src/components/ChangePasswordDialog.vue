@@ -3,8 +3,13 @@
     <div v-if="visible" class="dialog-overlay">
       <div class="dialog-box" @click.stop>
         <div class="dialog-header">
-          <h3>🔐 修改密码</h3>
-          <button class="btn-close" @click="onCancel">×</button>
+          <h3>
+            <AppIcon name="lock" :size="16" />
+            修改密码
+          </h3>
+          <button class="btn-close" @click="onCancel" title="关闭">
+            <AppIcon name="close" :size="16" />
+          </button>
         </div>
 
         <div class="dialog-body">
@@ -60,7 +65,9 @@
 
           <!-- 步骤2：成功提示 -->
           <div v-else class="step-content success-step">
-            <div class="success-icon">✅</div>
+            <div class="success-icon">
+              <AppIcon name="check" :size="44" :stroke="1.8" />
+            </div>
             <h4>密码修改成功</h4>
             <p>请使用新密码重新登录</p>
           </div>
@@ -92,6 +99,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { sendResetCode, resetPassword } from '@/api/user'
 import { alert, success, error } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 const visible = ref(false)
 const step = ref(1)
@@ -217,7 +225,7 @@ defineExpose({ show, hide })
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(20, 21, 28, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -225,11 +233,12 @@ defineExpose({ show, hide })
 }
 
 .dialog-box {
-  background: var(--card-bg, #fff);
+  background: var(--card-bg);
   width: 400px;
   max-width: 90vw;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
@@ -241,29 +250,32 @@ defineExpose({ show, hide })
 }
 
 .dialog-header h3 {
-  font-size: 18px;
-  color: var(--text-primary, #1f2937);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .btn-close {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: none;
   background: transparent;
-  font-size: 24px;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   cursor: pointer;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-close:hover {
-  background: var(--bg-secondary, #f3f4f6);
-  color: var(--text-primary, #1f2937);
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .dialog-body {
@@ -277,25 +289,27 @@ defineExpose({ show, hide })
 .form-group label {
   display: block;
   font-size: 13px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 
 .form-group input {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   font-size: 14px;
-  background: var(--input-bg, #f9fafb);
-  color: var(--text-primary, #1f2937);
+  background: var(--input-bg);
+  color: var(--text-primary);
   outline: none;
-  transition: border-color 0.2s;
+  font-family: var(--font-ui);
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
   box-sizing: border-box;
 }
 
 .form-group input:focus {
-  border-color: var(--menu-active, #73a9d8);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .form-group input:disabled {
@@ -314,27 +328,27 @@ defineExpose({ show, hide })
 
 .btn-code {
   padding: 0 16px;
-  border: 1px solid var(--menu-active, #73a9d8);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   background: transparent;
-  color: var(--menu-active, #73a9d8);
-  border-radius: 10px;
+  color: var(--accent);
+  border-radius: var(--radius-ctl);
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
   min-width: 100px;
 }
 
 .btn-code:hover:not(:disabled) {
-  background: var(--menu-active, #73a9d8);
-  color: #fff;
+  background: var(--accent-soft);
 }
 
 .btn-code:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  border-color: var(--border-color, #e5e7eb);
-  color: var(--text-muted, #9ca3af);
+  border-color: var(--border-color);
+  color: var(--text-muted);
 }
 
 .dialog-footer {
@@ -345,24 +359,27 @@ defineExpose({ show, hide })
 
 .dialog-footer button {
   flex: 1;
-  height: 44px;
-  border-radius: 12px;
+  height: 42px;
+  border-radius: var(--radius-ctl);
   border: none;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .btn-cancel {
-  background: var(--bg-secondary, #f3f4f6);
-  color: var(--text-secondary, #4b5563);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
 }
 
 .btn-cancel:hover:not(:disabled) {
-  background: var(--border-color, #e5e7eb);
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .btn-cancel:disabled {
@@ -371,12 +388,12 @@ defineExpose({ show, hide })
 }
 
 .btn-confirm {
-  background: var(--menu-active, #73a9d8);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .btn-confirm:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--accent-strong);
 }
 
 .btn-confirm:disabled {
@@ -387,8 +404,8 @@ defineExpose({ show, hide })
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border: 2px solid color-mix(in srgb, var(--on-accent) 30%, transparent);
+  border-top-color: var(--on-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -405,19 +422,23 @@ defineExpose({ show, hide })
 }
 
 .success-icon {
-  font-size: 56px;
+  color: var(--success);
   margin-bottom: 16px;
+  display: flex;
+  justify-content: center;
 }
 
 .success-step h4 {
-  font-size: 18px;
-  color: var(--text-primary, #1f2937);
-  margin-bottom: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .success-step p {
   font-size: 14px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .fade-enter-active,

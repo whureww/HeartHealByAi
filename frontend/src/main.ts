@@ -28,44 +28,67 @@ const DEFAULT_CONFIG: Record<string, string> = {
   lockTimeout: '5'
 }
 
-// 启动前从加密文件恢复本地数据（应用配置 + 登录会话）
+// 启动前从本地恢复数据（应用配置 + 登录会话）
+// Tauri 环境走加密文件；纯浏览器（开发模式）走 localStorage
 async function restoreLocalData() {
-  if (!isTauri()) return
-
   // 1. 恢复应用配置；首次运行时把默认配置写入加密文件
-  const config = await secureGet<Record<string, string>>('config')
-  if (config) {
-    for (const [key, value] of Object.entries(config)) {
-      if (localStorage.getItem(key) === null) localStorage.setItem(key, String(value))
+  if (isTauri()) {
+    const config = await secureGet<Record<string, string>>('config')
+    if (config) {
+      for (const [key, value] of Object.entries(config)) {
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, String(value))
+      }
+    } else {
+      await secureSet('config', DEFAULT_CONFIG)
     }
-  } else {
-    await secureSet('config', DEFAULT_CONFIG)
   }
 
   // 2. 应用主题
   applyTheme(localStorage.getItem('theme') || 'system')
 
-  // 3. 恢复登录会话（token + onlyId），实现重启后免登录
-  let session = await secureGet<{ token: string; onlyId: string }>('session')
-  if (session) {
-    if (!localStorage.getItem('token')) {
-      localStorage.setItem('token', session.token || '')
+  // 3. 会话恢复：加密文件（Tauri）与 localStorage 互为补充
+  let token = localStorage.getItem('token') || ''
+  let onlyId = localStorage.getItem('onlyId') || ''
+  if (isTauri()) {
+    const session = await secureGet<{ token: string; onlyId: string }>('session')
+    if (session?.token && !token) {
+      localStorage.setItem('token', session.token)
       localStorage.setItem('onlyId', session.onlyId || '')
-    }
-  } else {
-    const token = localStorage.getItem('token')
-    if (token) {
-      session = { token, onlyId: localStorage.getItem('onlyId') || '' }
-      await secureSet('session', session)
+      token = session.token
+      onlyId = session.onlyId || ''
+    } else if (token && !session) {
+      await secureSet('session', { token, onlyId })
     }
   }
 
   // 4. 水合 Pinia 用户状态（路由守卫依赖 store 中的 token/onlyId）
-  if (session?.token) {
+  if (token) {
     const { useUserStore } = await import('./stores/user')
-    const userStore = useUserStore(pinia)
-    userStore.token = session.token
-    userStore.onlyId = session.onlyId || ''
+    useUserStore(pinia).$patch({ token, onlyId: onlyId || '' })
+  }
+}
+
+// 自动备份：开启后按周期把本地配置快照写入加密备份文件（滚动单份）
+// 聊天/测评等业务数据在服务端，此处备份的是纯本地数据（设置项）
+async function runAutoBackup() {
+  try {
+    if (localStorage.getItem('autoBackup') !== 'true') return
+    const intervalDays = Number(localStorage.getItem('backupInterval')) || 7
+    const last = Number(localStorage.getItem('lastBackupAt')) || 0
+    if (Date.now() - last < intervalDays * 86400000) return
+
+    const snapshot: Record<string, string> = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      // 会话凭据不进备份（已单独加密存储，避免重复落盘）
+      if (key && key !== 'token' && key !== 'onlyId') {
+        snapshot[key] = localStorage.getItem(key) || ''
+      }
+    }
+    await secureSet('backup', { savedAt: new Date().toISOString(), data: snapshot })
+    localStorage.setItem('lastBackupAt', String(Date.now()))
+  } catch (e) {
+    console.error('自动备份失败:', e)
   }
 }
 
@@ -76,6 +99,8 @@ async function bootstrap() {
   app.use(pinia)
   app.use(router)
   app.mount('#app')
+
+  void runAutoBackup()
 }
 
 bootstrap()

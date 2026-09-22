@@ -1,7 +1,7 @@
 <template>
   <div class="title-bar" data-tauri-drag-region>
     <div class="title" data-tauri-drag-region>
-      <AppIcon name="moon" :size="14" class="title-mark" />
+      <AppIcon name="brand" :size="14" class="title-mark" />
       <span>心愈</span>
       <span class="title-sub">心理健康系统</span>
     </div>
@@ -22,30 +22,54 @@
   />
 </template>
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
 import ConfirmDialog from './ConfirmDialog.vue'
 import AppIcon from './AppIcon.vue'
+import { isTauri } from '@/utils/secureStore'
 import { useSettingsStore } from '@/stores/settings'
 
-const window = getCurrentWindow()
+// 浏览器开发环境下无 Tauri 容器，窗口 API 需守卫
+const window = isTauri() ? getCurrentWindow() : null
 const settingsStore = useSettingsStore()
 
 const showDialog = ref(false)
 
-// 点击最小化按钮 → 隐藏窗口到托盘
-const minimize = async () => {
-  await window.hide()
-}
-
-const onCloseClick = async () => {
+// 统一的关闭流程：按设置决定 隐藏到托盘 / 真正退出 / 每次询问
+const runCloseFlow = async () => {
   if (settingsStore.closeAction === 'minimize') {
-    await window.hide()
+    await window?.hide()
   } else if (settingsStore.closeAction === 'exit') {
-    await window.close()
+    // 退出走后端命令：Rust 侧拦截了系统关闭事件，window.close() 会被再次转回前端造成死循环
+    await invoke('exit_app')
   } else {
     showDialog.value = true
   }
+}
+
+let unlisten: UnlistenFn | null = null
+
+onMounted(async () => {
+  if (!isTauri()) return
+  // Rust 侧拦截所有关闭请求（含 Alt+F4 / 任务栏关闭），统一交给前端按设置处理
+  unlisten = await listen('close-requested', () => {
+    runCloseFlow()
+  })
+})
+
+onUnmounted(() => {
+  unlisten?.()
+})
+
+// 点击最小化按钮 → 最小化到任务栏（不是隐藏到托盘；后台保持由"关闭"按钮的设置控制）
+const minimize = async () => {
+  await window?.minimize()
+}
+
+const onCloseClick = () => {
+  runCloseFlow()
 }
 
 const onAction = async (action: 'minimize' | 'exit', remember: boolean) => {
@@ -56,9 +80,9 @@ const onAction = async (action: 'minimize' | 'exit', remember: boolean) => {
   }
 
   if (action === 'minimize') {
-    await window.hide()
+    await window?.hide()
   } else {
-    await window.close()
+    await invoke('exit_app')
   }
 }
 

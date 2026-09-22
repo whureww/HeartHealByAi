@@ -11,13 +11,29 @@ export function setupGuards(router: Router) {
 
     // 如果已登录但没有用户信息，尝试获取
     if (userStore.token && !userStore.userInfo) {
+      // 按错误类型分流：会话过期（拦截器抛出）立即登出；
+      // 仅真网络抖动（如 "Network Error"）时静默重试一次，避免偶发断网直接踢回登录页
+      const fetchInfo = () => userStore.getInfo()
+      const isAuthError = (e: unknown) => /过期|401/.test(String((e as Error)?.message || ''))
       try {
-        await userStore.getInfo()
+        await fetchInfo()
       } catch (e) {
         console.error('获取用户信息失败:', e)
-        await userStore.logout()
-        next('/login')
-        return
+        if (!isAuthError(e)) {
+          await new Promise((r) => setTimeout(r, 1500))
+          try {
+            await fetchInfo()
+          } catch (e2) {
+            console.error('重试后仍失败:', e2)
+            await userStore.logout()
+            next('/login')
+            return
+          }
+        } else {
+          await userStore.logout()
+          next('/login')
+          return
+        }
       }
     }
 

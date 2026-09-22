@@ -48,8 +48,9 @@ app.use((req, res, next) => {
 });
 
 // ===== 3. 解析请求体 =====
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 放宽到 5MB：头像以 base64 存储（体积膨胀约 1/3），Express 默认 100KB 会导致 413
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // 暴露 io 和 userSockets 给路由使用
 app.set('io', io);

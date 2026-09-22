@@ -3,7 +3,10 @@
     <!-- 左侧：用户信息和问卷结果（仅专家可见） -->
     <div v-if="!isUserView" class="left-panel">
       <div class="panel-card">
-        <h3>👤 预约人信息</h3>
+        <h3>
+          <AppIcon name="user" :size="16" />
+          预约人信息
+        </h3>
         <div class="info-item">
           <span class="label">姓名：</span>
           <span>{{ appointment.user_name }}</span>
@@ -23,25 +26,30 @@
           </span>
         </div>
         <div class="action-btns">
-          <button 
+          <button
             v-if="appointment.status === 'pending'"
             class="btn-confirm"
             @click="updateStatus('confirmed')"
           >
-            ✓ 确认预约
+            <AppIcon name="check" :size="14" />
+            确认预约
           </button>
-          <button 
+          <button
             v-if="appointment.status === 'confirmed'"
             class="btn-complete"
             @click="updateStatus('completed')"
           >
-            ✓ 标记完成
+            <AppIcon name="check" :size="14" />
+            标记完成
           </button>
         </div>
       </div>
 
       <div class="panel-card" v-if="testResults.length > 0">
-        <h3>📋 问卷结果</h3>
+        <h3>
+          <AppIcon name="clipboard" :size="16" />
+          问卷结果
+        </h3>
         <div v-for="result in testResults" :key="result.id" class="result-item">
           <div class="result-header">
             <span class="test-name">{{ result.test_name }}</span>
@@ -50,7 +58,8 @@
           <div class="result-level">{{ result.result_level }}</div>
           <p class="result-desc">{{ result.result_desc }}</p>
           <button class="btn-view-detail" @click="openDetailModal(result)">
-            🔍 查看详细答案
+            <AppIcon name="search" :size="14" />
+            查看详细答案
           </button>
         </div>
       </div>
@@ -59,15 +68,20 @@
     <!-- 右侧：聊天（所有角色都可见） -->
     <div class="right-panel" :class="{ 'full-width': isUserView }">
       <div class="chat-header">
-        <h3>💬 {{ chatTitle }}</h3>
-        <div class="connection-status" :class="{ online: isOtherOnline }">
+        <h3>
+          <AppIcon name="chat" :size="16" />
+          {{ chatTitle }}
+        </h3>
+        <div class="connection-status" :class="{ online: isOtherOnline, closed: isChatClosed }">
+          <span v-if="isChatClosed" class="status-dot"></span>
+          <span v-else class="status-dot" :class="{ online: isOtherOnline, offline: !isOtherOnline }"></span>
           {{ connectionStatusText }}
         </div>
       </div>
       <div class="chat-messages" ref="chatBox">
-        <div 
-          v-for="msg in messages" 
-          :key="msg.id" 
+        <div
+          v-for="msg in messages"
+          :key="msg.id"
           :class="['msg', msg.sender_id === currentUserId ? 'msg-me' : 'msg-other']"
         >
           <div class="msg-bubble">
@@ -82,17 +96,21 @@
       </div>
       <!-- 已完成或已取消：显示禁止输入提示 -->
       <div v-if="isChatClosed" class="chat-closed-tip">
-        <span>🔒 本次咨询已结束，无法继续发送消息</span>
+        <AppIcon name="lock" :size="14" />
+        <span>本次咨询已结束，无法继续发送消息</span>
       </div>
       <!-- 正常聊天输入 -->
       <div v-else class="chat-input">
-        <input 
-          v-model="newMessage" 
+        <input
+          v-model="newMessage"
           @keyup.enter="sendMessage"
-          placeholder="输入消息..." 
+          placeholder="输入消息..."
           :disabled="!isSelfConnected"
         />
-        <button @click="sendMessage" :disabled="!isSelfConnected || !newMessage.trim()">发送</button>
+        <button @click="sendMessage" :disabled="!isSelfConnected || !newMessage.trim()">
+          <AppIcon name="send" :size="14" />
+          发送
+        </button>
       </div>
     </div>
 
@@ -100,8 +118,13 @@
     <div v-if="showDetailModal" class="modal-overlay" @click="closeDetailModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h3>📋 {{ currentResult?.test_name }} - 详细答案</h3>
-          <button class="btn-close" @click="closeDetailModal">✕</button>
+          <h3>
+            <AppIcon name="clipboard" :size="16" />
+            {{ currentResult?.test_name }} - 详细答案
+          </h3>
+          <button class="btn-close" @click="closeDetailModal" title="关闭">
+            <AppIcon name="close" :size="16" />
+          </button>
         </div>
         <div class="modal-body">
           <div class="result-summary">
@@ -110,10 +133,10 @@
               {{ currentResult?.result_level }}
             </span>
           </div>
-          
+
           <div class="questions-list">
-            <div 
-              v-for="(answer, index) in parsedAnswers" 
+            <div
+              v-for="(answer, index) in parsedAnswers"
               :key="index"
               class="question-card"
             >
@@ -123,17 +146,19 @@
                   得分：{{ answer.score }}
                 </span>
               </div>
-              
+
               <div class="question-content">{{ answer.question }}</div>
-              
+
               <div class="options-list">
-                <div 
-                  v-for="(opt, idx) in answer.options" 
+                <div
+                  v-for="(opt, idx) in answer.options"
                   :key="idx"
                   :class="['option-item', { 'selected': Number(opt.id) === Number(answer.selected) }]"
                 >
                   <span class="opt-radio">
-                    <span v-if="Number(opt.id) === Number(answer.selected)" class="radio-checked">✓</span>
+                    <span v-if="Number(opt.id) === Number(answer.selected)" class="radio-checked">
+                      <AppIcon name="check" :size="10" />
+                    </span>
                     <span v-else class="radio-empty"></span>
                   </span>
                   <span class="opt-label">{{ opt.label }}</span>
@@ -141,7 +166,7 @@
                   <span class="opt-score">{{ opt.score }}分</span>
                 </div>
               </div>
-              
+
               <div class="user-answer">
                 <span class="ua-label">用户选择：</span>
                 <span class="ua-value">{{ getSelectedText(answer) }}</span>
@@ -163,7 +188,9 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getAppointmentDetail, updateAppointmentStatus, getChatMessages } from '@/api/expert'
 import { success, error, alert as dialogAlert } from '@/utils/dialog'
+import { showToast } from '@/utils/notify'
 import { useUserStore } from '@/stores/user'
+import AppIcon from '@/components/AppIcon.vue'
 
 const props = defineProps<{
   id: number
@@ -214,10 +241,10 @@ const isChatClosed = computed(() => {
 })
 
 const connectionStatusText = computed(() => {
-  if (isChatClosed.value) return '🔒 会话已结束'
-  if (!isSelfConnected.value) return '🔴 连接中...'
-  if (isOtherOnline.value) return '🟢 在线'
-  return '⚪ 离线'
+  if (isChatClosed.value) return '会话已结束'
+  if (!isSelfConnected.value) return '连接中...'
+  if (isOtherOnline.value) return '在线'
+  return '离线'
 })
 
 const statusText = (status: string) => {
@@ -251,27 +278,27 @@ const closeDetailModal = () => {
 // ===== 解析答案 =====
 const parseAnswers = (result: any) => {
   if (!result?.answers) return []
-  
+
   try {
     const parsed = JSON.parse(result.answers)
     if (!Array.isArray(parsed)) return []
-    
+
     // 解析 questions
     let questions: any[] = []
     if (result.test_questions) {
       try {
-        questions = typeof result.test_questions === 'string' 
-          ? JSON.parse(result.test_questions) 
+        questions = typeof result.test_questions === 'string'
+          ? JSON.parse(result.test_questions)
           : result.test_questions
       } catch (e) {
         console.error('解析 questions 失败:', e)
       }
     }
-    
+
     return parsed.map((item: any, index: number) => {
       const question = questions.find((q: any) => q.id === item.question_id)
       const options: any[] = question?.options || []
-      
+
       // 如果没有选项，生成默认选项
       if (options.length === 0) {
         for (let i = 1; i <= 4; i++) {
@@ -283,7 +310,7 @@ const parseAnswers = (result: any) => {
           })
         }
       }
-      
+
       return {
         no: index + 1,
         question: question?.content || `问题 ${item.question_id}`,
@@ -336,7 +363,7 @@ const loadDetail = async () => {
     const res = await getAppointmentDetail(appointmentId) as any
     appointment.value = res.data.appointment
     testResults.value = res.data.testResults || []
-    
+
     if (appointment.value.user_id === currentUserId.value) {
       otherUserId.value = appointment.value.doctor_user_id || appointment.value.doctor_id
     } else {
@@ -364,7 +391,7 @@ const updateStatus = async (status: string) => {
     await success('状态更新成功')
     appointment.value.status = status
     loadDetail()
-    
+
     // ===== 新增：通知父组件状态已更新，刷新统计 =====
     emit('status-updated')
     console.log('【AppointmentDetail】状态更新已通知父组件')
@@ -375,13 +402,13 @@ const updateStatus = async (status: string) => {
 
 const initSocket = () => {
   const globalSocket = (window as any).__globalSocket__ as Socket | undefined
-  
+
   if (globalSocket && globalSocket.connected) {
     socket.value = globalSocket
     isSelfConnected.value = true
     setupSocketListeners(globalSocket)
     globalSocket.emit('join-room', appointmentId)
-    
+
     if (otherUserId.value) {
       setTimeout(() => {
         globalSocket.emit('query-user-status', otherUserId.value)
@@ -408,7 +435,7 @@ const initSocket = () => {
     isSelfConnected.value = true
     newSocket.emit('authenticate', { userId: currentUserId.value, token: getAuthToken() })
     newSocket.emit('join-room', appointmentId)
-    
+
     if (otherUserId.value) {
       setTimeout(() => {
         newSocket.emit('query-user-status', otherUserId.value)
@@ -447,6 +474,10 @@ const setupSocketListeners = (sock: Socket) => {
   sock.on('new-message', (msg: any) => {
     messages.value.push(msg)
     scrollToBottom()
+    // 对方来信时轻提示（按通知设置过滤，自己发送的回显不提醒）
+    if (msg.senderId !== userStore.userInfo?.id) {
+      showToast('新消息', String(msg.content || '').slice(0, 60))
+    }
   })
 
   sock.on('error', (err: any) => {
@@ -456,7 +487,7 @@ const setupSocketListeners = (sock: Socket) => {
 
 const sendMessage = async () => {
   if (isChatClosed.value) return
-  
+
   const content = newMessage.value.trim()
   if (!content || !socket.value || !isSelfConnected.value) return
 
@@ -500,7 +531,7 @@ watch(() => appointment.value, (newVal) => {
 .detail-layout {
   display: flex;
   gap: 24px;
-  height: calc(100vh - 84px);
+  height: calc(100vh - var(--titlebar-h) - 48px);
 }
 
 .detail-layout.user-view {
@@ -526,16 +557,20 @@ watch(() => appointment.value, (newVal) => {
 
 .right-panel {
   flex: 1;
-  background: #fff;
-  border-radius: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  min-width: 0;
 }
 
 .user-view .right-panel {
   border-radius: 0;
+  border: none;
   box-shadow: none;
+  background: transparent;
 }
 
 .right-panel.full-width {
@@ -543,25 +578,30 @@ watch(() => appointment.value, (newVal) => {
 }
 
 .panel-card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  padding: 20px 22px;
 }
 
 .panel-card h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 16px;
+  color: var(--text-primary);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .info-item {
   display: flex;
   justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid #f3f4f6;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-color);
   font-size: 14px;
+  color: var(--text-primary);
 }
 
 .info-item:last-child {
@@ -569,19 +609,35 @@ watch(() => appointment.value, (newVal) => {
 }
 
 .label {
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .status-tag {
-  padding: 4px 12px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
 }
 
-.status-pending { background: #fef3c7; color: #92400e; }
-.status-confirmed { background: #d1fae5; color: #065f46; }
-.status-completed { background: #e0f2fe; color: #0369a1; }
+.status-pending {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.status-confirmed {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.status-completed {
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+}
+
+.status-cancelled {
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-muted);
+}
 
 .action-btns {
   display: flex;
@@ -591,30 +647,48 @@ watch(() => appointment.value, (newVal) => {
 
 .btn-confirm, .btn-complete {
   flex: 1;
-  padding: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: background 0.2s var(--ease-out);
 }
 
 .btn-confirm {
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn-confirm:hover {
+  background: var(--accent-strong);
 }
 
 .btn-complete {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #fff;
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+
+.btn-complete:hover {
+  background: color-mix(in srgb, var(--success) 24%, transparent);
 }
 
 .result-item {
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 12px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   margin-bottom: 12px;
+}
+
+.result-item:last-child {
+  margin-bottom: 0;
 }
 
 .result-header {
@@ -626,43 +700,49 @@ watch(() => appointment.value, (newVal) => {
 
 .test-name {
   font-weight: 600;
-  color: #374151;
+  color: var(--text-primary);
+  font-size: 13.5px;
 }
 
 .test-score {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
-  color: #73a9d8;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 
 .result-level {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: 13.5px;
+  color: var(--text-secondary);
   margin-bottom: 8px;
 }
 
 .result-desc {
-  font-size: 13px;
-  color: #9ca3af;
+  font-size: 12.5px;
+  color: var(--text-muted);
   line-height: 1.5;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
 }
 
 .btn-view-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   width: 100%;
-  padding: 10px;
-  background: #e3f0fc;
-  color: #73a9d8;
-  border: none;
-  border-radius: 8px;
+  padding: 9px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 13px;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  justify-content: center;
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-view-detail:hover {
-  background: #73a9d8;
-  color: #fff;
+  background: var(--accent-soft);
 }
 
 /* ===== 弹窗样式 ===== */
@@ -672,7 +752,7 @@ watch(() => appointment.value, (newVal) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(20, 21, 28, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -681,21 +761,22 @@ watch(() => appointment.value, (newVal) => {
 }
 
 .modal-content {
-  background: #fff;
-  border-radius: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
   width: 100%;
   max-width: 700px;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-  animation: modalIn 0.3s ease;
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.25s var(--ease-out);
 }
 
 @keyframes modalIn {
   from {
     opacity: 0;
-    transform: translateY(20px) scale(0.95);
+    transform: translateY(16px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -707,97 +788,101 @@ watch(() => appointment.value, (newVal) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #f3f4f6;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .btn-close {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: none;
-  background: #f3f4f6;
+  background: transparent;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 16px;
-  color: #6b7280;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-close:hover {
-  background: #e5e7eb;
-  color: #374151;
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 18px 22px;
 }
 
 .result-summary {
   display: flex;
   gap: 12px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f3f4f6;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .score-badge {
-  padding: 6px 14px;
-  background: #e3f0fc;
-  color: #73a9d8;
-  border-radius: 20px;
-  font-size: 14px;
+  padding: 5px 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 13.5px;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .level-badge {
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 14px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 
 .level-high {
-  background: #fee2e2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
 }
 
 .level-medium {
-  background: #fef3c7;
-  color: #92400e;
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
 }
 
 .level-low {
-  background: #d1fae5;
-  color: #065f46;
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
 }
 
 .level-normal {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
 }
 
 .questions-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .question-card {
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #f3f4f6;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  padding: 14px 16px;
 }
 
 .question-header {
@@ -808,25 +893,25 @@ watch(() => appointment.value, (newVal) => {
 }
 
 .q-num {
-  font-size: 13px;
-  color: #9ca3af;
+  font-size: 12.5px;
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .q-score {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: #10b981;
+  color: var(--success);
 }
 
 .q-score.high-score {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .question-content {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
-  color: #1f2937;
+  color: var(--text-primary);
   line-height: 1.6;
   margin-bottom: 12px;
 }
@@ -842,16 +927,18 @@ watch(() => appointment.value, (newVal) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  padding: 7px 11px;
+  border-radius: var(--radius-ctl);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .option-item.selected {
-  background: #e3f0fc;
-  border-color: #73a9d8;
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text-primary);
 }
 
 .opt-radio {
@@ -864,86 +951,90 @@ watch(() => appointment.value, (newVal) => {
 }
 
 .radio-checked {
-  width: 20px;
-  height: 20px;
-  background: #73a9d8;
-  color: #fff;
+  width: 18px;
+  height: 18px;
+  background: var(--accent);
+  color: var(--on-accent);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
 }
 
 .radio-empty {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #d1d5db;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border-strong);
   border-radius: 50%;
+  box-sizing: border-box;
 }
 
 .opt-label {
-  width: 24px;
+  width: 22px;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
 .opt-text {
   flex: 1;
-  color: #4b5563;
+  color: var(--text-primary);
 }
 
 .opt-score {
-  color: #9ca3af;
+  color: var(--text-muted);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
 .user-answer {
-  padding: 8px 12px;
-  background: #fff;
-  border-radius: 8px;
-  border: 1px dashed #73a9d8;
+  padding: 7px 11px;
+  background: var(--card-bg);
+  border-radius: var(--radius-ctl);
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+  font-size: 13px;
 }
 
 .ua-label {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .ua-value {
-  font-size: 14px;
-  color: #73a9d8;
+  font-size: 13.5px;
+  color: var(--accent);
   font-weight: 500;
 }
 
 .modal-footer {
-  padding: 16px 24px;
-  border-top: 1px solid #f3f4f6;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: flex-end;
 }
 
 .btn-close-modal {
-  padding: 10px 24px;
-  background: #f3f4f6;
-  color: #4b5563;
-  border: none;
-  border-radius: 10px;
+  padding: 9px 22px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-close-modal:hover {
-  background: #e5e7eb;
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 /* 聊天样式 */
 .chat-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid #f3f4f6;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -952,26 +1043,53 @@ watch(() => appointment.value, (newVal) => {
 .chat-header h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
   transition: color 0.3s;
 }
 
 .connection-status.online {
-  color: #10b981;
+  color: var(--success);
+}
+
+.connection-status.closed {
+  color: var(--text-muted);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: var(--success);
+}
+
+.status-dot.offline {
+  background: var(--text-muted);
 }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 18px 22px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -992,21 +1110,21 @@ watch(() => appointment.value, (newVal) => {
 }
 
 .msg-bubble {
-  max-width: 70%;
-  padding: 12px 16px;
-  border-radius: 16px;
+  max-width: 68%;
+  padding: 11px 15px;
+  border-radius: 14px;
   font-size: 14px;
 }
 
 .msg-me .msg-bubble {
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  background: var(--msg-user-bg);
+  color: var(--text-primary);
   border-bottom-right-radius: 4px;
 }
 
 .msg-other .msg-bubble {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--msg-ai-bg);
+  color: var(--text-primary);
   border-bottom-left-radius: 4px;
 }
 
@@ -1024,59 +1142,80 @@ watch(() => appointment.value, (newVal) => {
   font-size: 11px;
   margin-top: 4px;
   opacity: 0.6;
+  font-variant-numeric: tabular-nums;
 }
 
 .empty-chat {
   text-align: center;
-  color: #9ca3af;
+  color: var(--text-muted);
   padding: 40px;
+  font-size: 13.5px;
 }
 
 .chat-closed-tip {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 24px;
-  border-top: 1px solid #f3f4f6;
-  background: #f9fafb;
-  color: #9ca3af;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
   font-size: 13px;
   gap: 8px;
 }
 
 .chat-input {
   display: flex;
-  gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #f3f4f6;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-color);
 }
 
 .chat-input input {
   flex: 1;
-  padding: 12px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   font-size: 14px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
   outline: none;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
 }
 
 .chat-input input:focus {
-  border-color: #73a9d8;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .chat-input input:disabled {
-  background: #f9fafb;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
+.chat-input input::placeholder {
+  color: var(--text-muted);
+}
+
 .chat-input button {
-  padding: 12px 24px;
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 11px 20px;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  transition: background 0.2s var(--ease-out);
+}
+
+.chat-input button:hover:not(:disabled) {
+  background: var(--accent-strong);
 }
 
 .chat-input button:disabled {

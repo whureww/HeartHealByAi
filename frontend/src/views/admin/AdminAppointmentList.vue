@@ -1,11 +1,11 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>📋 预约管理</h2>
+      <h2>预约管理</h2>
       <p class="subtitle">查看和管理所有用户预约</p>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-card">
       <table class="data-table">
         <thead>
           <tr>
@@ -36,7 +36,10 @@
             <td class="date-cell">{{ formatDate(apt.created_at) }}</td>
           </tr>
           <tr v-if="appointments.length === 0">
-            <td colspan="6" class="empty-cell">暂无预约数据</td>
+            <td colspan="6" class="empty-cell">
+              <AppIcon name="list" :size="28" />
+              <p>暂无预约数据</p>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -47,6 +50,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getAllAppointments } from '@/api/admin'
+import AppIcon from '@/components/AppIcon.vue'
 
 const appointments = ref<any[]>([])
 
@@ -78,32 +82,31 @@ onMounted(loadAppointments)
 
 <style scoped>
 .page-container {
-  background: #fff;
-  border-radius: 20px;
-  padding: 32px;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+  max-width: 1080px;
 }
 
 .page-header {
-  margin-bottom: 24px;
+  margin: 8px 0 20px;
 }
 
 .page-header h2 {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
+  color: var(--text-primary);
+  margin: 0 0 4px;
 }
 
 .subtitle {
-  color: #9ca3af;
-  font-size: 14px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  margin: 0;
 }
 
-.table-wrap {
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid #f0f0f0;
+.table-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
   overflow-x: auto;
 }
 
@@ -112,33 +115,44 @@ onMounted(loadAppointments)
   border-collapse: collapse;
   font-size: 14px;
   min-width: 700px;
+  color: var(--text-secondary);
 }
 
 .data-table th {
-  padding: 16px;
+  padding: 13px 16px;
   text-align: left;
-  background: #f9fafb;
-  color: #6b7280;
+  color: var(--text-muted);
   font-weight: 500;
-  font-size: 13px;
-}
-
-.data-table td {
-  padding: 16px;
-  text-align: left;
-  border-bottom: 1px solid #f3f4f6;
-  color: #4b5563;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
 }
 
+.data-table td {
+  padding: 13px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.data-table tbody tr {
+  transition: background 0.15s var(--ease-out);
+}
+
 .data-table tbody tr:hover {
-  background: #fafbfc;
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .id-cell {
-  font-family: monospace;
-  color: #9ca3af;
-  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 12.5px;
 }
 
 .user-info {
@@ -149,30 +163,55 @@ onMounted(loadAppointments)
 
 .user-email {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .status-tag {
-  padding: 6px 14px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-.status-pending { background: #fef3c7; color: #92400e; }
-.status-confirmed { background: #d1fae5; color: #065f46; }
-.status-completed { background: #e0f2fe; color: #0369a1; }
-.status-cancelled { background: #fee2e2; color: #991b1b; }
+.status-pending {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.status-confirmed {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.status-completed {
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+}
+
+.status-cancelled {
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-muted);
+}
 
 .date-cell {
-  color: #9ca3af;
-  font-size: 13px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .empty-cell {
   text-align: center;
-  padding: 60px;
-  color: #9ca3af;
-  font-size: 14px;
+  padding: 56px 16px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.empty-cell svg {
+  opacity: 0.55;
+}
+
+.empty-cell p {
+  margin: 10px 0 0;
 }
 </style>

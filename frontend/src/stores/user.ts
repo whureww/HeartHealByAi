@@ -173,28 +173,23 @@ export const useUserStore = defineStore('user', {
             return
           }
 
-          // 限制大小 2MB
-          if (file.size > 2 * 1024 * 1024) {
-            resolve({ success: false, message: '图片大小不能超过2MB' })
+          // 限制原始文件 10MB（压缩后远小于此，仅拦截异常大文件）
+          if (file.size > 10 * 1024 * 1024) {
+            resolve({ success: false, message: '图片大小不能超过10MB' })
             return
           }
 
-          const reader = new FileReader()
-          reader.onload = async () => {
-            const base64 = reader.result as string
-            try {
-              const res = await this.updateAvatar(base64)
-              resolve(res)
-            } catch (e: any) {
-              resolve({ success: false, message: e.message || '头像更新失败' })
-            }
+          try {
+            // 上传前压缩：最长边 256px，PNG 保留透明通道，其余转 JPEG 0.85
+            // 避免 base64 膨胀后触发请求体过大（413）
+            const base64 = await compressImage(file)
+            const res = await this.updateAvatar(base64)
+            resolve(res)
+          } catch (err: any) {
+            resolve({ success: false, message: err?.message || '头像更新失败' })
           }
-          reader.onerror = () => {
-            resolve({ success: false, message: '图片读取失败' })
-          }
-          reader.readAsDataURL(file)
         }
-        
+
         input.click()
       })
     },
@@ -232,8 +227,45 @@ export const useUserStore = defineStore('user', {
       this.currentResultId = null
       this.avatarBase64 = ''
       clearAuthToken()
-      // 清除加密会话文件
-      secureRemove('session')
+      // 清除加密会话文件（必须等待完成，防止整页跳转时被中断导致 token 复活）
+      await secureRemove('session')
     }
   }
 })
+
+/**
+ * 头像压缩：等比缩放到最长边 256px。
+ * PNG 输出 PNG（保留透明通道），其余类型输出 JPEG（质量 0.85）。
+ * 返回可直接入库的 dataURL。
+ */
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('图片解析失败'))
+      img.onload = () => {
+        const MAX = 256
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('画布不可用'))
+          return
+        }
+        ctx.drawImage(img, 0, 0, w, h)
+
+        const isPng = file.type === 'image/png'
+        resolve(canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.85))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
+}

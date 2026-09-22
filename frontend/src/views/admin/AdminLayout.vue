@@ -2,7 +2,7 @@
   <div class="admin-layout">
     <aside class="admin-sidebar">
       <div class="logo-box">
-        <div class="logo-mark"><AppIcon name="shield" :size="18" /></div>
+        <div class="logo-mark"><AppIcon name="brand" :size="18" /></div>
         <div class="logo-text">
           <h2>管理后台</h2>
           <p>心愈 · 管理控制台</p>
@@ -54,14 +54,14 @@ const goBack = () => {
 .admin-layout {
   display: flex;
   width: 100vw;
-  height: calc(100vh - 38px);
+  height: calc(100vh - var(--titlebar-h));
   overflow: hidden;
 }
 
 .admin-sidebar {
   width: 224px;
   min-width: 224px;
-  height: calc(100vh - 38px);
+  height: calc(100vh - var(--titlebar-h));
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-color);
   color: var(--text-primary);
@@ -177,7 +177,7 @@ nav a.active {
 
 .admin-main {
   flex: 1;
-  height: calc(100vh - 38px);
+  height: calc(100vh - var(--titlebar-h));
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--bg-primary);

@@ -1,10 +1,13 @@
-<<template>
+<template>
   <div class="result-detail-page">
     <div class="header">
-      <button class="btn-back" @click="onGoBack">← 返回</button>
+      <button class="btn-back" @click="onGoBack">
+        <AppIcon name="back" :size="15" />
+        返回
+      </button>
       <h2>测评结果详情</h2>
     </div>
-    
+
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="result" class="result-content">
       <h3>{{ result.test_name }}</h3>
@@ -25,6 +28,7 @@
 import { ref, onMounted } from 'vue'
 import { getTestResult } from '@/api/tests'
 import { error } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 const props = defineProps({
   resultId: {
@@ -79,21 +83,32 @@ const formatTime = (time: string) => {
 .header {
   display: flex;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .btn-back {
-  background: none;
-  border: none;
-  color: #73a9d8;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 13px;
   cursor: pointer;
-  padding: 8px 12px;
-  margin-right: 12px;
+  padding: 7px 14px;
+  margin-right: 14px;
+  border-radius: var(--radius-ctl);
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-back:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .header h2 {
   font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
@@ -106,50 +121,55 @@ const formatTime = (time: string) => {
 
 .result-content {
   background: var(--card-bg);
-  border-radius: 16px;
-  padding: 24px;
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
 }
 
 .result-content h3 {
-  font-size: 18px;
-  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px;
   color: var(--text-primary);
 }
 
 .score-box {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 16px;
 }
 
 .score {
-  font-size: 36px;
-  font-weight: bold;
-  color: #73a9d8;
+  font-size: 40px;
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .level {
-  font-size: 14px;
-  padding: 6px 14px;
-  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 14px;
 }
 
-.level-normal { background: #d4edda; color: #155724; }
-.level-mild { background: #fff3cd; color: #856404; }
-.level-moderate { background: #ffe0b2; color: #e65100; }
-.level-severe { background: #f8d7da; color: #721c24; }
+.level-normal { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+.level-mild { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+.level-moderate { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.level-severe { background: color-mix(in srgb, var(--danger) 28%, transparent); color: var(--danger); }
 
 .desc {
   font-size: 14px;
   color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 16px;
+  line-height: 1.7;
+  margin: 0 0 16px;
 }
 
 .time {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-muted);
 }
 

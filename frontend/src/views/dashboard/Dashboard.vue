@@ -1,22 +1,41 @@
 <template>
   <div class="app-wrap">
     <!-- 左侧导航栏 -->
-    <div class="left-sidebar">
+    <aside class="left-sidebar">
       <div class="logo-box">
-        <div class="logo-avatar"></div>
-        <h2>心愈 AI心理系统</h2>
-        <p>私密倾诉 · 测评 · 专家问诊</p>
+        <div class="logo-mark"><AppIcon name="brand" :size="19" /></div>
+        <div class="logo-text">
+          <h2>心愈</h2>
+          <p>AI 心理系统</p>
+        </div>
       </div>
-      <div class="menu-list">
-        <button 
-          v-for="item in menuItems" 
+      <nav class="menu-list">
+        <button
+          v-for="item in menuItems"
           :key="item.id"
           :class="{ active: currentPage === item.id }"
           @click="switchPage(item.id)">
-          {{ item.icon }} {{ item.name }}
+          <AppIcon :name="item.icon" :size="17" />
+          <span class="menu-text">{{ item.name }}</span>
         </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="footer-user">
+          <div class="footer-avatar">
+            <img
+              v-if="userStore.userInfo?.avatar"
+              :src="userStore.userInfo.avatar"
+              alt="头像"
+            />
+            <span v-else class="footer-avatar-text">{{ userStore.userInfo?.username?.[0]?.toUpperCase() || '?' }}</span>
+          </div>
+          <span class="footer-name">{{ userStore.userInfo?.username || '心理用户' }}</span>
+          <button class="btn-logout" title="退出登录" @click="logout">
+            <AppIcon name="logout" :size="16" />
+          </button>
+        </div>
       </div>
-    </div>
+    </aside>
 
     <!-- 中间主内容区 -->
     <div class="main-content">
@@ -31,7 +50,7 @@
           <h3>一对一 AI 私密心理倾诉</h3>
           <div class="chat-box" ref="chatBox">
             <div class="msg-item">
-              <div class="msg-ai selectable-text">你好！我是你的专属心理陪伴助手"心愈"，你所有的情绪、压力、困惑都可以安心告诉我，我会耐心倾听并给予疏导。💙</div>
+              <div class="msg-ai selectable-text">你好！我是你的专属心理陪伴助手"心愈"，你所有的情绪、压力、困惑都可以安心告诉我，我会耐心倾听并给予疏导。</div>
             </div>
             <div v-for="(msg, index) in chatMessages" :key="index" class="msg-item">
               <div :class="[msg.type === 'user' ? 'msg-user' : 'msg-ai', 'selectable-text']">{{ msg.content }}</div>
@@ -42,14 +61,16 @@
             </div>
           </div>
           <div class="input-row">
-            <input 
-              v-model="chatInput" 
-              type="text" 
+            <input
+              v-model="chatInput"
+              type="text"
               placeholder="输入你的心情与困惑..."
               @keyup.enter="sendChat"
               :disabled="aiLoading">
-            <button @click="sendChat" :disabled="aiLoading || !chatInput.trim()">
-              {{ aiLoading ? '思考中...' : '发送' }}
+            <button class="btn-send-chat" @click="sendChat" :disabled="aiLoading || !chatInput.trim()">
+              <AppIcon v-if="!aiLoading" name="send" :size="15" />
+              <AppIcon v-else name="spark" :size="15" class="spin" />
+              <span>{{ aiLoading ? '思考中...' : '发送' }}</span>
             </button>
           </div>
         </div>
@@ -81,15 +102,18 @@
           <div v-if="loading.doctors" class="loading-text">加载中...</div>
           <div class="scroll-content">
             <div class="doc-list">
-              <div v-for="doc in userStore.doctors" :key="doc.id" class="doc-card">
-                <div class="doc-header">
+              <div v-for="doc in userStore.doctors" :key="doc.id" class="doc-row">
+                <div class="doc-info">
                   <h4>{{ doc.name }}｜{{ doc.title }}</h4>
-                  <span class="online-badge" :class="{ online: isUserOnline(doc.user_id) }">
-                    {{ isUserOnline(doc.user_id) ? '🟢 在线' : '⚪ 离线' }}
-                  </span>
+                  <p>{{ doc.specialty }}</p>
                 </div>
-                <p>{{ doc.specialty }}</p>
-                <button @click="bookDoctor(doc)">立即预约问诊</button>
+                <div class="doc-side">
+                  <span class="online-badge" :class="{ online: isUserOnline(doc.user_id) }">
+                    <span class="status-dot" :class="{ online: isUserOnline(doc.user_id) }"></span>
+                    {{ isUserOnline(doc.user_id) ? '在线' : '离线' }}
+                  </span>
+                  <button class="btn-book" @click="bookDoctor(doc)">立即预约问诊</button>
+                </div>
               </div>
             </div>
           </div>
@@ -113,14 +137,19 @@
           </div>
           <div class="scroll-content">
             <div v-if="reportLoading" class="loading-text">
-              🤖 AI 正在分析您的心理数据，请稍候...
+              <AppIcon name="spark" class="spin" /> AI 正在分析您的心理数据，请稍候...
+            </div>
+            <div v-else-if="!reportContent || reportContent === '报告内容将在此处展示...'" class="report-empty">
+              <div class="report-empty-mark"><AppIcon name="moon" :size="22" /></div>
+              <p class="report-empty-title">报告会在台灯下等你</p>
+              <p class="report-empty-sub">选择时间段后生成，AI 将综合你的倾诉与测评，写下一份只有你能看见的分析</p>
             </div>
             <div v-else class="report-result selectable-text" style="white-space: pre-wrap;">{{ reportContent }}</div>
           </div>
           <!-- 导出报告按钮 -->
           <div v-if="reportContent && reportContent !== '报告内容将在此处展示...' && !reportLoading" class="report-actions">
-            <button class="btn-export" @click="exportReport">📋 复制报告内容</button>
-            <button class="btn-export" @click="downloadReport">💾 导出为 HTML</button>
+            <button class="btn-export" @click="exportReport"><AppIcon name="fileText" :size="15" /> 复制报告内容</button>
+            <button class="btn-export" @click="downloadReport"><AppIcon name="download" :size="15" /> 导出为 HTML</button>
           </div>
         </div>
       </div>
@@ -145,7 +174,7 @@
               <h4>{{ userStore.userInfo?.username || '心理用户' }}</h4>
               <p>{{ userRoleText }}</p>
             </div>
-            <span class="edit-icon">✏️</span>
+            <span class="edit-icon"><AppIcon name="edit" :size="16" /></span>
           </div>
 
 
@@ -226,15 +255,21 @@
           <div class="setting-list">
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>🌙 深色模式</span>
-                <span class="setting-desc">切换应用主题颜色</span>
+                <span>外观主题</span>
+                <span class="setting-desc">选择应用主题颜色</span>
               </div>
               <div class="setting-item-right">
-                <select v-model="settingsStore.theme" @change="settingsStore.setTheme(settingsStore.theme)" class="setting-select">
-                  <option value="light">浅色</option>
-                  <option value="dark">深色</option>
-                  <option value="system">跟随系统</option>
-                </select>
+                <div class="theme-options">
+                  <button class="theme-option" :class="{ selected: settingsStore.theme === 'light' }" @click="settingsStore.setTheme('light')">
+                    <AppIcon name="sun" :size="15" /><span>浅色</span>
+                  </button>
+                  <button class="theme-option" :class="{ selected: settingsStore.theme === 'dark' }" @click="settingsStore.setTheme('dark')">
+                    <AppIcon name="moon" :size="15" /><span>深色</span>
+                  </button>
+                  <button class="theme-option" :class="{ selected: settingsStore.theme === 'system' }" @click="settingsStore.setTheme('system')">
+                    <AppIcon name="monitor" :size="15" /><span>跟随系统</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -244,7 +279,7 @@
           <div class="setting-list">
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>🔔 消息提醒</span>
+                <span>消息提醒</span>
                 <span class="setting-desc">选择接收通知的类型</span>
               </div>
               <div class="setting-item-right">
@@ -257,7 +292,7 @@
             </div>
             <div class="setting-item" @click="settingsStore.toggleSound()">
               <div class="setting-item-left">
-                <span>🔊 提示音</span>
+                <span>提示音</span>
                 <span class="setting-desc">{{ settingsStore.soundEnabled ? '已开启' : '已关闭' }}</span>
               </div>
               <div class="setting-item-right">
@@ -273,7 +308,7 @@
           <div class="setting-list">
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>❌ 关闭窗口时</span>
+                <span>关闭窗口时</span>
                 <span class="setting-desc">点击右上角关闭按钮的行为</span>
               </div>
               <div class="setting-item-right">
@@ -291,29 +326,85 @@
           <div class="setting-list">
             <div class="setting-item" @click="exportData">
               <div class="setting-item-left">
-                <span>📥 导出完整数据备份</span>
+                <span>导出完整数据备份</span>
                 <span class="setting-desc">导出所有聊天记录、测评结果、预约记录和报告</span>
               </div>
               <div class="setting-item-right">
-                <span class="arrow">›</span>
+                <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
               </div>
             </div>
             <div class="setting-item" @click="importData">
               <div class="setting-item-left">
-                <span>📤 导入数据备份</span>
+                <span>导入数据备份</span>
                 <span class="setting-desc">从备份文件恢复所有数据</span>
               </div>
               <div class="setting-item-right">
-                <span class="arrow">›</span>
+                <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
               </div>
             </div>
             <div class="setting-item" @click="clearData">
               <div class="setting-item-left">
-                <span>🗑️ 清空本地记录</span>
+                <span>清空本地记录</span>
                 <span class="setting-desc">清空所有对话、测评记录（不可恢复）</span>
               </div>
               <div class="setting-item-right">
-                <span class="arrow">›</span>
+                <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
+              </div>
+            </div>
+            <div class="setting-item" @click="settingsStore.toggleAutoBackup()">
+              <div class="setting-item-left">
+                <span>自动备份</span>
+                <span class="setting-desc">按所选周期自动生成加密快照（本地设置数据）</span>
+              </div>
+              <div class="setting-item-right">
+                <div class="toggle-switch" :class="{ active: settingsStore.autoBackup }">
+                  <div class="toggle-knob"></div>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item" v-if="settingsStore.autoBackup">
+              <div class="setting-item-left">
+                <span>备份周期</span>
+                <span class="setting-desc">自动备份的时间间隔</span>
+              </div>
+              <div class="setting-item-right">
+                <select v-model.number="settingsStore.backupInterval" class="setting-select">
+                  <option :value="1">每天</option>
+                  <option :value="3">每 3 天</option>
+                  <option :value="7">每周</option>
+                  <option :value="14">每两周</option>
+                  <option :value="30">每月</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 隐私安全 -->
+          <h3>隐私安全</h3>
+          <div class="setting-list">
+            <div class="setting-item" @click="settingsStore.toggleLockOnLeave()">
+              <div class="setting-item-left">
+                <span>离开自动锁定</span>
+                <span class="setting-desc">无操作超过设定时长后锁定应用，需密码解锁</span>
+              </div>
+              <div class="setting-item-right">
+                <div class="toggle-switch" :class="{ active: settingsStore.lockOnLeave }">
+                  <div class="toggle-knob"></div>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item" v-if="settingsStore.lockOnLeave">
+              <div class="setting-item-left">
+                <span>锁定时长</span>
+                <span class="setting-desc">无操作多久后自动锁定</span>
+              </div>
+              <div class="setting-item-right">
+                <select v-model.number="settingsStore.lockTimeout" class="setting-select">
+                  <option :value="1">1 分钟</option>
+                  <option :value="5">5 分钟</option>
+                  <option :value="10">10 分钟</option>
+                  <option :value="30">30 分钟</option>
+                </select>
               </div>
             </div>
           </div>
@@ -323,20 +414,20 @@
           <div class="setting-list">
             <div class="setting-item" @click="showChangePassword">
               <div class="setting-item-left">
-                <span>🔐 修改密码</span>
+                <span>修改密码</span>
                 <span class="setting-desc">通过邮箱验证码修改密码</span>
               </div>
               <div class="setting-item-right">
-                <span class="arrow">›</span>
+                <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
               </div>
             </div>
             <div class="setting-item" @click="logout">
               <div class="setting-item-left">
-                <span>🚪 退出登录</span>
+                <span>退出登录</span>
                 <span class="setting-desc">返回登录页面</span>
               </div>
               <div class="setting-item-right">
-                <span class="arrow">›</span>
+                <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
               </div>
             </div>
           </div>
@@ -346,7 +437,7 @@
           <div class="setting-list">
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>ℹ️ 版本信息</span>
+                <span>版本信息</span>
                 <span class="setting-desc">心愈 AI心理系统 v1.1.0 (Powered by DeepSeek)</span>
               </div>
             </div>
@@ -414,6 +505,7 @@ import AppointmentDetail from '../expert/AppointmentDetail.vue'
 import UserAppointmentList from '../expert/UserAppointmentList.vue'
 import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
+import AppIcon from '@/components/AppIcon.vue'
 
 const streamingContent = ref('')
 const isStreaming = ref(false)    
@@ -633,16 +725,16 @@ const downloadReport = () => {
   <title>心理状态分析报告</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.8; color: #333; }
-    h2 { color: #2c3e50; border-bottom: 2px solid #73a9d8; padding-bottom: 10px; }
+    h2 { color: #332e27; border-bottom: 2px solid #a96a2c; padding-bottom: 10px; }
     .meta { color: #666; margin-bottom: 30px; font-size: 14px; }
     .section { margin-bottom: 24px; }
-    .section h3 { color: #73a9d8; margin-bottom: 12px; }
+    .section h3 { color: #a96a2c; margin-bottom: 12px; }
     .section p, .section li { margin-bottom: 8px; }
     ul { padding-left: 20px; }
   </style>
 </head>
 <body>
-  <h2>📋 心理状态综合分析报告</h2>
+  <h2>心理状态综合分析报告</h2>
   <div class="meta">
     <p>分析时间段：${startDate.value} 至 ${endDate.value}</p>
     <p>生成时间：${new Date().toLocaleString('zh-CN')}</p>
@@ -688,19 +780,19 @@ interface MenuItem {
 
 // 普通用户菜单
 const baseMenuItems: MenuItem[] = [
-  { id: 'chat', name: 'AI心理倾诉', icon: '💬' },
-  { id: 'test', name: '心理测评中心', icon: '📋' },
-  { id: 'doctor', name: '专家在线问诊', icon: '👩‍⚕️' },
-  { id: 'analysis', name: '周期AI分析报告', icon: '📊' },
-  { id: 'my-appointments', name: '我的预约', icon: '📅' },
-  { id: 'user', name: '个人中心', icon: '👤' }
+  { id: 'chat', name: 'AI心理倾诉', icon: 'chat' },
+  { id: 'test', name: '心理测评中心', icon: 'clipboard' },
+  { id: 'doctor', name: '专家在线问诊', icon: 'stethoscope' },
+  { id: 'analysis', name: '周期AI分析报告', icon: 'chart' },
+  { id: 'my-appointments', name: '我的预约', icon: 'calendar' },
+  { id: 'user', name: '个人中心', icon: 'user' }
 ]
 
 // 管理员菜单项
-const adminMenuItem: MenuItem = { 
-  id: 'admin', 
-  name: '管理后台', 
-  icon: '⚙️' 
+const adminMenuItem: MenuItem = {
+  id: 'admin',
+  name: '管理后台',
+  icon: 'settings'
 }
 
 // 动态菜单：根据 role 显示不同入口
@@ -708,8 +800,8 @@ const menuItems = computed<MenuItem[]>(() => {
   // role=2 专家：只显示专家工作台 + 个人中心
   if (userStore.userInfo?.role === 2) {
     return [
-      { id: 'expert', name: '专家工作台', icon: '👨‍⚕️' },
-      { id: 'user', name: '个人中心', icon: '👤' }
+      { id: 'expert', name: '专家工作台', icon: 'stethoscope' },
+      { id: 'user', name: '个人中心', icon: 'user' }
     ]
   }
 
@@ -943,7 +1035,7 @@ const sendChat = async () => {
     
     chatMessages.value.push({
       type: 'ai',
-      content: '抱歉，我暂时遇到了一些问题，请稍后再试。💙'
+      content: '抱歉，我暂时遇到了一些问题，请稍后再试。'
     })
     scrollToBottom()
   }
@@ -1074,16 +1166,26 @@ const scrollToBottom = () => {
 </script>
 
 <style scoped>
-/* 添加流式输出样式 */
+/* 流式输出样式：全页唯一的"呼吸光"时刻 */
 .streaming {
   animation: fadeIn 0.1s ease;
+  box-shadow: 0 0 24px var(--glow);
+}
+
+.spin {
+  animation: spin 1.2s linear infinite;
+  vertical-align: -0.15em;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .cursor {
   display: inline-block;
   width: 2px;
   height: 1em;
-  background: var(--menu-active);
+  background: var(--accent);
   margin-left: 2px;
   animation: blink 1s infinite;
   vertical-align: text-bottom;
@@ -1108,97 +1210,186 @@ const scrollToBottom = () => {
 }
 
 .btn-export {
-  padding: 8px 20px;
-  background: #e3f0fc;
-  color: #73a9d8;
-  border: none;
-  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-export:hover {
-  background: #73a9d8;
-  color: #fff;
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .app-wrap {
   display: flex;
   width: 100vw;
-  height: calc(100vh - 36px);
+  height: calc(100vh - var(--titlebar-h));
   overflow: hidden !important;
   box-sizing: border-box;
 }
 
 .left-sidebar {
-  width: 220px;
-  min-width: 220px;
+  width: 232px;
+  min-width: 232px;
   height: 100%;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-color);
-  padding: 24px 16px;
+  padding: 20px 14px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
   overflow: hidden !important;
   box-sizing: border-box;
 }
 
 .logo-box {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 6px 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
-.logo-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #73a9d8, #b4d8f0);
-  margin: 0 auto 10px;
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.logo-box h2 {
-  font-size: 15px;
+.logo-text h2 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
   color: var(--text-primary);
   line-height: 1.3;
 }
 
-.logo-box p {
+.logo-text p {
+  margin: 0;
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 4px;
 }
 
 .menu-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .menu-list button {
   width: 100%;
-  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
   border: none;
-  border-radius: 10px;
-  background: var(--menu-bg);
+  border-radius: var(--radius-ctl);
+  background: transparent;
   text-align: left;
-  font-size: 13px;
+  font-size: 13.5px;
   cursor: pointer;
-  transition: 0.25s;
-  color: var(--text-primary);
+  transition: background 0.2s var(--ease-out), color 0.2s var(--ease-out);
+  color: var(--text-secondary);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .menu-list button:hover {
-  background: #e3f0fc;
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .menu-list button.active {
-  background: var(--menu-active);
-  color: #fff;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.footer-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.footer-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.footer-avatar-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.footer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.btn-logout {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-logout:hover {
+  background: var(--accent-soft);
+  color: var(--danger);
 }
 
 .main-content {
@@ -1238,9 +1429,10 @@ const scrollToBottom = () => {
 
 .card {
   background: var(--card-bg);
-  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
   padding: 24px;
-  box-shadow: 0 2px 12px var(--shadow);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -1254,24 +1446,24 @@ const scrollToBottom = () => {
 }
 /* 专家统计样式 */
 .expert-stats .data-item:nth-child(1) .num {
-  color: #f59e0b;
+  color: var(--warning);
 }
 
 .expert-stats .data-item:nth-child(2) .num {
-  color: #10b981;
+  color: var(--success);
 }
 
 .expert-stats .data-item:nth-child(3) .num {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .expert-stats .data-item:nth-child(4) .num {
-  color: #73a9d8;
+  color: var(--accent);
 }
 
 /* 管理员统计样式 */
 .admin-stats .data-item .num {
-  color: #73a9d8;
+  color: var(--accent);
 }
 
 .card h3 {
@@ -1289,10 +1481,20 @@ const scrollToBottom = () => {
 }
 
 .loading-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   text-align: center;
   color: var(--text-muted);
   padding: 40px;
+  box-sizing: border-box;
   flex-shrink: 0;
+}
+
+/* 仅报告生成区保留预留高度（滚动容器内），其余加载态自然收拢 */
+.scroll-content .loading-text {
+  min-height: 132px;
 }
 
 .scroll-content {
@@ -1309,39 +1511,41 @@ const scrollToBottom = () => {
 .chat-box {
   flex: 1;
   overflow-y: auto;
-  background: var(--input-bg);
+  background: transparent;
   border-radius: 12px;
-  padding: 16px;
+  padding: 8px 4px 12px;
   margin-bottom: 12px;
   min-height: 0;
   box-sizing: border-box;
 }
 
 .msg-item {
+  display: flex;
+  justify-content: flex-start;
   margin-bottom: 12px;
-  clear: both;
-  overflow: hidden;
+}
+
+.msg-item:has(.msg-user) {
+  justify-content: flex-end;
 }
 
 .msg-ai {
-  float: left;
-  max-width: 75%;
+  max-width: 68%;
   padding: 10px 14px;
   background: var(--msg-ai-bg);
   border-radius: 14px 14px 14px 4px;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--text-primary);
 }
 
 .msg-user {
-  float: right;
-  max-width: 75%;
+  max-width: 68%;
   padding: 10px 14px;
   background: var(--msg-user-bg);
   border-radius: 14px 14px 4px 14px;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--text-primary);
 }
 
@@ -1380,13 +1584,19 @@ const scrollToBottom = () => {
   flex: 1;
   padding: 0 16px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-ctl);
   outline: none;
   font-size: 14px;
   height: 100%;
   background: var(--input-bg);
   color: var(--text-primary);
   box-sizing: border-box;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.input-row input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .input-row input:disabled {
@@ -1394,21 +1604,31 @@ const scrollToBottom = () => {
   cursor: not-allowed;
 }
 
-.input-row button {
-  padding: 0 24px;
+.btn-send-chat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 22px;
   border: none;
-  border-radius: 10px;
-  background: var(--menu-active);
-  color: #fff;
+  border-radius: var(--radius-ctl);
+  background: var(--accent);
+  color: var(--on-accent);
   cursor: pointer;
   font-size: 14px;
+  font-weight: 600;
   height: 100%;
   flex-shrink: 0;
   box-sizing: border-box;
+  transition: background 0.2s var(--ease-out), opacity 0.2s;
 }
 
-.input-row button:disabled {
-  opacity: 0.6;
+.btn-send-chat:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.btn-send-chat:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -1422,7 +1642,7 @@ const scrollToBottom = () => {
 }
 
 .test-item:hover {
-  border-color: var(--menu-active);
+  border-color: var(--accent);
   background: var(--bg-secondary);
 }
 
@@ -1438,59 +1658,82 @@ const scrollToBottom = () => {
 }
 
 .doc-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-}
-
-.doc-card {
-  padding: 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: var(--card-bg);
-}
-
-.doc-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
+  flex-direction: column;
 }
 
-.doc-card h4 {
+.doc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.doc-row:last-child {
+  border-bottom: none;
+}
+
+.doc-info h4 {
   color: var(--text-primary);
   font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.doc-info p {
+  font-size: 12.5px;
+  color: var(--text-secondary);
   margin: 0;
 }
 
+.doc-side {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
 .online-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #f3f4f6;
-  color: #9ca3af;
-  transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: color 0.3s;
 }
 
 .online-badge.online {
-  background: #d1fae5;
-  color: #065f46;
+  color: var(--success);
 }
 
-.doc-card p {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 10px;
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 0.3s;
 }
 
-.doc-card button {
+.status-dot.online {
+  background: var(--success);
+}
+
+.btn-book {
   border: none;
   padding: 8px 14px;
-  background: var(--menu-active);
-  color: #fff;
-  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 13px;
+  transition: background 0.2s var(--ease-out), opacity 0.2s;
+}
+
+.btn-book:hover {
+  background: var(--accent-strong);
 }
 
 .time-select {
@@ -1505,33 +1748,86 @@ const scrollToBottom = () => {
 .time-select input {
   padding: 8px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-ctl);
   font-size: 13px;
   background: var(--input-bg);
   color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.time-select input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .time-select button {
-  padding: 8px 14px;
-  background: var(--menu-active);
-  color: #fff;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 13px;
+  font-weight: 600;
+  transition: background 0.2s var(--ease-out), opacity 0.2s;
+}
+
+.time-select button:hover:not(:disabled) {
+  background: var(--accent-strong);
 }
 
 .time-select button:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
+}
+
+.report-empty {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  gap: 4px;
+}
+
+.report-empty-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  box-shadow: 0 0 28px var(--glow);
+}
+
+.report-empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.report-empty-sub {
+  margin: 0;
+  max-width: 340px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
 }
 
 .report-result {
   padding: 16px;
-  background: var(--input-bg);
-  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   line-height: 1.7;
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text-primary);
 }
 
@@ -1545,19 +1841,22 @@ const scrollToBottom = () => {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 16px;
+  padding: 10px 10px 16px;
+  margin: 0 -10px 16px;
+  border-radius: var(--radius-ctl);
+  box-sizing: border-box;
   flex-shrink: 0;
   cursor: pointer;
-  transition: background 0.2s;
-  border-radius: 12px;
-  padding: 12px;
-  margin: -12px -12px 16px -12px;
+  transition: background-color 0.2s var(--ease-out);
+  /* 分割线用背景层绘制：宽度只到内容边缘，不随高亮外扩 */
+  background-image: linear-gradient(var(--border-color), var(--border-color));
+  background-size: calc(100% - 20px) 1px;
+  background-position: 10px 100%;
+  background-repeat: no-repeat;
 }
 
 .user-info-top:hover {
-  background: rgba(115, 169, 216, 0.08);
+  background-color: var(--accent-soft);
 }
 
 .user-avatar {
@@ -1566,7 +1865,10 @@ const scrollToBottom = () => {
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #73a9d8, #b4d8f0);
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .avatar-img {
@@ -1582,7 +1884,7 @@ const scrollToBottom = () => {
   align-items: center;
   justify-content: center;
   font-size: 28px;
-  color: #fff;
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -1599,7 +1901,8 @@ const scrollToBottom = () => {
 
 .edit-icon {
   margin-left: auto;
-  font-size: 16px;
+  display: inline-flex;
+  color: var(--text-muted);
   opacity: 0.5;
   transition: opacity 0.2s;
 }
@@ -1625,9 +1928,10 @@ const scrollToBottom = () => {
 
 .data-item .num {
   font-size: 20px;
-  font-weight: bold;
-  color: var(--menu-active);
+  font-weight: 600;
+  color: var(--accent);
   margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .data-item .text {
@@ -1653,7 +1957,7 @@ const scrollToBottom = () => {
 }
 
 .setting-item:hover {
-  background: rgba(115, 169, 216, 0.05);
+  background: var(--accent-soft);
 }
 
 .setting-item-left {
@@ -1679,19 +1983,57 @@ const scrollToBottom = () => {
 
 .setting-select {
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-ctl);
   border: 1px solid var(--border-color);
   background: var(--input-bg);
   color: var(--text-primary);
   font-size: 13px;
   outline: none;
   cursor: pointer;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.setting-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.theme-options {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+  white-space: nowrap;
+}
+
+.theme-option:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.theme-option.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .toggle-switch {
   width: 44px;
   height: 24px;
-  background: #ccc;
+  background: var(--border-strong);
   border-radius: 12px;
   position: relative;
   cursor: pointer;
@@ -1699,13 +2041,13 @@ const scrollToBottom = () => {
 }
 
 .toggle-switch.active {
-  background: var(--menu-active);
+  background: var(--accent);
 }
 
 .toggle-knob {
   width: 20px;
   height: 20px;
-  background: #fff;
+  background: var(--on-accent);
   border-radius: 50%;
   position: absolute;
   top: 2px;
@@ -1719,16 +2061,9 @@ const scrollToBottom = () => {
 }
 
 .arrow {
-  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
   color: var(--text-muted);
-}
-
-:global(html.dark) .setting-item:hover {
-  background: rgba(255,255,255,0.05);
-}
-
-:global(html.dark) .data-item {
-  background: var(--bg-secondary);
 }
 
 .user-card::-webkit-scrollbar,
@@ -1749,8 +2084,8 @@ const scrollToBottom = () => {
 
 @media (max-width: 900px) {
   .left-sidebar {
-    width: 180px;
-    min-width: 180px;
+    width: 190px;
+    min-width: 190px;
   }
 
   .card {
@@ -1762,25 +2097,41 @@ const scrollToBottom = () => {
   .left-sidebar {
     width: 60px;
     min-width: 60px;
+    padding: 16px 8px;
   }
 
-  .logo-box h2, .logo-box p {
+  .logo-text {
     display: none;
   }
 
-  .logo-avatar {
-    width: 40px;
-    height: 40px;
+  .logo-box {
+    justify-content: center;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .footer-name,
+  .btn-logout {
+    display: none;
+  }
+
+  .footer-user {
+    justify-content: center;
   }
 
   .menu-list button {
     padding: 10px;
-    text-align: center;
-    font-size: 11px;
+    justify-content: center;
   }
 
-  .doc-list {
-    grid-template-columns: 1fr;
+  .menu-list button .menu-text {
+    display: none;
+  }
+
+  .doc-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 
   .user-data-list {

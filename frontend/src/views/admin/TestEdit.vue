@@ -1,6 +1,8 @@
 <template>
   <div class="page-container">
-    <h2>{{ isEdit ? '编辑问卷' : '新建问卷' }}</h2>
+    <div class="page-header">
+      <h2>{{ isEdit ? '编辑问卷' : '新建问卷' }}</h2>
+    </div>
 
     <div class="form-section">
       <h3>基本信息</h3>
@@ -51,7 +53,9 @@
       <div v-for="(level, index) in form.result_levels" :key="index" class="level-card">
         <div class="level-header">
           <span>等级 {{ index + 1 }}</span>
-          <button class="btn-icon" @click="removeLevel(index)">×</button>
+          <button class="btn-icon" @click="removeLevel(index)" title="删除该等级">
+            <AppIcon name="close" :size="14" />
+          </button>
         </div>
         <div class="form-grid">
           <div class="form-group">
@@ -72,7 +76,10 @@
           <textarea v-model="level.desc" rows="2" placeholder="该等级的结果描述和建议"></textarea>
         </div>
       </div>
-      <button class="btn-add" @click="addLevel">+ 添加等级</button>
+      <button class="btn-add" @click="addLevel">
+        <AppIcon name="plus" :size="14" />
+        添加等级
+      </button>
     </div>
 
     <!-- 题目设置 -->
@@ -81,7 +88,9 @@
       <div v-for="(question, qIndex) in form.questions" :key="qIndex" class="question-card">
         <div class="question-header">
           <span>第 {{ qIndex + 1 }} 题</span>
-          <button class="btn-icon" @click="removeQuestion(qIndex)">×</button>
+          <button class="btn-icon" @click="removeQuestion(qIndex)" title="删除该题">
+            <AppIcon name="close" :size="14" />
+          </button>
         </div>
         <div class="form-group full-width">
           <label>题目内容 <span class="required">*</span></label>
@@ -99,19 +108,27 @@
             </label>
           </div>
         </div>
-        
+
         <!-- 选项设置 -->
         <div class="options-section">
           <label>选项设置</label>
           <div v-for="(option, oIndex) in question.options" :key="oIndex" class="option-row">
             <input v-model.number="option.score" type="number" placeholder="分值" class="score-input" />
             <input v-model="option.text" placeholder="选项文字" class="text-input" />
-            <button class="btn-icon" @click="removeOption(qIndex, oIndex)">×</button>
+            <button class="btn-icon" @click="removeOption(qIndex, oIndex)" title="删除该选项">
+              <AppIcon name="close" :size="14" />
+            </button>
           </div>
-          <button class="btn-add-small" @click="addOption(qIndex)">+ 添加选项</button>
+          <button class="btn-add-small" @click="addOption(qIndex)">
+            <AppIcon name="plus" :size="13" />
+            添加选项
+          </button>
         </div>
       </div>
-      <button class="btn-add" @click="addQuestion">+ 添加题目</button>
+      <button class="btn-add" @click="addQuestion">
+        <AppIcon name="plus" :size="14" />
+        添加题目
+      </button>
     </div>
 
     <div class="form-actions">
@@ -129,6 +146,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createTest } from '@/api/admin'
 import { alert, success, error } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 interface QuestionOption {
   score: number
@@ -230,7 +248,7 @@ const submit = async () => {
     await alert('请至少添加一道题目')
     return
   }
-  
+
   isSubmitting.value = true
   try {
     await createTest(form.value)
@@ -252,29 +270,42 @@ onMounted(() => {
 
 <style scoped>
 .page-container {
-  background: #fff;
-  border-radius: 16px;
-  padding: 30px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  padding: 28px 32px;
   max-width: 900px;
   margin: 0 auto;
 }
 
+.page-header {
+  margin: 4px 0 20px;
+}
+
 h2 {
-  margin-bottom: 24px;
+  margin: 0;
   font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .form-section {
-  margin-bottom: 30px;
-  padding-bottom: 30px;
-  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 26px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.form-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .form-section h3 {
   font-size: 16px;
+  font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 16px;
+  margin: 0 0 16px;
 }
 
 .form-grid {
@@ -287,6 +318,7 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-bottom: 14px;
 }
 
 .form-group.full-width {
@@ -299,24 +331,29 @@ h2 {
 }
 
 .required {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .form-group input,
 .form-group select,
 .form-group textarea {
-  padding: 10px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  padding: 9px 13px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   font-size: 14px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+  box-sizing: border-box;
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-  border-color: #73a9d8;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .checkbox-group label {
@@ -324,14 +361,16 @@ h2 {
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  padding-top: 8px;
 }
 
 .level-card,
 .question-card {
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  padding: 18px;
+  margin-bottom: 14px;
 }
 
 .level-header,
@@ -339,14 +378,23 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  font-weight: 500;
+  margin-bottom: 14px;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text-primary);
 }
 
 .options-section {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px dashed #e5e7eb;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-strong);
+}
+
+.options-section > label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  display: block;
 }
 
 .option-row {
@@ -357,7 +405,8 @@ h2 {
 }
 
 .score-input {
-  width: 80px;
+  width: 84px;
+  flex-shrink: 0;
 }
 
 .text-input {
@@ -368,66 +417,101 @@ h2 {
   width: 28px;
   height: 28px;
   border: none;
-  background: #fee2e2;
-  color: #ef4444;
+  background: transparent;
+  color: var(--text-muted);
   border-radius: 50%;
   cursor: pointer;
-  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-icon:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 .btn-add {
   width: 100%;
-  padding: 14px;
-  border: 2px dashed #73a9d8;
+  padding: 12px;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, transparent);
   background: transparent;
-  color: #73a9d8;
-  border-radius: 12px;
+  color: var(--accent);
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
-  transition: 0.2s;
+  font-family: var(--font-ui);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-add:hover {
-  background: #e3f0fc;
+  background: var(--accent-soft);
 }
 
 .btn-add-small {
-  padding: 8px 16px;
-  border: 1px dashed #73a9d8;
+  padding: 7px 14px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
   background: transparent;
-  color: #73a9d8;
-  border-radius: 8px;
+  color: var(--accent);
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 13px;
+  font-family: var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-add-small:hover {
+  background: var(--accent-soft);
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 16px;
-  margin-top: 40px;
+  gap: 12px;
+  margin-top: 32px;
 }
 
 .btn-cancel {
-  padding: 12px 32px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  border-radius: 12px;
+  padding: 10px 28px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-cancel:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .btn-submit {
-  padding: 12px 32px;
-  background: #73a9d8;
-  color: #fff;
+  padding: 10px 28px;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  transition: background 0.2s var(--ease-out);
+}
+
+.btn-submit:hover:not(:disabled) {
+  background: var(--accent-strong);
 }
 
 .btn-submit:disabled {

@@ -1,23 +1,25 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>👥 用户管理</h2>
-      <p class="subtitle">管理系统用户，分配角色权限</p>
+      <div>
+        <h2>用户管理</h2>
+        <p class="subtitle">管理系统用户，分配角色权限</p>
+      </div>
     </div>
-    
+
     <div class="search-bar">
       <div class="search-input-wrap">
-        <span class="search-icon">🔍</span>
-        <input 
-          v-model="searchKeyword" 
-          placeholder="搜索用户名 / 邮箱 / 手机号" 
-          @keyup.enter="loadUsers" 
+        <AppIcon name="search" :size="16" class="search-icon" />
+        <input
+          v-model="searchKeyword"
+          placeholder="搜索用户名 / 邮箱 / 手机号"
+          @keyup.enter="loadUsers"
         />
       </div>
       <button class="btn-search" @click="loadUsers">搜索</button>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-card">
       <table class="data-table">
         <thead>
           <tr>
@@ -48,8 +50,8 @@
             </td>
             <td class="date-cell">{{ formatDate(user.created_at) }}</td>
             <td>
-              <select 
-                v-model="user.newRole" 
+              <select
+                v-model="user.newRole"
                 class="role-select"
                 @change="updateRole(user)"
               >
@@ -60,27 +62,32 @@
             </td>
           </tr>
           <tr v-if="users.length === 0">
-            <td colspan="7" class="empty-cell">暂无用户数据</td>
+            <td colspan="7" class="empty-cell">
+              <AppIcon name="list" :size="28" />
+              <p>暂无用户数据</p>
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
 
     <div class="pagination">
-      <button 
-        :disabled="page <= 1" 
+      <button
+        :disabled="page <= 1"
         @click="page--; loadUsers()"
         class="page-btn"
       >
-        ← 上一页
+        <AppIcon name="back" :size="14" />
+        上一页
       </button>
       <span class="page-info">{{ page }} / {{ totalPages }}</span>
-      <button 
-        :disabled="page >= totalPages" 
+      <button
+        :disabled="page >= totalPages"
         @click="page++; loadUsers()"
         class="page-btn"
       >
-        下一页 →
+        下一页
+        <AppIcon name="chevronRight" :size="14" />
       </button>
     </div>
   </div>
@@ -90,6 +97,7 @@
 import { ref, onMounted, computed } from 'vue'
 import request from '@/api/request'
 import { success, error } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 const users = ref<any[]>([])
 const page = ref(1)
@@ -122,7 +130,7 @@ const loadUsers = async () => {
 
 const updateRole = async (user: any) => {
   if (user.newRole === user.role) return
-  
+
   try {
     await request.put(`/admin/users/${user.id}/role`, { role: user.newRole })
     user.role = user.newRole
@@ -138,108 +146,125 @@ onMounted(loadUsers)
 
 <style scoped>
 .page-container {
-  background: #fff;
-  border-radius: 20px;
-  padding: 32px;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+  max-width: 1080px;
 }
 
 .page-header {
-  margin-bottom: 24px;
+  margin: 8px 0 20px;
 }
 
 .page-header h2 {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
+  color: var(--text-primary);
+  margin: 0 0 4px;
 }
 
 .subtitle {
-  color: #9ca3af;
-  font-size: 14px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  margin: 0;
 }
 
 .search-bar {
   display: flex;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .search-input-wrap {
   flex: 1;
   display: flex;
   align-items: center;
-  background: #f3f4f6;
-  border-radius: 12px;
-  padding: 0 16px;
-  gap: 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  padding: 0 14px;
+  gap: 8px;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.search-input-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .search-icon {
-  font-size: 16px;
-  opacity: 0.5;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .search-input-wrap input {
   flex: 1;
-  padding: 12px 0;
+  padding: 10px 0;
   border: none;
   background: transparent;
   font-size: 14px;
   outline: none;
-  color: #374151;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.search-input-wrap input::placeholder {
+  color: var(--text-muted);
 }
 
 .btn-search {
-  padding: 12px 28px;
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  padding: 10px 24px;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: background 0.2s var(--ease-out);
 }
 
 .btn-search:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(115, 169, 216, 0.3);
+  background: var(--accent-strong);
 }
 
-.table-wrap {
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid #f0f0f0;
+.table-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  color: var(--text-secondary);
 }
 
 .data-table th {
-  padding: 16px;
+  padding: 13px 16px;
   text-align: left;
-  background: #f9fafb;
-  color: #6b7280;
+  color: var(--text-muted);
   font-weight: 500;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
 .data-table td {
-  padding: 16px;
+  padding: 13px 16px;
   text-align: left;
-  border-bottom: 1px solid #f3f4f6;
-  color: #4b5563;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13.5px;
+}
+
+.data-table tbody tr {
+  transition: background 0.15s var(--ease-out);
 }
 
 .data-table tbody tr:hover {
-  background: #fafbfc;
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
 }
 
 .data-table tbody tr:last-child td {
@@ -247,9 +272,9 @@ onMounted(loadUsers)
 }
 
 .id-cell {
-  font-family: monospace;
-  color: #9ca3af;
-  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 12.5px;
 }
 
 .user-info {
@@ -259,95 +284,123 @@ onMounted(loadUsers)
 }
 
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #73a9d8, #b4d8f0);
+  background: var(--accent-soft);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .role-tag {
-  padding: 6px 14px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-.role-1 { background: #e0f2fe; color: #0369a1; }
-.role-2 { background: #fef3c7; color: #92400e; }
-.role-3 { background: #fce7f3; color: #be185d; }
+.role-1 {
+  background: color-mix(in srgb, var(--info) 14%, transparent);
+  color: var(--info);
+}
+
+.role-2 {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.role-3 {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
 
 .date-cell {
-  color: #9ca3af;
-  font-size: 13px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .role-select {
-  padding: 8px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   font-size: 13px;
-  background: #fff;
-  color: #374151;
+  background: var(--input-bg);
+  color: var(--text-primary);
   cursor: pointer;
   outline: none;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
 }
 
 .role-select:hover {
-  border-color: #73a9d8;
+  border-color: var(--border-strong);
 }
 
 .role-select:focus {
-  border-color: #73a9d8;
-  box-shadow: 0 0 0 3px rgba(115, 169, 216, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .empty-cell {
   text-align: center;
-  padding: 60px;
-  color: #9ca3af;
-  font-size: 14px;
+  padding: 56px 16px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.empty-cell svg {
+  opacity: 0.55;
+}
+
+.empty-cell p {
+  margin: 10px 0 0;
 }
 
 .pagination {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 20px;
-  margin-top: 28px;
+  gap: 16px;
+  margin-top: 24px;
 }
 
 .page-btn {
-  padding: 10px 20px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  border-radius: 10px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 13px;
-  color: #4b5563;
-  transition: all 0.2s;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s var(--ease-out);
 }
 
 .page-btn:hover:not(:disabled) {
-  border-color: #73a9d8;
-  color: #73a9d8;
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .page-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .page-info {
-  font-size: 14px;
-  color: #6b7280;
-  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
   min-width: 60px;
   text-align: center;
 }

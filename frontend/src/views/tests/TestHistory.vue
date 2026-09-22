@@ -1,13 +1,16 @@
-<<template>
+<template>
   <div class="history-page">
     <div class="header">
-      <button class="btn-back" @click="onGoBack">← 返回</button>
+      <button class="btn-back" @click="onGoBack">
+        <AppIcon name="back" :size="15" />
+        返回
+      </button>
       <h2>测评历史</h2>
     </div>
 
     <div class="history-list" v-if="history.length > 0">
-      <div 
-        v-for="item in history" 
+      <div
+        v-for="item in history"
         :key="item.id"
         class="history-item"
         @click="onViewDetail(item.id)"
@@ -22,6 +25,7 @@
             {{ item.result_level }}
           </span>
         </div>
+        <AppIcon name="chevronRight" :size="16" class="row-arrow" />
       </div>
     </div>
 
@@ -36,6 +40,7 @@
 import { ref, onMounted } from 'vue'
 import { getTestHistory } from '@/api/tests'
 import { error } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 const emit = defineEmits(['go-back', 'view-detail'])
 
@@ -83,21 +88,32 @@ const onViewDetail = (id: number) => {
 .header {
   display: flex;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .btn-back {
-  background: none;
-  border: none;
-  color: #73a9d8;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 13px;
   cursor: pointer;
-  padding: 8px 12px;
-  margin-right: 12px;
+  padding: 7px 14px;
+  margin-right: 14px;
+  border-radius: var(--radius-ctl);
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-back:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .header h2 {
   font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
@@ -105,30 +121,41 @@ const onViewDetail = (id: number) => {
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
 .history-item {
-  background: var(--card-bg);
-  border-radius: 14px;
-  padding: 16px 20px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
   cursor: pointer;
-  border: 1px solid var(--border-color);
-  transition: all 0.2s;
+  transition: background 0.2s var(--ease-out);
+}
+
+.history-item:last-child {
+  border-bottom: none;
 }
 
 .history-item:hover {
-  transform: translateX(4px);
-  box-shadow: 0 4px 12px var(--shadow);
+  background: var(--accent-soft);
+}
+
+.history-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .history-info h4 {
-  font-size: 15px;
+  font-size: 14.5px;
+  font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 6px 0;
+  margin: 0 0 4px;
 }
 
 .time {
@@ -137,27 +164,35 @@ const onViewDetail = (id: number) => {
 }
 
 .history-result {
-  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .score {
-  font-size: 20px;
-  font-weight: bold;
-  color: #73a9d8;
-  display: block;
-  margin-bottom: 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 
 .level {
   font-size: 12px;
-  padding: 4px 10px;
+  font-weight: 600;
+  padding: 3px 10px;
   border-radius: 12px;
 }
 
-.level-normal { background: #d4edda; color: #155724; }
-.level-mild { background: #fff3cd; color: #856404; }
-.level-moderate { background: #ffe0b2; color: #e65100; }
-.level-severe { background: #f8d7da; color: #721c24; }
+.level-normal { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+.level-mild { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+.level-moderate { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.level-severe { background: color-mix(in srgb, var(--danger) 28%, transparent); color: var(--danger); }
+
+.row-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
 
 .empty {
   text-align: center;
@@ -165,18 +200,24 @@ const onViewDetail = (id: number) => {
 }
 
 .empty p {
-  font-size: 15px;
-  color: var(--text-secondary);
-  margin-bottom: 20px;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0 0 20px;
 }
 
 .btn-go {
   padding: 10px 28px;
-  background: #73a9d8;
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-ctl);
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.2s var(--ease-out);
+}
+
+.btn-go:hover {
+  background: var(--accent-strong);
 }
 </style>

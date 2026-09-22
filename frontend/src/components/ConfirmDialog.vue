@@ -4,7 +4,7 @@
       <div class="dialog-box" @click.stop>
         <h3>确认关闭</h3>
         <p>您希望如何操作？</p>
-        
+
         <div class="buttons-row">
           <button class="btn-minimize" @click="onMinimize">最小化</button>
           <button class="btn-exit" @click="onExit">直接退出</button>
@@ -56,7 +56,7 @@ const onCancel = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(20, 21, 28, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -64,24 +64,26 @@ const onCancel = () => {
 }
 
 .dialog-box {
-  background: #fff;
+  background: var(--card-bg);
   width: 300px;
   padding: 28px;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
 }
 
 h3 {
-  font-size: 18px;
-  margin-bottom: 8px;
-  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--text-primary);
   text-align: center;
 }
 
 p {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 14px;
-  margin-bottom: 24px;
+  margin: 0 0 24px;
   text-align: center;
 }
 
@@ -93,30 +95,33 @@ p {
 
 .buttons-row button {
   flex: 1;
-  height: 44px;
-  border-radius: 12px;
+  height: 42px;
+  border-radius: var(--radius-ctl);
   border: none;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-minimize {
-  background: #f3f4f6;
-  color: #4b5563;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
 }
 
 .btn-minimize:hover {
-  background: #e5e7eb;
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .btn-exit {
-  background: #ef4444;
-  color: #fff;
+  background: var(--danger);
+  color: var(--on-accent);
 }
 
 .btn-exit:hover {
-  background: #dc2626;
+  filter: brightness(0.92);
 }
 
 .remember {
@@ -125,14 +130,14 @@ p {
   justify-content: center;
   gap: 8px;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .remember input {
   width: 14px;
   height: 14px;
-  accent-color: #3b82f6;
+  accent-color: var(--accent);
   cursor: pointer;
 }
 

@@ -1,24 +1,24 @@
-<<template>
+<template>
   <transition name="fade">
     <div v-if="visible" class="dialog-overlay" @click="onOverlayClick">
       <div class="dialog-box" :class="type" @click.stop>
         <div class="dialog-icon" v-if="icon">
-          {{ icon }}
+          <AppIcon :name="icon" :size="38" :stroke="1.6" />
         </div>
         <h3>{{ title }}</h3>
         <p>{{ message }}</p>
-        
+
         <div class="buttons-row">
-          <button 
-            v-if="showCancel" 
-            class="btn-cancel" 
+          <button
+            v-if="showCancel"
+            class="btn-cancel"
             @click="onCancel"
           >
             {{ cancelText }}
           </button>
-          <button 
+          <button
             v-if="showConfirm"
-            class="btn-confirm" 
+            class="btn-confirm"
             :class="confirmClass"
             @click="onConfirm"
           >
@@ -32,6 +32,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
+import AppIcon from '@/components/AppIcon.vue'
 
 interface DialogOptions {
   title?: string
@@ -63,7 +64,7 @@ const show = async (options: DialogOptions): Promise<boolean> => {
     await nextTick()
     await new Promise(resolve => setTimeout(resolve, 200))
   }
-  
+
   title.value = options.title || '提示'
   message.value = options.message
   type.value = options.type || 'info'
@@ -73,10 +74,10 @@ const show = async (options: DialogOptions): Promise<boolean> => {
   cancelText.value = options.cancelText || '取消'
   confirmText.value = options.confirmText || '确定'
   confirmClass.value = options.confirmClass || ''
-  
+
   await nextTick()
   visible.value = true
-  
+
   return new Promise<boolean>((resolve) => {
     resolvePromise = resolve
   })
@@ -89,12 +90,12 @@ const hide = () => {
 
 const getIcon = (t?: string) => {
   const map: Record<string, string> = {
-    info: 'ℹ️',
-    success: '✅',
-    warning: '⚠️',
-    error: '❌'
+    info: 'info',
+    success: 'check',
+    warning: 'warning',
+    error: 'close'
   }
-  return map[t || 'info'] || 'ℹ️'
+  return map[t || 'info'] || 'info'
 }
 
 const onConfirm = () => {
@@ -127,7 +128,7 @@ defineExpose({ show, hide })
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(20, 21, 28, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -135,41 +136,45 @@ defineExpose({ show, hide })
 }
 
 .dialog-box {
-  background: #fff;
+  background: var(--card-bg);
   width: 320px;
   padding: 28px;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
   text-align: center;
 }
 
-.dialog-box.error .btn-confirm {
-  background: #ef4444;
-}
-
-.dialog-box.warning .btn-confirm {
-  background: #f59e0b;
-}
-
-.dialog-box.success .btn-confirm {
-  background: #10b981;
-}
-
 .dialog-icon {
-  font-size: 48px;
+  color: var(--info);
   margin-bottom: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.dialog-box.success .dialog-icon {
+  color: var(--success);
+}
+
+.dialog-box.warning .dialog-icon {
+  color: var(--warning);
+}
+
+.dialog-box.error .dialog-icon {
+  color: var(--danger);
 }
 
 h3 {
-  font-size: 18px;
-  margin-bottom: 8px;
-  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--text-primary);
 }
 
 p {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 14px;
-  margin-bottom: 24px;
+  margin: 0 0 24px;
   line-height: 1.5;
 }
 
@@ -180,30 +185,60 @@ p {
 
 .buttons-row button {
   flex: 1;
-  height: 44px;
-  border-radius: 12px;
+  height: 42px;
+  border-radius: var(--radius-ctl);
   border: none;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-cancel {
-  background: #f3f4f6;
-  color: #4b5563;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
 }
 
 .btn-cancel:hover {
-  background: #e5e7eb;
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .btn-confirm {
-  background: #73a9d8;
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .btn-confirm:hover {
-  opacity: 0.9;
+  background: var(--accent-strong);
+}
+
+.dialog-box.error .btn-confirm {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+
+.dialog-box.error .btn-confirm:hover {
+  filter: brightness(0.92);
+}
+
+.dialog-box.warning .btn-confirm {
+  background: var(--warning);
+  color: var(--on-accent);
+}
+
+.dialog-box.warning .btn-confirm:hover {
+  filter: brightness(0.92);
+}
+
+.dialog-box.success .btn-confirm {
+  background: var(--success);
+  color: var(--on-accent);
+}
+
+.dialog-box.success .btn-confirm:hover {
+  filter: brightness(0.92);
 }
 
 .fade-enter-active,

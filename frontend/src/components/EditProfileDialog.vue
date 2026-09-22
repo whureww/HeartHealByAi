@@ -3,16 +3,18 @@
     <div class="modal-content" @click.stop>
       <div class="modal-header">
         <h3>编辑资料</h3>
-        <button class="btn-close" @click="close">✕</button>
+        <button class="btn-close" @click="close" title="关闭">
+          <AppIcon name="close" :size="16" />
+        </button>
       </div>
-      
+
       <div class="modal-body">
         <!-- 头像区域 -->
         <div class="avatar-section">
           <div class="avatar-wrapper" @click="changeAvatar">
-            <img 
-              v-if="userStore.avatarBase64" 
-              :src="userStore.avatarBase64" 
+            <img
+              v-if="userStore.avatarBase64"
+              :src="userStore.avatarBase64"
               class="avatar-img"
               alt="头像"
             />
@@ -20,34 +22,35 @@
               {{ userStore.userInfo?.username?.[0]?.toUpperCase() || '?' }}
             </div>
             <div class="avatar-overlay">
-              <span>📷 更换</span>
+              <AppIcon name="camera" :size="14" />
+              <span>更换</span>
             </div>
           </div>
         </div>
-        
+
         <!-- 昵称 -->
         <div class="form-item">
           <label>昵称</label>
-          <input 
-            v-model="form.username" 
-            type="text" 
+          <input
+            v-model="form.username"
+            type="text"
             placeholder="请输入昵称"
             maxlength="20"
           />
           <span class="char-count">{{ form.username.length }}/20</span>
         </div>
-        
+
         <!-- 邮箱（只读） -->
         <div class="form-item">
           <label>邮箱</label>
           <input :value="userStore.userInfo?.email" disabled type="text" />
         </div>
       </div>
-      
+
       <div class="modal-footer">
         <button class="btn-cancel" @click="close">取消</button>
-        <button 
-          class="btn-confirm" 
+        <button
+          class="btn-confirm"
           @click="save"
           :disabled="saving || !form.username.trim()"
         >
@@ -62,6 +65,7 @@
 import { ref, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { success, error } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -107,7 +111,7 @@ const save = async () => {
     await error('昵称至少需要2个字符')
     return
   }
-  
+
   saving.value = true
   try {
     const res = await userStore.updateUsername(username)
@@ -134,7 +138,7 @@ const save = async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(20, 21, 28, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -142,16 +146,17 @@ const save = async () => {
 }
 
 .modal-content {
-  background: var(--card-bg, #fff);
-  border-radius: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
   width: 420px;
   max-width: 90vw;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-  animation: modalIn 0.3s ease;
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.25s var(--ease-out);
 }
 
 @keyframes modalIn {
-  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -160,27 +165,33 @@ const save = async () => {
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 1px solid var(--border-color, #f3f4f6);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--text-primary, #1f2937);
+  color: var(--text-primary);
+  margin: 0;
 }
 
 .btn-close {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: none;
-  background: var(--bg-secondary, #f3f4f6);
+  background: transparent;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 16px;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-close:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -213,12 +224,12 @@ const save = async () => {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: linear-gradient(135deg, #73a9d8, #b4d8f0);
+  background: var(--accent-soft);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 36px;
-  color: #fff;
   font-weight: 600;
 }
 
@@ -228,17 +239,19 @@ const save = async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   opacity: 0;
   transition: opacity 0.3s;
   border-radius: 50%;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .avatar-overlay span {
-  color: #fff;
+  color: rgba(255, 255, 255, 0.95);
   font-size: 13px;
 }
 
@@ -253,35 +266,43 @@ const save = async () => {
 .form-item label {
   display: block;
   font-size: 13px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 
 .form-item input {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   font-size: 14px;
-  background: var(--input-bg, #fff);
-  color: var(--text-primary, #1f2937);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  outline: none;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
   box-sizing: border-box;
 }
 
 .form-item input:focus {
-  outline: none;
-  border-color: #73a9d8;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .form-item input:disabled {
-  background: var(--bg-secondary, #f9fafb);
-  color: var(--text-muted, #9ca3af);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.form-item input::placeholder {
+  color: var(--text-muted);
 }
 
 .char-count {
   float: right;
   font-size: 12px;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   margin-top: 4px;
 }
 
@@ -290,31 +311,45 @@ const save = async () => {
   justify-content: flex-end;
   gap: 12px;
   padding: 16px 24px;
-  border-top: 1px solid var(--border-color, #f3f4f6);
+  border-top: 1px solid var(--border-color);
 }
 
 .btn-cancel {
   padding: 10px 20px;
-  background: var(--bg-secondary, #f3f4f6);
-  color: var(--text-secondary, #4b5563);
-  border: none;
-  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-cancel:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 .btn-confirm {
   padding: 10px 20px;
-  background: linear-gradient(135deg, #73a9d8, #4a90c2);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-ctl);
   cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  transition: background 0.2s var(--ease-out);
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: var(--accent-strong);
 }
 
 .btn-confirm:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 </style>
