@@ -65,12 +65,19 @@
           <button
             v-if="item.status === 'pending'"
             class="btn-action confirm"
-            @click.stop="handleConfirm(item.id)"
+            @click.stop="handleUpdate(item.id, 'confirmed', '预约已确认')"
           >
             确认
           </button>
           <button
-            v-else-if="item.status === 'confirmed'"
+            v-if="item.status === 'pending'"
+            class="btn-action reject"
+            @click.stop="handleUpdate(item.id, 'cancelled', '预约已拒绝')"
+          >
+            拒绝
+          </button>
+          <button
+            v-if="item.status === 'confirmed'"
             class="btn-action chat"
             @click.stop="emit('view-detail', item.id)"
           >
@@ -78,13 +85,20 @@
             进入聊天
           </button>
           <button
-            v-else-if="item.status === 'completed'"
+            v-if="item.status === 'confirmed'"
+            class="btn-action reject"
+            @click.stop="handleUpdate(item.id, 'cancelled', '预约已取消')"
+          >
+            取消
+          </button>
+          <button
+            v-if="item.status === 'completed'"
             class="btn-action view"
             @click.stop="emit('view-detail', item.id)"
           >
             查看
           </button>
-          <span v-else class="status-tip">—</span>
+          <span v-if="item.status === 'cancelled'" class="status-tip">—</span>
         </div>
       </div>
     </div>
@@ -96,7 +110,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getExpertAppointments, updateAppointmentStatus } from '@/api/expert'
-import { success, error } from '@/utils/dialog'
+import { success, error, confirm } from '@/utils/dialog'
 import { showToast } from '@/utils/notify'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
@@ -144,13 +158,18 @@ const loadAppointments = async () => {
   }
 }
 
-const handleConfirm = async (id: number) => {
+// 专家更新预约状态：确认 / 拒绝（pending→cancelled）/ 取消（confirmed→cancelled）
+const handleUpdate = async (id: number, status: string, successMsg: string) => {
+  if (status === 'cancelled') {
+    const ok = await confirm('确定取消该预约吗？用户端会同步收到通知。', '取消预约')
+    if (!ok) return
+  }
   try {
-    await updateAppointmentStatus(id, 'confirmed')
-    await success('预约已确认')
-    updateLocalStatus(id, 'confirmed')
+    await updateAppointmentStatus(id, status)
+    await success(successMsg)
+    updateLocalStatus(id, status)
   } catch (e: any) {
-    await error(e.message || '确认失败')
+    await error(e.message || '操作失败')
   }
 }
 
@@ -486,6 +505,9 @@ onUnmounted(() => {
 .actions {
   display: flex;
   justify-content: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .btn-action {
@@ -511,6 +533,16 @@ onUnmounted(() => {
 
 .btn-action.confirm:hover {
   background: var(--accent-strong);
+}
+
+/* 拒绝/取消：红色幽灵按钮，与用户端取消样式一致 */
+.btn-action.reject {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  color: var(--danger);
+}
+
+.btn-action.reject:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .btn-action.chat:hover {

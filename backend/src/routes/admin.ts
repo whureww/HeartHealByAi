@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import { pool } from '../db/mysql';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
@@ -192,6 +193,93 @@ router.get('/appointments', authenticate, requireAdmin, asyncHandler(async (req:
          ORDER BY ar.created_at DESC`
     );
     res.json({ success: true, data: rows });
+}));
+
+// ========== 新增用户（管理员创建，无需邮箱验证码） ==========
+router.post('/users', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { username, email, password, role, phone } = req.body;
+
+    if (!username || !email || !password) {
+        throw new BusinessError('用户名、邮箱、密码不能为空', 400);
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new BusinessError('邮箱格式不正确', 400);
+    }
+    if (String(password).length < 6) {
+        throw new BusinessError('密码至少 6 位', 400);
+    }
+    const validRole = [1, 2, 3].includes(Number(role)) ? Number(role) : 1;
+
+    const [dup] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
+    if ((dup as any[]).length > 0) {
+        throw new BusinessError('该邮箱已被注册', 409);
+    }
+
+    const hashed = await bcrypt.hash(String(password), 12);
+    await pool.execute(
+        'INSERT INTO users (username, email, password_hash, role, phone) VALUES (?, ?, ?, ?, ?)',
+        [username, email, hashed, validRole, phone || null]
+    );
+
+    res.json({ success: true, message: '用户创建成功' });
+}));
+
+// ========== 删除用户（连带清理其业务数据） ==========
+router.delete('/users/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.id);
+    if (userId === req.user!.id) {
+        throw new BusinessError('不能删除当前登录的账号', 400);
+    }
+
+    const [exists] = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
+    if ((exists as any[]).length === 0) {
+        throw new BusinessError('用户不存在', 404);
+    }
+
+    // 清理关联数据（schema 无外键约束，需手动删）
+    await pool.execute('DELETE FROM appointment_records WHERE user_id = ?', [userId]);
+    await pool.execute('DELETE FROM test_results WHERE user_id = ?', [userId]);
+    await pool.execute('DELETE FROM chat_records WHERE user_id = ?', [userId]);
+    await pool.execute('DELETE FROM analysis_reports WHERE user_id = ?', [userId]);
+    await pool.execute('DELETE FROM expert_chat WHERE sender_id = ? OR receiver_id = ?', [userId, userId]);
+    await pool.execute('DELETE FROM user_oauth WHERE user_id = ?', [userId]);
+    await pool.execute('DELETE FROM doctors WHERE user_id = ?', [userId]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
+
+    res.json({ success: true, message: '用户及其关联数据已删除' });
+}));
+
+// ========== 新增预约（管理员代建） ==========
+router.post('/appointments', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { user_id, doctor_id, status } = req.body;
+
+    const userId = parseInt(user_id);
+    const doctorId = parseInt(doctor_id);
+    if (!userId || !doctorId) {
+        throw new BusinessError('请选择用户和专家', 400);
+    }
+    const validStatus = ['pending', 'confirmed', 'completed', 'cancelled'].includes(status) ? status : 'pending';
+
+    const [u] = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
+    if ((u as any[]).length === 0) throw new BusinessError('用户不存在', 404);
+    const [d] = await pool.execute('SELECT id FROM doctors WHERE id = ?', [doctorId]);
+    if ((d as any[]).length === 0) throw new BusinessError('专家不存在', 404);
+
+    const [r] = await pool.execute(
+        'INSERT INTO appointment_records (user_id, doctor_id, status) VALUES (?, ?, ?)',
+        [userId, doctorId, validStatus]
+    );
+    res.json({ success: true, message: '预约创建成功', data: { id: (r as any).insertId } });
+}));
+
+// ========== 删除预约 ==========
+router.delete('/appointments/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    const [r] = await pool.execute('DELETE FROM appointment_records WHERE id = ?', [id]);
+    if ((r as any).affectedRows === 0) {
+        throw new BusinessError('预约记录不存在', 404);
+    }
+    res.json({ success: true, message: '预约记录已删除' });
 }));
 
 export default router;

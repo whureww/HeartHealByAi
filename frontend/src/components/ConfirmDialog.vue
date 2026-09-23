@@ -2,6 +2,9 @@
   <transition name="fade">
     <div v-if="visible" class="dialog-overlay" @click="onCancel">
       <div class="dialog-box" @click.stop>
+        <button class="dialog-close" @click="onCancel" title="取消" aria-label="取消">
+          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </button>
         <h3>确认关闭</h3>
         <p>您希望如何操作？</p>
 
@@ -64,12 +67,36 @@ const onCancel = () => {
 }
 
 .dialog-box {
+  position: relative;
   background: var(--card-bg);
   width: 300px;
   padding: 28px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-lg);
+}
+
+/* 右上角取消按钮：与标题栏 caption 按钮同款，省去独立取消按钮占位 */
+.dialog-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dialog-close:hover {
+  background: #c0392b;
+  color: #fff;
 }
 
 h3 {

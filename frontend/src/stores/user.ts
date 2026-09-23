@@ -68,6 +68,8 @@ export const useUserStore = defineStore('user', {
         this.fixedId = res.data.fixedId || ''
         setAuthToken(this.token)
         this.userInfo = res.data.user || null
+        // 记录当前账户邮箱：锁屏重新验证的兜底凭据（userInfo 缺失时也能解锁）
+        localStorage.setItem('accountEmail', data.email)
         persistSession(this)
       }
       return res
@@ -227,6 +229,7 @@ export const useUserStore = defineStore('user', {
       this.currentResultId = null
       this.avatarBase64 = ''
       clearAuthToken()
+      localStorage.removeItem('accountEmail')
       // 清除加密会话文件（必须等待完成，防止整页跳转时被中断导致 token 复活）
       await secureRemove('session')
     }

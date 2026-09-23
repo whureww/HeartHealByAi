@@ -32,7 +32,7 @@
         v-for="item in appointments"
         :key="item.id"
         class="appointment-card"
-        :class="{ 'status-changed': recentlyUpdated.has(item.id) }"
+        :class="{ 'status-changed': recentlyUpdated.has(item.id), 'clickable': item.status === 'confirmed' }"
         @click="handleViewDetail(item.id)"
       >
         <div class="card-header">
@@ -67,6 +67,14 @@
           <span v-else class="status-tip">
             {{ statusTip(item.status) }}
           </span>
+          <button
+            v-if="item.status === 'pending' || item.status === 'confirmed'"
+            class="btn-cancel"
+            :disabled="canceling === item.id"
+            @click.stop="handleCancel(item)"
+          >
+            {{ canceling === item.id ? '取消中...' : '取消预约' }}
+          </button>
         </div>
       </div>
     </div>
@@ -77,8 +85,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
-import { getUserAppointments } from '@/api/user'
+import { getUserAppointments, cancelAppointment } from '@/api/user'
 import { showToast } from '@/utils/notify'
+import { confirm, success, error } from '@/utils/dialog'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
 
@@ -147,6 +156,27 @@ const loadAppointments = async () => {
 const handleViewDetail = (id: number) => {
   if (appointments.value.find(a => a.id === id)?.status === 'confirmed') {
     emit('view-detail', id)
+  }
+}
+
+// 用户取消自己的预约（待确认/已确认均可取消，后端校验只能操作本人的预约）
+const canceling = ref<number | null>(null)
+
+const handleCancel = async (item: any) => {
+  const ok = await confirm(
+    `确定取消与「${item.expert_name || '专家'}」的预约吗？取消后不可恢复。`,
+    '取消预约'
+  )
+  if (!ok) return
+  canceling.value = item.id
+  try {
+    await cancelAppointment(item.id)
+    await success('预约已取消')
+    await loadAppointments()
+  } catch (e: any) {
+    await error(e?.message || '取消失败，请稍后再试')
+  } finally {
+    canceling.value = null
   }
 }
 
@@ -386,8 +416,13 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
   padding: 16px;
-  cursor: pointer;
+  cursor: default;
   transition: all 0.3s var(--ease-out);
+}
+
+/* 仅已确认（可进入聊天）的卡片呈现可点击手势 */
+.appointment-card.clickable {
+  cursor: pointer;
 }
 
 .appointment-card:hover {
@@ -494,6 +529,8 @@ onUnmounted(() => {
 .card-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
 }
 
 .btn-chat {
@@ -514,6 +551,27 @@ onUnmounted(() => {
 
 .btn-chat:hover {
   background: var(--accent-strong);
+}
+
+.btn-cancel {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: var(--radius-ctl);
+  color: var(--danger);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.btn-cancel:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .status-tip {

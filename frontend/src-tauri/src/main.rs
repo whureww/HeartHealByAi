@@ -108,6 +108,29 @@ fn main() {
     tauri::Builder::default()
         // 系统通知插件：消息提醒走 Windows 通知中心真实弹窗
         .plugin(tauri_plugin_notification::init())
+        // 全局快捷键：Ctrl+Alt+H 任意界面（含锁屏、托盘后台）一键呼出/隐藏窗口
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcuts(["ctrl+alt+h"])
+                .expect("注册全局快捷键失败")
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let visible = w.is_visible().unwrap_or(false);
+                            let minimized = w.is_minimized().unwrap_or(false);
+                            if visible && !minimized {
+                                // 已在前台：再按一次隐藏到后台（托盘保持运行）
+                                let _ = w.hide();
+                            } else {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             secure_write,
             secure_read,

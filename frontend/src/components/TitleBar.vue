@@ -106,7 +106,9 @@ const onCancel = () => {
   justify-content: space-between;
   padding: 0 0 0 14px;
   -webkit-app-region: drag;
-  z-index: 9999;
+  /* 高于锁屏遮罩（10000）：锁定状态下关闭/最小化/拖拽仍可用，
+     其子元素 ConfirmDialog 随本上下文一并浮于锁屏之上 */
+  z-index: 10002;
 }
 
 .title {

@@ -597,6 +597,17 @@ router.post('/appointments', authenticate, asyncHandler(async (req: Request, res
         throw new BusinessError('专家不存在', 404);
     }
 
+    // 去重校验：同一用户对同一专家已有进行中（待确认/已确认）的预约时禁止重复创建
+    const [dupRows] = await pool.execute(
+        `SELECT id FROM appointment_records
+         WHERE user_id = ? AND doctor_id = ? AND status IN ('pending', 'confirmed')
+         LIMIT 1`,
+        [userId, doctorId]
+    );
+    if ((dupRows as any[]).length > 0) {
+        throw new BusinessError('您已有该专家的进行中预约，请勿重复预约', 409);
+    }
+
     // 创建预约
     const [result] = await pool.execute(
         'INSERT INTO appointment_records (user_id, doctor_id, status, created_at) VALUES (?, ?, ?, NOW())',
@@ -631,6 +642,27 @@ router.put('/appointments/:id/cancel', authenticate, asyncHandler(async (req: Re
         'UPDATE appointment_records SET status = ? WHERE id = ? AND user_id = ?',
         ['cancelled', appointmentId, userId]
     );
+
+    // Socket.IO 实时广播：专家端列表/详情即时感知用户取消
+    const io = req.app.get('io');
+    if (io) {
+        io.to(`appointment-${appointmentId}`).emit('appointment-updated', {
+            appointmentId: parseInt(appointmentId),
+            status: 'cancelled',
+            updaterId: userId,
+            updateTime: new Date().toISOString()
+        });
+
+        // 广播给所有在线客户端（接收方按 userId / 预约归属自行过滤）
+        io.emit('appointment-list-updated', {
+            userId,
+            appointmentId: parseInt(appointmentId),
+            status: 'cancelled',
+            updaterId: userId,
+            updateTime: new Date().toISOString()
+        });
+    }
+
     res.json({ success: true, message: '预约已取消' });
 }));
 // 获取当前用户信息（包含头像路径）

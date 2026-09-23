@@ -213,7 +213,7 @@ router.put('/appointments/:id/status', authenticate, requireExpert, asyncHandler
         if (userId) {
             // 广播给所有当前在线用户的前端（根据 userId 判断是否需要更新）
             io.emit('appointment-list-updated', {
-                targetUserId: userId,      // 目标用户ID
+                userId,                    // 目标用户ID（前端按此字段过滤）
                 appointmentId: parseInt(appointmentId),
                 status,
                 updaterId: expertUserId,

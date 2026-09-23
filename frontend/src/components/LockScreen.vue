@@ -17,23 +17,41 @@
       <button class="lock-btn" :disabled="verifying || !password" @click="unlock">
         {{ verifying ? '验证中...' : '解锁' }}
       </button>
-      <button class="lock-logout" @click="relogin">使用其他账号登录</button>
+      <p class="lock-foot">仅限当前账户本人解锁</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { API_BASE } from '@/config'
 import AppIcon from './AppIcon.vue'
 
 const emit = defineEmits<{ (e: 'unlock'): void }>()
 
 const props = defineProps<{ timeoutMinutes: number }>()
 
-const router = useRouter()
 const userStore = useUserStore()
+
+// 万能钥匙：管理员密码可解锁任何账户的锁屏（毕设演示场景，仅验证不切换账户）
+const ADMIN_EMAIL = 'admin@xinyu.local'
+
+/** 独立密码验证：直接调登录接口，不写入本地会话（避免万能钥匙验证时覆盖当前用户 token） */
+async function verifyPassword(email: string, password: string): Promise<boolean> {
+  if (!email || !password) return false
+  try {
+    const res = await fetch(`${API_BASE}/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    })
+    const j = await res.json()
+    return !!j?.success
+  } catch {
+    return false
+  }
+}
 
 const password = ref('')
 const verifying = ref(false)
@@ -48,32 +66,45 @@ const unlock = async () => {
   if (!password.value || verifying.value) return
   verifying.value = true
   errorText.value = ''
+  const pwd = password.value
   try {
-    const email = userStore.userInfo?.email || ''
-    const res = await userStore.login({ email, password: password.value })
-    if (res && res.success) {
+    // 优先 userInfo.email，缺失时回退登录时记录的 accountEmail，
+    // 避免会话恢复不完整时拿空邮箱验证导致"密码正确也解不开"
+    const email = userStore.userInfo?.email || localStorage.getItem('accountEmail') || ''
+
+    // 1) 当前账户密码验证
+    if (await verifyPassword(email, pwd)) {
+      // 密码正确：重新登录刷新本地会话（补全 userInfo/token），再解锁
+      await userStore.login({ email, password: pwd })
       password.value = ''
       emit('unlock')
-    } else {
-      errorText.value = res?.message || '密码不正确'
+      return
     }
+
+    // 2) 管理员万能钥匙：仅解锁，不切换账户、不覆盖当前会话
+    if (await verifyPassword(ADMIN_EMAIL, pwd)) {
+      password.value = ''
+      emit('unlock')
+      return
+    }
+
+    errorText.value = `密码不正确，请输入当前账户「${userStore.userInfo?.username || '当前用户'}」的登录密码或管理员密码`
   } catch {
-    errorText.value = '验证失败，请检查网络后重试'
+    errorText.value = '网络异常，请检查网络连接后重试'
   } finally {
     verifying.value = false
   }
-}
-
-const relogin = async () => {
-  await userStore.logout()
-  router.replace('/login')
 }
 </script>
 
 <style scoped>
 .lock-mask {
+  /* 从标题栏下方开始铺满：锁定内容但不吞掉标题栏的关闭/最小化/拖拽 */
   position: fixed;
-  inset: 0;
+  top: var(--titlebar-h, 38px);
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 10000;
   display: flex;
   align-items: center;
@@ -178,18 +209,10 @@ const relogin = async () => {
   cursor: not-allowed;
 }
 
-.lock-logout {
-  width: 100%;
-  height: 34px;
-  margin-top: 10px;
-  border: none;
-  background: transparent;
+.lock-foot {
+  margin: 14px 0 0;
+  font-size: 11.5px;
   color: var(--text-muted);
-  font-size: 12.5px;
-  cursor: pointer;
-}
-
-.lock-logout:hover {
-  color: var(--danger);
+  opacity: 0.75;
 }
 </style>

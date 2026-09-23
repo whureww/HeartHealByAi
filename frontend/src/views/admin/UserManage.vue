@@ -5,6 +5,10 @@
         <h2>用户管理</h2>
         <p class="subtitle">管理系统用户，分配角色权限</p>
       </div>
+      <button class="btn-add" @click="openCreate">
+        <AppIcon name="plus" :size="15" />
+        新增用户
+      </button>
     </div>
 
     <div class="search-bar">
@@ -29,6 +33,7 @@
             <th>手机号</th>
             <th>当前角色</th>
             <th>注册时间</th>
+            <th>角色调整</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -60,9 +65,19 @@
                 <option :value="3">管理员</option>
               </select>
             </td>
+            <td>
+              <button
+                class="btn-del"
+                :disabled="user.id === userStore.userInfo?.id"
+                :title="user.id === userStore.userInfo?.id ? '不能删除当前登录账号' : '删除该用户'"
+                @click="removeUser(user)"
+              >
+                <AppIcon name="trash" :size="14" />
+              </button>
+            </td>
           </tr>
           <tr v-if="users.length === 0">
-            <td colspan="7" class="empty-cell">
+            <td colspan="8" class="empty-cell">
               <AppIcon name="list" :size="28" />
               <p>暂无用户数据</p>
             </td>
@@ -90,20 +105,116 @@
         <AppIcon name="chevronRight" :size="14" />
       </button>
     </div>
+
+    <!-- 新增用户弹窗 -->
+    <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>新增用户</h3>
+          <button class="modal-close" @click="showCreate = false"><AppIcon name="close" :size="16" /></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-item">
+            <label>用户名 <i>*</i></label>
+            <input v-model="createForm.username" placeholder="2-20 个字符" />
+          </div>
+          <div class="form-item">
+            <label>邮箱 <i>*</i></label>
+            <input v-model="createForm.email" type="email" placeholder="user@example.com" />
+          </div>
+          <div class="form-item">
+            <label>初始密码 <i>*</i></label>
+            <input v-model="createForm.password" type="password" placeholder="至少 6 位" />
+          </div>
+          <div class="form-row">
+            <div class="form-item">
+              <label>角色</label>
+              <select v-model.number="createForm.role">
+                <option :value="1">普通用户</option>
+                <option :value="2">专家</option>
+                <option :value="3">管理员</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label>手机号</label>
+              <input v-model="createForm.phone" placeholder="选填" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-ghost" @click="showCreate = false">取消</button>
+          <button class="btn-primary" :disabled="creating" @click="submitCreate">
+            {{ creating ? '创建中...' : '创建用户' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import request from '@/api/request'
-import { success, error } from '@/utils/dialog'
+import { createUser, deleteUser } from '@/api/admin'
+import { success, error, confirm } from '@/utils/dialog'
+import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
 
+const userStore = useUserStore()
 const users = ref<any[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const searchKeyword = ref('')
+
+const showCreate = ref(false)
+const creating = ref(false)
+const createForm = ref({ username: '', email: '', password: '', role: 1, phone: '' })
+
+const openCreate = () => {
+  createForm.value = { username: '', email: '', password: '', role: 1, phone: '' }
+  showCreate.value = true
+}
+
+const submitCreate = async () => {
+  const f = createForm.value
+  if (!f.username.trim() || !f.email.trim() || !f.password) {
+    await error('请填写用户名、邮箱和初始密码')
+    return
+  }
+  if (f.password.length < 6) {
+    await error('初始密码至少 6 位')
+    return
+  }
+  try {
+    creating.value = true
+    await createUser({ ...f, username: f.username.trim(), email: f.email.trim() })
+    await success('用户创建成功')
+    showCreate.value = false
+    page.value = 1
+    await loadUsers()
+  } catch (e: any) {
+    await error(e.message || '创建失败')
+  } finally {
+    creating.value = false
+  }
+}
+
+const removeUser = async (user: any) => {
+  const ok = await confirm(
+    `确定删除用户「${user.username}」吗？其聊天记录、测评结果、预约等关联数据将一并清除，不可恢复。`,
+    '删除用户'
+  )
+  if (!ok) return
+  try {
+    await deleteUser(user.id)
+    await success('用户已删除')
+    if (users.value.length === 1 && page.value > 1) page.value--
+    await loadUsers()
+  } catch (e: any) {
+    await error(e.message || '删除失败')
+  }
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
@@ -151,6 +262,218 @@ onMounted(loadUsers)
 
 .page-header {
   margin: 8px 0 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.btn-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  transition: background 0.2s var(--ease-out);
+}
+
+.btn-add:hover {
+  background: var(--accent-strong);
+}
+
+.btn-del {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  border-radius: var(--radius-ctl);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-del:hover:not(:disabled) {
+  border-color: var(--danger, #c0503a);
+  color: var(--danger, #c0503a);
+  background: color-mix(in srgb, var(--danger, #c0503a) 10%, transparent);
+}
+
+.btn-del:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ===== 弹窗 ===== */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 12, 4, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: mask-in 0.2s var(--ease-out);
+}
+
+@keyframes mask-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-card {
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+  animation: card-in 0.25s var(--ease-out);
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 15.5px;
+  color: var(--text-primary);
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-ctl);
+  transition: all 0.15s var(--ease-out);
+}
+
+.modal-close:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-item label {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.form-item label i {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.form-item input,
+.form-item select {
+  padding: 9px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-family: var(--font-ui);
+  outline: none;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.form-item input:focus,
+.form-item select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px 18px;
+}
+
+.btn-ghost {
+  padding: 9px 18px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  border-radius: var(--radius-ctl);
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-ghost:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.btn-primary {
+  padding: 9px 22px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--radius-ctl);
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background 0.2s var(--ease-out);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .page-header h2 {

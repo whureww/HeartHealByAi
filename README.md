@@ -9,8 +9,10 @@
 - **AI 心理咨询**：基于 DeepSeek 的流式对话，温和、不评判的倾诉空间
 - **心理测评**：量表作答、自动计分、分级报告与历史记录
 - **AI 周期报告**：基于倾诉与测评数据的周期性心理健康分析
-- **专家预约与私聊**：预约心理专家，通过 Socket.IO 实时私聊（支持多设备在线状态、消息已读、离线通知）
-- **管理后台**：用户管理、测评管理、预约管理
+- **专家预约与私聊**：预约心理专家，通过 Socket.IO 实时私聊（支持多设备在线状态、消息已读、离线通知）；同一用户对同一专家不可重复预约，用户与专家均可取消/拒绝预约，状态变更实时同步
+- **管理后台**：用户与预约的增、删、改、查（删除用户连带清理关联数据）
+- **锁屏保护**：一键锁定 / 离开自动锁定，当前账户密码或管理员万能钥匙解锁
+- **桌面集成**：系统托盘（后台常驻）、关闭行为设置（询问 / 最小化到托盘 / 直接退出）、全局快捷键 `Ctrl+Alt+H` 一键呼出/隐藏、系统通知
 - **主题系统**：亮 / 暗 / 跟随系统三态主题
 - **本地数据安全**：本地会话与配置经 AES-256-GCM 加密落盘（Rust 侧）
 - **账号体系**：邮箱验证码注册 / 登录、找回密码，支持微信 / QQ OAuth 登录
@@ -23,12 +25,15 @@
 | 前端框架 | Vue | 3.5+ |
 | 语言 | TypeScript | 5.6+ |
 | 构建工具 | Vite | 6.0+ |
-| 后端语言 | Rust | 2021 |
-| 数据库 | SQLite | (rusqlite 0.32) |
+| 后端框架 | Express | 4.21+ |
+| 后端语言 | Node.js + TypeScript | >= 18 |
+| 数据库 | MySQL | >= 8 |
+| 缓存 | Redis | 4.7+（客户端） |
 | 状态管理 | Pinia | 3.0+ |
 | 路由 | Vue Router | 4.6+ |
 | 实时通信 | Socket.io | 4.8+ |
 | HTTP请求 | Axios | 1.16+ |
+| 安装包 | Inno Setup | 7.x |
 
 前后端通过 HTTP + Socket.IO 通信。
 
@@ -95,7 +100,15 @@ cd frontend
 npm install
 npm run dev        # 浏览器开发预览（Vite）
 npm run tauri:dev  # 桌面端开发模式
-npm run tauri:build  # 打包 Windows 桌面应用
+npm run tauri:build  # 打包 Windows 桌面应用（产出 target/release/心愈.exe）
+```
+
+### 4. 打包安装程序（Inno Setup）
+
+```bash
+# 先执行 npm run tauri:build 产出主程序，再运行：
+"C:\Program Files\Inno Setup 7\ISCC.exe" frontend\src-tauri\windows\xinyu.iss
+# 产物：frontend\src-tauri\target\release\bundle\inno\心愈_<版本>_x64-setup.exe
 ```
 
 前端通过 `.env.development` / `.env.production` 中的 `VITE_API_BASE`、`VITE_SOCKET_URL` 指向后端地址，修改 `.env` 即可，无需改代码。

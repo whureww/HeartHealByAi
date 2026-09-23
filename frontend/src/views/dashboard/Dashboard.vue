@@ -466,7 +466,13 @@
             <div class="setting-item">
               <div class="setting-item-left">
                 <span>版本信息</span>
-                <span class="setting-desc">心愈 AI心理系统 v1.1.0 (Powered by DeepSeek)</span>
+                <span class="setting-desc">心愈 AI心理系统 v0.0.5 (Powered by DeepSeek)</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-item-left">
+                <span>全局快捷键</span>
+                <span class="setting-desc">Ctrl + Alt + H 任意界面一键呼出 / 隐藏窗口（含锁屏与托盘后台）</span>
               </div>
             </div>
             </div>
@@ -1872,6 +1878,8 @@ const scrollToBottom = () => {
   height: 100%;
   overflow-y: auto;
   max-width: 720px;
+  /* 弹性列布局中让固定最大宽度的内容列水平居中，不再贴左 */
+  margin: 0 auto;
   padding: 18px 22px 32px;
   box-sizing: border-box;
   display: flex;
