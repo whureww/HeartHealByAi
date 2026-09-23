@@ -280,6 +280,6 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-    console.log(`✅ 服务已启动: http://your-server-ip:${PORT}`);
+    console.log(`✅ 服务已启动: http://localhost:${PORT}`);
     console.log(`✅ Socket.IO 已启用`);
 });

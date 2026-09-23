@@ -44,8 +44,8 @@ Vue 3 + TypeScript + Pinia + Vue Router + Vite，打包为 Tauri 2 桌面应用�
 
 ## Evidence on Hand
 
-- 可运行的前端代码与云端后端（your-server-ip:3001，健康检查可用）。
-- 真实可用账号：admin@xinyu.local（管理员）。
+- 可运行的前端代码与云端后端（部署地址见 `.env.*.local`，健康检查可用）。
+- 演示账号：admin@xinyu.local（管理员）。
 - 无真实用户见证/运营数据；不得虚构。演示数据可合成但需可辨识。
 
 ## Product Principles

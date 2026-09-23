@@ -1,0 +1,19 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+backend/dist/
+frontend/dist/
+src-tauri/target/
+src-tauri/gen/
+
+# 环境变量（真实密钥/密码不入库，用 .env.example 作为模板）
+.env
+.env.local
+.env.*.local
+
+# 日志与系统文件
+*.log
+.DS_Store
+Thumbs.db

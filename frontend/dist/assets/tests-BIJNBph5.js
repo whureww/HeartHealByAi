@@ -1,1 +1,0 @@
-import{r as s}from"./index-D9NAwV4L.js";const r=()=>s.get("/users/tests"),o=t=>s.get(`/tests/questions/${t}`),u=t=>s.post("/tests/submit",t),n=()=>s.get("/tests/history"),g=t=>s.get(`/tests/result/${t}`);export{n as a,g as b,o as c,r as g,u as s};
