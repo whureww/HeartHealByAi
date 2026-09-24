@@ -63,16 +63,24 @@ export const useUserStore = defineStore('user', {
     async login(data: { email: string; password: string }) {
       const res = await login(data) as unknown as ApiResponse<any>
       if (res.success && res.data) {
-        this.token = res.data.token
-        this.onlyId = res.data.onlyId
-        this.fixedId = res.data.fixedId || ''
-        setAuthToken(this.token)
-        this.userInfo = res.data.user || null
+        this.applySession(res.data)
         // 记录当前账户邮箱：锁屏重新验证的兜底凭据（userInfo 缺失时也能解锁）
         localStorage.setItem('accountEmail', data.email)
-        persistSession(this)
       }
       return res
+    },
+
+    /**
+     * 写入登录态（login 与万能钥匙 master-login 共用）：
+     * 更新 store、axios 头、localStorage、加密会话文件
+     */
+    applySession(data: { token: string; onlyId: string; fixedId?: string; user?: unknown }) {
+      this.token = data.token
+      this.onlyId = data.onlyId
+      this.fixedId = data.fixedId || ''
+      this.userInfo = (data.user as UserInfo) || null
+      setAuthToken(this.token)
+      persistSession(this)
     },
 
     async register(data: { username: string; email: string; password: string; code: string }) {

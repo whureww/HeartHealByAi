@@ -235,6 +235,64 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 
+// ========== 管理员万能钥匙解锁 ==========
+// 锁屏语义 = 会话注销：本端点验证管理员身份后，为被锁定的原账户重新签发 token，
+// 使「管理员密码解锁」能直接恢复本人会话，而无需知道原账户密码
+router.post('/master-login', asyncHandler(async (req: Request, res: Response) => {
+    const { admin_email, admin_password, email } = req.body || {};
+    if (!admin_email || !admin_password || !email) {
+        throw new BusinessError('参数不完整', 400);
+    }
+
+    const [arows] = await pool.execute(
+        'SELECT id, password_hash, role FROM users WHERE email = ?',
+        [admin_email]
+    );
+    const admins = arows as any[];
+    if (admins.length === 0 || admins[0].role !== 3) {
+        throw new BusinessError('管理员验证失败', 401);
+    }
+    const adminOk = await verifyPassword(admin_password, admins[0].password_hash);
+    if (!adminOk) {
+        throw new BusinessError('管理员验证失败', 401);
+    }
+
+    const [urows] = await pool.execute(
+        'SELECT id, username, email, phone, avatar, role FROM users WHERE email = ?',
+        [email]
+    );
+    const users = urows as User[];
+    if (users.length === 0) {
+        throw new BusinessError('账户不存在', 404);
+    }
+    const user = users[0];
+
+    // 为原账户换发全新凭据（旧 token 在锁定时已注销进黑名单，不受影响）
+    const onlyId = TokenManager.generateOnlyId();
+    const token = generateToken(user.id, onlyId);
+    await TokenManager.saveToken(user.id, token, onlyId);
+
+    res.json({
+        success: true,
+        message: '解锁成功',
+        data: {
+            token,
+            onlyId,
+            userId: user.id,
+            role: user.role,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                phone: user.phone,
+                avatar: user.avatar,
+                role: user.role
+            }
+        }
+    });
+}));
+
+
 // ========== 修改用户信息（昵称 + 头像base64）==========
 router.put('/profile', authenticate, asyncHandler(async (req: any, res: any) => {
     const userId = req.user.id;

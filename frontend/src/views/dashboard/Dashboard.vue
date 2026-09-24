@@ -880,7 +880,7 @@ const updateInfo = ref<UpdateInfo | null>(null)
 const updateError = ref('')
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.0.8'
+  const cur = updateInfo.value?.current_version || '0.0.9'
   if (updatePhase.value === 'idle' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧立即更新`
   }

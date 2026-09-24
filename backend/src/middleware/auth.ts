@@ -51,11 +51,18 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
         // 验证 onlyId 是否有效（单点登录）
         const onlyIdValid = await TokenManager.verifyOnlyId(decoded.userId, decoded.onlyId);
         if (!onlyIdValid) {
-            return res.status(401).json({
-                success: false,
-                message: '您的账号已在其他设备登录',
-                code: 'SESSION_EXPIRED'
-            });
+            // 区分「被顶号」（映射存在但不一致）与「映射丢失」（Redis 重启/键过期）：
+            // JWT 本身有效且未拉黑时，映射丢失属于服务端数据丢失，自愈重建而非误踢用户
+            const stored = await TokenManager.getOnlyId(decoded.userId);
+            if (stored === null) {
+                await TokenManager.saveToken(decoded.userId, token, decoded.onlyId);
+            } else {
+                return res.status(401).json({
+                    success: false,
+                    message: '您的账号已在其他设备登录',
+                    code: 'SESSION_EXPIRED'
+                });
+            }
         }
 
         // 查询数据库获取用户 role（只查存在的字段）

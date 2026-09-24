@@ -37,11 +37,12 @@ const props = defineProps<{ timeoutMinutes: number }>()
 const userStore = useUserStore()
 const router = useRouter()
 
-// 万能钥匙：管理员密码可解锁任何账户的锁屏（毕设演示场景，解锁后需本人重新登录）
+// 万能钥匙：管理员密码可解锁任何账户的锁屏（服务端验证后为原账户换发新凭据）
 const ADMIN_EMAIL = 'admin@xinyu.local'
 
-// 切换账户：清掉账户痕迹并回到登录页（锁屏遮罩随路由守卫卸载）
+// 切换账户：清掉账户痕迹与锁屏标记并回到登录页（锁屏遮罩随路由守卫卸载）
 const switchAccount = async () => {
+  clearLockFlag()
   localStorage.removeItem('accountEmail')
   await userStore.logoutForLock()
   router.replace('/login')
@@ -55,6 +56,17 @@ const timeoutText = computed(() => {
   const m = props.timeoutMinutes
   return m >= 60 ? `${Math.round(m / 60)} 小时` : `${m} 分钟`
 })
+
+// 锁屏标记：锁定状态持久化到 localStorage，程序重启后仍进入锁屏而非静默登出
+const clearLockFlag = () => localStorage.removeItem('lockFlag')
+
+// 解锁成功后如果在公开页（如程序重启后直接落在 /login），按角色送回工作区
+const leaveIfPublic = () => {
+  const p = router.currentRoute.value.path
+  if (['/login', '/register', '/forget-password'].includes(p)) {
+    router.replace(userStore.userInfo?.role === 2 ? '/expert' : '/dashboard')
+  }
+}
 
 const unlock = async () => {
   if (!password.value || verifying.value) return
@@ -75,19 +87,26 @@ const unlock = async () => {
     // 1) 当前账户密码验证：锁定时旧 token 已被注销，密码正确即重新登录换取新 token
     const rel = await userStore.login({ email, password: pwd })
     if (rel?.success) {
+      clearLockFlag()
       password.value = ''
       emit('unlock')
+      leaveIfPublic()
       return
     }
 
-    // 2) 管理员万能钥匙：以管理员身份登录换发新 token，解锁后恢复为本人会话
-    const adminRel = await userStore.login({ email: ADMIN_EMAIL, password: pwd })
-    if (adminRel?.success) {
-      // 万能钥匙只是"钥匙"：登录态立刻交还给原账户（accountEmail 仍指向本人）
-      // 退出管理员会话（服务端注销 admin token），恢复本地凭据为空，由本人下次登录重新建立
-      await userStore.logoutForLock()
+    // 2) 管理员万能钥匙：服务端验证管理员身份后为原账户换发新 token，会话无缝恢复
+    const mres = await fetch(`${API_BASE}/users/master-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_email: ADMIN_EMAIL, admin_password: pwd, email })
+    })
+    const mj = await mres.json().catch(() => null)
+    if (mj?.success && mj?.data) {
+      userStore.applySession(mj.data)
+      clearLockFlag()
       password.value = ''
       emit('unlock')
+      leaveIfPublic()
       return
     }
 

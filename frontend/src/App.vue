@@ -39,7 +39,9 @@ function resetIdle() {
   if (!userStore.isLoggedIn) return
   if (!settingsStore.lockOnLeave || !settingsStore.lockTimeout) return
   idleTimer = window.setTimeout(async () => {
-    // 锁定瞬间注销服务端 token：解锁须凭密码重新登录换取新 token
+    // 锁定瞬间注销服务端 token：解锁须凭密码重新登录换取新 token。
+    // lockFlag 持久化锁屏状态：锁定期间关闭程序，重启后仍显示锁屏（而非静默登出）
+    localStorage.setItem('lockFlag', '1')
     try {
       await userStore.logoutForLock()
     } catch (e) {
@@ -65,6 +67,10 @@ onMounted(() => {
   document.body.style.height = '100vh'
   window.addEventListener('pointerdown', resetIdle, true)
   window.addEventListener('keydown', resetIdle, true)
+  // 程序重启后恢复锁屏状态：锁定期间关闭的程序，打开仍应先解锁而非静默登出
+  if (localStorage.getItem('lockFlag') === '1') {
+    isLocked.value = true
+  }
   resetIdle()
 })
 
