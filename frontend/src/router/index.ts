@@ -41,6 +41,10 @@ const routes = [
       {
         path: 'appointments/:id',
         component: () => import('../views/expert/AppointmentDetail.vue')
+      },
+      {
+        path: 'my-card',
+        component: () => import('../views/expert/MyCard.vue')
       }
     ]
   },
@@ -73,6 +77,10 @@ const routes = [
       {
         path: 'appointments',
         component: AdminAppointmentList
+      },
+      {
+        path: 'doctor-cards',
+        component: () => import('../views/admin/DoctorCardReview.vue')
       }
     ]
   }

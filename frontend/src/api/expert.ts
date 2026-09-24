@@ -19,3 +19,10 @@ export const sendChatMessage = (data: { appointmentId: number, receiverId: numbe
   request.post('/expert/chat', data)
 // 获取专家统计数据
 export const getExpertStats = () => request.get('/expert/stats')
+
+// 我的名片：读取
+export const getMyCard = () => request.get('/expert/my-card')
+
+// 我的名片：保存并提交审核
+export const saveMyCard = (data: { name: string; title: string; specialty: string; intro: string }) =>
+  request.put('/expert/my-card', data)

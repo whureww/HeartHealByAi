@@ -16,6 +16,13 @@
           <AppIcon name="clipboard" :size="17" />
           <span class="menu-text">预约管理</span>
         </router-link>
+        <router-link
+          to="/expert/my-card"
+          :class="{ active: $route.path === '/expert/my-card' }"
+        >
+          <AppIcon name="stethoscope" :size="17" />
+          <span class="menu-text">我的名片</span>
+        </router-link>
         <a
           :class="{ active: $route.path === '/dashboard' }"
           @click="goToUserCenter"

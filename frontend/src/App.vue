@@ -61,6 +61,55 @@ document.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   return false;
 }, { capture: true });
+
+// ===== 禁用浏览器式快捷键（WebView 本质是网页，需拦截导航/刷新/缩放类操作） =====
+// 防止用户误触或利用快捷键离开当前流程：侧键前进回退、刷新、缩放、打印等
+const BLOCKED_KEYS = new Set(['F5', 'F12'])
+const BLOCKED_CTRL_KEYS = new Set(['KeyR', 'KeyP', 'KeyH', 'KeyU', 'KeyJ', 'KeyD', 'Equal', 'Minus', 'Digit0'])
+
+function onBlockKeydown(e: KeyboardEvent) {
+  // 放行功能键给正常输入（如表单里的 F2 等不在名单内）
+  if (BLOCKED_KEYS.has(e.code)) {
+    e.preventDefault()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && BLOCKED_CTRL_KEYS.has(e.code)) {
+    e.preventDefault()
+    return
+  }
+  // Alt+←/→ 浏览器式前进回退
+  if (e.altKey && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+    e.preventDefault()
+  }
+}
+
+// 鼠标侧键（XButton1/2 = 回退/前进）
+function onBlockMouseNav(e: MouseEvent) {
+  if (e.button === 3 || e.button === 4) {
+    e.preventDefault()
+  }
+}
+
+// Ctrl+滚轮缩放
+function onBlockWheelZoom(e: WheelEvent) {
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onBlockKeydown, true)
+  window.addEventListener('mousedown', onBlockMouseNav, true)
+  window.addEventListener('mouseup', onBlockMouseNav, true)
+  window.addEventListener('wheel', onBlockWheelZoom, { capture: true, passive: false })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onBlockKeydown, true)
+  window.removeEventListener('mousedown', onBlockMouseNav, true)
+  window.removeEventListener('mouseup', onBlockMouseNav, true)
+  window.removeEventListener('wheel', onBlockWheelZoom, { capture: true })
+})
 </script>
 
 <style>

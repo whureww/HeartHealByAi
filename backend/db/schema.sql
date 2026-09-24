@@ -27,8 +27,9 @@ CREATE TABLE IF NOT EXISTS doctors (
     name VARCHAR(50) NOT NULL,
     title VARCHAR(50) DEFAULT '',
     specialty VARCHAR(200) DEFAULT '',
+    intro TEXT COMMENT '专家名片简介',
     user_id INT UNSIGNED DEFAULT NULL COMMENT '关联 users.id（role=2）',
-    status TINYINT NOT NULL DEFAULT 1,
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '0 下架/1 上架/2 待审核',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

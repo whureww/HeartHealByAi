@@ -466,7 +466,7 @@
             <div class="setting-item">
               <div class="setting-item-left">
                 <span>版本信息</span>
-                <span class="setting-desc">心愈 AI心理系统 v0.0.5 (Powered by DeepSeek)</span>
+                <span class="setting-desc">心愈 AI心理系统 v0.0.6 (Powered by DeepSeek)</span>
               </div>
             </div>
             <div class="setting-item">

@@ -13,6 +13,52 @@ const requireExpert = asyncHandler(async (req: any, res: any, next: any) => {
     next();
 });
 
+// ========== 专家名片：读取我的名片 ==========
+router.get('/my-card', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    const expertUserId = req.user.id;
+    const [rows] = await pool.execute(
+        'SELECT id, name, title, specialty, intro, status FROM doctors WHERE user_id = ?',
+        [expertUserId]
+    );
+    const card = (rows as any[])[0] || null;
+    res.json({ success: true, data: card });
+}));
+
+// ========== 专家名片：保存并提交审核 ==========
+// 保存后状态置为 2（待审核），管理员通过后才显示在专家列表
+router.put('/my-card', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    const expertUserId = req.user.id;
+    const { name, title, specialty, intro } = req.body;
+
+    if (!name || !String(name).trim()) {
+        throw new BusinessError('专家姓名不能为空', 400);
+    }
+    if (String(name).length > 50) {
+        throw new BusinessError('姓名不能超过 50 字', 400);
+    }
+
+    const [rows] = await pool.execute(
+        'SELECT id FROM doctors WHERE user_id = ?',
+        [expertUserId]
+    );
+    const existing = (rows as any[])[0];
+
+    if (existing) {
+        await pool.execute(
+            'UPDATE doctors SET name = ?, title = ?, specialty = ?, intro = ?, status = 2 WHERE id = ?',
+            [String(name).trim(), String(title || ''), String(specialty || ''), String(intro || ''), existing.id]
+        );
+    } else {
+        // 兜底：老专家账号可能无名片记录，自动补建
+        await pool.execute(
+            'INSERT INTO doctors (name, title, specialty, intro, user_id, status) VALUES (?, ?, ?, ?, ?, 2)',
+            [String(name).trim(), String(title || ''), String(specialty || ''), String(intro || ''), expertUserId]
+        );
+    }
+
+    res.json({ success: true, message: '名片已提交审核，管理员通过后将显示在专家列表' });
+}));
+
 // 获取专家的预约列表
 router.get('/appointments', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
     const expertUserId = req.user.id;

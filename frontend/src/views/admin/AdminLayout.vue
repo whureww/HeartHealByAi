@@ -42,7 +42,8 @@ const router = useRouter()
 const menuItems = [
   { path: '/admin/users', name: '用户管理', icon: 'users' },
   { path: '/admin/tests', name: '问卷管理', icon: 'clipboard' },
-  { path: '/admin/appointments', name: '预约管理', icon: 'calendar' }
+  { path: '/admin/appointments', name: '预约管理', icon: 'calendar' },
+  { path: '/admin/doctor-cards', name: '名片审核', icon: 'stethoscope' }
 ]
 
 const goBack = () => {

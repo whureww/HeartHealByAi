@@ -12,3 +12,8 @@ export const createUser = (data: { username: string; email: string; password: st
 export const deleteUser = (id: number) => request.delete(`/admin/users/${id}`)
 export const createAppointment = (data: { user_id: number; doctor_id: number; status?: string }) => request.post('/admin/appointments', data)
 export const deleteAppointment = (id: number) => request.delete(`/admin/appointments/${id}`)
+
+// 专家名片审核
+export const getDoctorCards = () => request.get('/admin/doctor-cards')
+export const reviewDoctorCard = (id: number, action: 'approve' | 'reject') =>
+  request.put(`/admin/doctor-cards/${id}/review`, { action })

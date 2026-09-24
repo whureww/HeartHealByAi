@@ -216,12 +216,21 @@ router.post('/users', authenticate, requireAdmin, asyncHandler(async (req: Reque
     }
 
     const hashed = await bcrypt.hash(String(password), 12);
-    await pool.execute(
+    const [result] = await pool.execute(
         'INSERT INTO users (username, email, password_hash, role, phone) VALUES (?, ?, ?, ?, ?)',
         [username, email, hashed, validRole, phone || null]
     );
 
-    res.json({ success: true, message: '用户创建成功' });
+    // 专家账号：同步创建名片记录（默认下架状态），专家登录后编辑名片并提交管理员审核，通过后才显示在专家列表
+    if (validRole === 2) {
+        const newUserId = (result as any).insertId;
+        await pool.execute(
+            'INSERT INTO doctors (name, title, specialty, intro, user_id, status) VALUES (?, ?, ?, ?, ?, 0)',
+            [username, '', '', '', newUserId]
+        );
+    }
+
+    res.json({ success: true, message: validRole === 2 ? '专家账号创建成功，名片待本人完善并提交审核后上架' : '用户创建成功' });
 }));
 
 // ========== 删除用户（连带清理其业务数据） ==========
@@ -247,6 +256,42 @@ router.delete('/users/:id', authenticate, requireAdmin, asyncHandler(async (req:
     await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
 
     res.json({ success: true, message: '用户及其关联数据已删除' });
+}));
+
+// ========== 专家名片审核：列表（含全部状态，供管理员管理上下架） ==========
+router.get('/doctor-cards', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const [rows] = await pool.execute(
+        `SELECT d.id, d.name, d.title, d.specialty, d.intro, d.status, d.created_at,
+                u.email AS user_email
+         FROM doctors d
+         LEFT JOIN users u ON d.user_id = u.id
+         ORDER BY CASE d.status WHEN 2 THEN 0 WHEN 0 THEN 1 ELSE 2 END, d.created_at DESC`
+    );
+    res.json({ success: true, data: rows });
+}));
+
+// ========== 专家名片审核：通过(上架)/拒绝(下架) ==========
+router.put('/doctor-cards/:id/review', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const cardId = parseInt(req.params.id);
+    const { action } = req.body; // approve | reject
+
+    if (!['approve', 'reject'].includes(action)) {
+        throw new BusinessError('无效的审核操作', 400);
+    }
+
+    const [rows] = await pool.execute('SELECT id, status FROM doctors WHERE id = ?', [cardId]);
+    const card = (rows as any[])[0];
+    if (!card) {
+        throw new BusinessError('名片不存在', 404);
+    }
+
+    const newStatus = action === 'approve' ? 1 : 0;
+    await pool.execute('UPDATE doctors SET status = ? WHERE id = ?', [newStatus, cardId]);
+
+    res.json({
+        success: true,
+        message: action === 'approve' ? '已通过，名片已上架专家列表' : '已拒绝，名片保持下架状态'
+    });
 }));
 
 // ========== 新增预约（管理员代建） ==========
