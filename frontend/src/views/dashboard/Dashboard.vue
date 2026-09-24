@@ -467,8 +467,21 @@
               <div class="setting-item-left">
                 <span>版本信息</span>
                 <span class="setting-desc">{{ updateDesc }}</span>
+                <!-- 下载进度条（仅下载中显示） -->
+                <div v-if="updatePhase === 'downloading'" class="update-progress">
+                  <div class="update-progress-track">
+                    <div class="update-progress-fill" :style="{ width: updateProgress.percent + '%' }"></div>
+                  </div>
+                  <span class="update-progress-text">{{ updateProgressText }}</span>
+                  <button class="btn-cancel-download" @click="onCancelDownload">取消</button>
+                </div>
               </div>
-              <button class="btn-check-update" :disabled="updatePhase !== 'idle'" @click="onCheckUpdate">
+              <button
+                class="btn-check-update"
+                :class="{ 'btn-install-ready': updatePhase === 'ready' }"
+                :disabled="updatePhase === 'checking' || updatePhase === 'downloading'"
+                @click="onUpdateAction"
+              >
                 {{ updatePhaseText }}
               </button>
             </div>
@@ -551,7 +564,7 @@ import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
 import AppIcon from '@/components/AppIcon.vue'
 import { showToast } from '@/utils/notify'
-import { checkUpdate, downloadUpdate, installUpdate, type UpdateInfo, type UpdatePhase } from '@/utils/updater'
+import { checkUpdate, downloadUpdate, cancelDownload, installUpdate, onUpdateProgress, type UpdateInfo, type UpdatePhase, type DownloadProgress } from '@/utils/updater'
 import { isTauri } from '@/utils/secureStore'
 
 const streamingContent = ref('')
@@ -875,50 +888,70 @@ const menuItems = computed<MenuItem[]>(() => {
 })
 
 // ===== 检查更新（Gitee Releases） =====
+// 流程：检查 → 发现新版停下来等用户决定 → 下载（进度条+可取消）→ 安装
 const updatePhase = ref<UpdatePhase>('idle')
 const updateInfo = ref<UpdateInfo | null>(null)
 const updateError = ref('')
+const updateProgress = ref<DownloadProgress>({ received: 0, total: 0, percent: 0 })
+const downloadedPath = ref('') // 已下载完成的安装包本地路径
+let unlistenProgress: (() => void) | null = null
+
+const formatMB = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`
+const updateProgressText = computed(() => {
+  const p = updateProgress.value
+  if (p.total > 0) return `${formatMB(p.received)} / ${formatMB(p.total)}（${p.percent}%）`
+  return `已下载 ${formatMB(p.received)}`
+})
 
 const updateDesc = computed(() => {
   const cur = updateInfo.value?.current_version || '0.0.9'
-  if (updatePhase.value === 'idle' && updateInfo.value?.has_update) {
-    return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧立即更新`
+  const base = `心愈 AI心理系统 v${cur}`
+  if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
+    return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
+  }
+  if (updatePhase.value === 'downloading' && updateInfo.value) {
+    return `正在下载 v${updateInfo.value.latest_version} · 下载完成后可安装`
+  }
+  if (updatePhase.value === 'ready' && updateInfo.value) {
+    return `v${updateInfo.value.latest_version} 安装包已就绪 · 点击右侧立即安装（会关闭程序并启动安装向导）`
   }
   if (updatePhase.value === 'idle' && updateInfo.value && !updateInfo.value.has_update) {
-    return `心愈 AI心理系统 v${cur} (Powered by DeepSeek) · 已是最新版本`
+    return `${base} (Powered by DeepSeek) · 已是最新版本`
   }
   if (updateError.value) {
-    return `心愈 AI心理系统 v${cur} · ${updateError.value}`
+    return `${base} · ${updateError.value}`
   }
-  return `心愈 AI心理系统 v${cur} (Powered by DeepSeek)`
+  return `${base} (Powered by DeepSeek)`
 })
 
 const updatePhaseText = computed(() => {
   switch (updatePhase.value) {
     case 'checking': return '检查中...'
+    case 'available': return '下载更新'
     case 'downloading': return '下载中...'
     case 'ready': return '立即安装'
     default: return '检查更新'
   }
 })
 
-const onCheckUpdate = async () => {
+const onUpdateAction = async () => {
   if (!isTauri()) {
     updateError.value = '浏览器模式暂不支持'
     return
   }
-  // ready 状态下点击 = 执行安装
-  if (updatePhase.value === 'ready' && updateInfo.value?.download_url) {
-    try {
-      const localPath = await downloadUpdate(updateInfo.value.download_url)
-      await installUpdate(localPath) // 内部会退出程序并唤起安装器
-    } catch (e: any) {
-      updateError.value = e?.message || '安装失败'
-      updatePhase.value = 'idle'
-    }
-    return
+  switch (updatePhase.value) {
+    case 'ready':
+      await doInstall()
+      break
+    case 'available':
+      await startDownload()
+      break
+    default:
+      await doCheck()
   }
+}
 
+const doCheck = async () => {
   updatePhase.value = 'checking'
   updateError.value = ''
   try {
@@ -926,10 +959,8 @@ const onCheckUpdate = async () => {
     updateInfo.value = info
     if (info.has_update) {
       if (info.download_url) {
-        // 先把安装包下载好，按钮变为「立即安装」
-        updatePhase.value = 'downloading'
-        await downloadUpdate(info.download_url)
-        updatePhase.value = 'ready'
+        // 发现新版：不自动下载，交给用户决定
+        updatePhase.value = 'available'
       } else {
         updateError.value = '新版本缺少安装包附件'
         updatePhase.value = 'idle'
@@ -938,21 +969,67 @@ const onCheckUpdate = async () => {
       updatePhase.value = 'idle'
     }
   } catch (e: any) {
-    updateError.value = e?.message || '检查失败'
+    updateError.value = (typeof e === 'string' ? e : e?.message) || '检查失败'
     updatePhase.value = 'idle'
   }
 }
 
-// 启动静默检查：有新版时仅提示文案，不自动下载
+const startDownload = async () => {
+  if (!updateInfo.value?.download_url) return
+  updatePhase.value = 'downloading'
+  updateError.value = ''
+  updateProgress.value = { received: 0, total: 0, percent: 0 }
+  unlistenProgress = await onUpdateProgress((p) => { updateProgress.value = p })
+  try {
+    downloadedPath.value = await downloadUpdate(updateInfo.value.download_url)
+    updatePhase.value = 'ready'
+  } catch (e: any) {
+    const msg = typeof e === 'string' ? e : e?.message || ''
+    if (msg.includes('__CANCELLED__')) {
+      // 用户取消：删除临时文件后回到「可下载」状态
+      updatePhase.value = 'available'
+    } else {
+      updateError.value = msg || '下载失败'
+      updatePhase.value = 'available'
+    }
+  } finally {
+    unlistenProgress?.()
+    unlistenProgress = null
+  }
+}
+
+const onCancelDownload = async () => {
+  try {
+    await cancelDownload()
+  } catch {
+    // Rust 侧中断时 invoke 可能随任务取消一起失败，忽略即可
+  }
+}
+
+const doInstall = async () => {
+  if (!downloadedPath.value) {
+    // 没有本地安装包（异常情况），退回可下载状态
+    updatePhase.value = 'available'
+    return
+  }
+  updateError.value = ''
+  try {
+    await installUpdate(downloadedPath.value) // 内部会退出程序并唤起安装器
+  } catch (e: any) {
+    updateError.value = (typeof e === 'string' ? e : e?.message) || '安装失败'
+    updatePhase.value = 'available'
+  }
+}
+
+// 启动静默检查：有新版时仅提示文案与「下载更新」按钮，不自动下载
 const silentCheckUpdate = async () => {
   if (!isTauri()) return
   try {
     const info = await checkUpdate()
+    updateInfo.value = info
     if (info.has_update) {
-      updateInfo.value = info
-      await showToast(`发现新版本 v${info.latest_version}，请到 设置-关于 检查更新`, '')
-    } else {
-      updateInfo.value = info
+      updatePhase.value = info.download_url ? 'available' : 'idle'
+      await showToast(`发现新版本 v${info.latest_version}，请到 设置-关于 下载更新`, '')
     }
   } catch {
     // 静默失败不打扰用户
@@ -2200,6 +2277,69 @@ const scrollToBottom = () => {
 .btn-check-update:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* 下载就绪态：主色高亮，明确可点击 */
+.btn-check-update.btn-install-ready {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-check-update.btn-install-ready:hover:not(:disabled) {
+  background: var(--accent-hover, var(--accent));
+  color: #fff;
+  opacity: 0.9;
+}
+
+/* 下载进度条 */
+.update-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  max-width: 340px;
+}
+
+.update-progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.update-progress-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-cancel-download {
+  padding: 2px 10px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-cancel-download:hover {
+  border-color: var(--danger, #ef4444);
+  color: var(--danger, #ef4444);
 }
 
 .setting-select {
