@@ -235,9 +235,9 @@ const showDetailModal = ref(false)
 const currentResult = ref<any>(null)
 const parsedAnswers = ref<any[]>([])
 
-// 聊天是否已关闭
+// 聊天是否已关闭（已完成/已取消/已拒绝均不可再聊天）
 const isChatClosed = computed(() => {
-  return appointment.value.status === 'completed' || appointment.value.status === 'cancelled'
+  return ['completed', 'cancelled', 'rejected'].includes(appointment.value.status)
 })
 
 const connectionStatusText = computed(() => {
@@ -252,7 +252,8 @@ const statusText = (status: string) => {
     pending: '待确认',
     confirmed: '已确认',
     completed: '已完成',
-    cancelled: '已取消'
+    cancelled: '已取消',
+    rejected: '已拒绝'
   }
   return map[status] || status
 }
@@ -474,8 +475,10 @@ const setupSocketListeners = (sock: Socket) => {
   sock.on('new-message', (msg: any) => {
     messages.value.push(msg)
     scrollToBottom()
-    // 对方来信时轻提示（按通知设置过滤，自己发送的回显不提醒）
-    if (msg.senderId !== userStore.userInfo?.id) {
+    // 对方来信时轻提示（后端广播字段为 sender_id，兼容 senderId；
+    // 字段缺失时退回 sender_name 判断不可靠，直接比较两种字段名）
+    const senderId = msg.sender_id ?? msg.senderId
+    if (senderId !== userStore.userInfo?.id) {
       showToast('新消息', String(msg.content || '').slice(0, 60))
     }
   })

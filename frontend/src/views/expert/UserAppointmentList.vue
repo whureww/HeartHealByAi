@@ -107,7 +107,8 @@ const statusText = (status: string) => {
     pending: '待确认',
     confirmed: '已确认',
     completed: '已完成',
-    cancelled: '已取消'
+    cancelled: '已取消',
+    rejected: '已拒绝'
   }
   return map[status] || status
 }
@@ -117,7 +118,8 @@ const statusDesc = (status: string) => {
     pending: '专家正在处理您的预约',
     confirmed: '专家已确认，可以开始聊天',
     completed: '本次咨询已完成',
-    cancelled: '预约已取消'
+    cancelled: '预约已取消',
+    rejected: '专家拒绝了本次预约'
   }
   return map[status] || ''
 }
@@ -126,7 +128,8 @@ const statusTip = (status: string) => {
   const map: Record<string, string> = {
     pending: '请耐心等待专家确认...',
     completed: '咨询已完成，感谢使用',
-    cancelled: '如有需要请重新预约'
+    cancelled: '如有需要请重新预约',
+    rejected: '如有需要可选择其他专家重新预约'
   }
   return map[status] || ''
 }
@@ -495,6 +498,12 @@ onUnmounted(() => {
 .status-cancelled {
   background: color-mix(in srgb, var(--text-muted) 14%, transparent);
   color: var(--text-muted);
+}
+
+/* 拒绝：红色调，与用户主动取消的灰色区分 */
+.status-rejected {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
 }
 
 .card-body {

@@ -466,8 +466,11 @@
             <div class="setting-item">
               <div class="setting-item-left">
                 <span>版本信息</span>
-                <span class="setting-desc">心愈 AI心理系统 v0.0.6 (Powered by DeepSeek)</span>
+                <span class="setting-desc">{{ updateDesc }}</span>
               </div>
+              <button class="btn-check-update" :disabled="updatePhase !== 'idle'" @click="onCheckUpdate">
+                {{ updatePhaseText }}
+              </button>
             </div>
             <div class="setting-item">
               <div class="setting-item-left">
@@ -548,6 +551,8 @@ import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
 import AppIcon from '@/components/AppIcon.vue'
 import { showToast } from '@/utils/notify'
+import { checkUpdate, downloadUpdate, installUpdate, type UpdateInfo, type UpdatePhase } from '@/utils/updater'
+import { isTauri } from '@/utils/secureStore'
 
 const streamingContent = ref('')
 const isStreaming = ref(false)    
@@ -864,6 +869,91 @@ const menuItems = computed<MenuItem[]>(() => {
   return items
 })
 
+// ===== 检查更新（Gitee Releases） =====
+const updatePhase = ref<UpdatePhase>('idle')
+const updateInfo = ref<UpdateInfo | null>(null)
+const updateError = ref('')
+
+const updateDesc = computed(() => {
+  const cur = updateInfo.value?.current_version || '0.0.7'
+  if (updatePhase.value === 'idle' && updateInfo.value?.has_update) {
+    return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧立即更新`
+  }
+  if (updatePhase.value === 'idle' && updateInfo.value && !updateInfo.value.has_update) {
+    return `心愈 AI心理系统 v${cur} (Powered by DeepSeek) · 已是最新版本`
+  }
+  if (updateError.value) {
+    return `心愈 AI心理系统 v${cur} · ${updateError.value}`
+  }
+  return `心愈 AI心理系统 v${cur} (Powered by DeepSeek)`
+})
+
+const updatePhaseText = computed(() => {
+  switch (updatePhase.value) {
+    case 'checking': return '检查中...'
+    case 'downloading': return '下载中...'
+    case 'ready': return '立即安装'
+    default: return '检查更新'
+  }
+})
+
+const onCheckUpdate = async () => {
+  if (!isTauri()) {
+    updateError.value = '浏览器模式暂不支持'
+    return
+  }
+  // ready 状态下点击 = 执行安装
+  if (updatePhase.value === 'ready' && updateInfo.value?.download_url) {
+    try {
+      const localPath = await downloadUpdate(updateInfo.value.download_url)
+      await installUpdate(localPath) // 内部会退出程序并唤起安装器
+    } catch (e: any) {
+      updateError.value = e?.message || '安装失败'
+      updatePhase.value = 'idle'
+    }
+    return
+  }
+
+  updatePhase.value = 'checking'
+  updateError.value = ''
+  try {
+    const info = await checkUpdate()
+    updateInfo.value = info
+    if (info.has_update) {
+      if (info.download_url) {
+        // 先把安装包下载好，按钮变为「立即安装」
+        updatePhase.value = 'downloading'
+        await downloadUpdate(info.download_url)
+        updatePhase.value = 'ready'
+      } else {
+        updateError.value = '新版本缺少安装包附件'
+        updatePhase.value = 'idle'
+      }
+    } else {
+      updatePhase.value = 'idle'
+    }
+  } catch (e: any) {
+    updateError.value = e?.message || '检查失败'
+    updatePhase.value = 'idle'
+  }
+}
+
+// 启动静默检查：有新版时仅提示文案，不自动下载
+const silentCheckUpdate = async () => {
+  if (!isTauri()) return
+  try {
+    const info = await checkUpdate()
+    if (info.has_update) {
+      updateInfo.value = info
+      await showToast(`发现新版本 v${info.latest_version}，请到 设置-关于 检查更新`, '')
+    } else {
+      updateInfo.value = info
+    }
+  } catch {
+    // 静默失败不打扰用户
+  }
+}
+
 onMounted(async () => {
   if (userStore.isLoggedIn) {
     try {
@@ -875,6 +965,9 @@ onMounted(async () => {
   }
 
   initSocket()
+
+  // 启动静默检查更新（后台执行，不阻塞首屏）
+  void silentCheckUpdate()
 
   // 根据角色加载不同数据
   loading.value.stats = true
@@ -2077,6 +2170,30 @@ const scrollToBottom = () => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+}
+
+/* 检查更新按钮 */
+.btn-check-update {
+  padding: 6px 14px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border-color);
+  background: var(--bg-main);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-check-update:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.btn-check-update:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .setting-select {

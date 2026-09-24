@@ -638,6 +638,20 @@ router.get('/appointments', authenticate, asyncHandler(async (req: Request, res:
 router.put('/appointments/:id/cancel', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const appointmentId = req.params.id;
+
+    // 仅待确认/已确认可取消；已拒绝/已完成/已取消不允许再改状态
+    const [statusRows] = await pool.execute(
+        'SELECT status FROM appointment_records WHERE id = ? AND user_id = ?',
+        [appointmentId, userId]
+    );
+    const current = (statusRows as any[])[0];
+    if (!current) {
+        throw new BusinessError('预约不存在或无权操作', 404);
+    }
+    if (!['pending', 'confirmed'].includes(current.status)) {
+        throw new BusinessError('当前状态不可取消', 400);
+    }
+
     await pool.execute(
         'UPDATE appointment_records SET status = ? WHERE id = ? AND user_id = ?',
         ['cancelled', appointmentId, userId]

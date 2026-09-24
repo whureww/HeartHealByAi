@@ -223,6 +223,12 @@ router.put('/appointments/:id/status', authenticate, requireExpert, asyncHandler
     const { status } = req.body;
     const expertUserId = req.user.id;
 
+    // 状态白名单：confirmed 确认 / rejected 拒绝（待确认阶段） / cancelled 取消 / completed 完成
+    const allowed = ['confirmed', 'rejected', 'cancelled', 'completed'];
+    if (!allowed.includes(status)) {
+        throw new BusinessError('无效的预约状态', 400);
+    }
+
     const [doctorRows] = await pool.execute(
         'SELECT id FROM doctors WHERE user_id = ?',
         [expertUserId]

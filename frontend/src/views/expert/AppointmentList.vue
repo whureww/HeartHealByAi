@@ -72,7 +72,7 @@
           <button
             v-if="item.status === 'pending'"
             class="btn-action reject"
-            @click.stop="handleUpdate(item.id, 'cancelled', '预约已拒绝')"
+            @click.stop="handleUpdate(item.id, 'rejected', '已拒绝该预约')"
           >
             拒绝
           </button>
@@ -98,7 +98,7 @@
           >
             查看
           </button>
-          <span v-if="item.status === 'cancelled'" class="status-tip">—</span>
+          <span v-if="item.status === 'cancelled' || item.status === 'rejected'" class="status-tip">—</span>
         </div>
       </div>
     </div>
@@ -131,7 +131,8 @@ const statusText = (status: string) => {
     pending: '待确认',
     confirmed: '已确认',
     completed: '已完成',
-    cancelled: '已取消'
+    cancelled: '已取消',
+    rejected: '已拒绝'
   }
   return map[status] || status
 }
@@ -158,10 +159,13 @@ const loadAppointments = async () => {
   }
 }
 
-// 专家更新预约状态：确认 / 拒绝（pending→cancelled）/ 取消（confirmed→cancelled）
+// 专家更新预约状态：确认 / 拒绝（pending→rejected）/ 取消（confirmed→cancelled）
 const handleUpdate = async (id: number, status: string, successMsg: string) => {
-  if (status === 'cancelled') {
-    const ok = await confirm('确定取消该预约吗？用户端会同步收到通知。', '取消预约')
+  if (status === 'cancelled' || status === 'rejected') {
+    const ok = await confirm(
+      status === 'rejected' ? '确定拒绝该预约吗？用户端将看到「已拒绝」。' : '确定取消该预约吗？用户端会同步收到通知。',
+      status === 'rejected' ? '拒绝预约' : '取消预约'
+    )
     if (!ok) return
   }
   try {
@@ -500,6 +504,12 @@ onUnmounted(() => {
 .status-cancelled {
   background: color-mix(in srgb, var(--text-muted) 14%, transparent);
   color: var(--text-muted);
+}
+
+/* 拒绝：红色调，与取消的灰色区分 */
+.status-rejected {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
 }
 
 .actions {

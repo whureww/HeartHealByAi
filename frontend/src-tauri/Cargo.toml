@@ -1,6 +1,6 @@
 [package]
 name = "xinyu-app"
-version = "0.0.6"
+version = "0.0.7"
 description = "心愈 · 心理健康服务平台桌面端"
 authors = ["you"]
 edition = "2021"
@@ -16,6 +16,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 aes-gcm = "0.10"
 base64 = "0.22"
+# 检查更新：HTTP 请求（Gitee Releases API）
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
 [profile.release]
 strip = true
