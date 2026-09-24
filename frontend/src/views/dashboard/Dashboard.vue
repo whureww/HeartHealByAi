@@ -485,6 +485,11 @@
         <AppointmentList @view-detail="onViewAppointmentDetail" />
       </div>
 
+      <!-- 6.1 专家工作台 - 我的名片 -->
+      <div v-if="currentPage === 'expert-card'" class="page show">
+        <MyCard />
+      </div>
+
       <!-- 7. 专家工作台 - 预约详情 -->
       <div v-if="currentPage === 'expert-detail'" class="page show">
         <AppointmentDetail 
@@ -536,6 +541,7 @@ import TestList from './TestList.vue'
 import TestHistory from '../tests/TestHistory.vue'
 import TestResultDetail from '../tests/TestResultDetail.vue'
 import AppointmentList from '../expert/AppointmentList.vue'
+import MyCard from '../expert/MyCard.vue'
 import AppointmentDetail from '../expert/AppointmentDetail.vue'
 import UserAppointmentList from '../expert/UserAppointmentList.vue'
 import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
@@ -838,10 +844,11 @@ const adminMenuItem: MenuItem = {
 
 // 动态菜单：根据 role 显示不同入口
 const menuItems = computed<MenuItem[]>(() => {
-  // role=2 专家：只显示专家工作台 + 个人中心
+  // role=2 专家：只显示专家工作台 + 我的名片 + 个人中心
   if (userStore.userInfo?.role === 2) {
     return [
       { id: 'expert', name: '专家工作台', icon: 'stethoscope' },
+      { id: 'expert-card', name: '我的名片', icon: 'fileText' },
       { id: 'user', name: '个人中心', icon: 'user' }
     ]
   }
