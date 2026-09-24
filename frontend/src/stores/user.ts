@@ -212,7 +212,7 @@ export const useUserStore = defineStore('user', {
           socket.disconnect()
         }
         delete (window as any).__chatSocket__
-        
+
         await logoutApi()
       } catch (e) {
         console.error('Logout API failed:', e)
@@ -231,6 +231,36 @@ export const useUserStore = defineStore('user', {
       clearAuthToken()
       localStorage.removeItem('accountEmail')
       // 清除加密会话文件（必须等待完成，防止整页跳转时被中断导致 token 复活）
+      await secureRemove('session')
+    },
+
+    /**
+     * 锁屏专用注销：调服务端注销接口使 token 真正失效（Redis 黑名单），
+     * 清空本地会话但保留 accountEmail——解锁界面要用它来验证密码换新 token。
+     * 不清理聊天 socket（锁屏期间保持在线状态由服务端超时处理）。
+     */
+    async logoutForLock() {
+      const email = this.userInfo?.email || localStorage.getItem('accountEmail') || ''
+      try {
+        await logoutApi()
+      } catch (e) {
+        console.error('锁定注销 API 失败（token 可能已无效）:', e)
+      }
+      this.token = ''
+      this.onlyId = ''
+      this.fixedId = ''
+      this.userInfo = null
+      this.stats = null
+      this.chatHistory = []
+      this.tests = []
+      this.doctors = []
+      this.currentTestView = 'list'
+      this.currentResultId = null
+      this.avatarBase64 = ''
+      clearAuthToken()
+      if (email) {
+        localStorage.setItem('accountEmail', email)
+      }
       await secureRemove('session')
     }
   }

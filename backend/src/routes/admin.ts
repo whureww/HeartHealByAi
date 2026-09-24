@@ -288,6 +288,16 @@ router.put('/doctor-cards/:id/review', authenticate, requireAdmin, asyncHandler(
     const newStatus = action === 'approve' ? 1 : 0;
     await pool.execute('UPDATE doctors SET status = ? WHERE id = ?', [newStatus, cardId]);
 
+    // Socket.IO 实时广播：名片上下架后所有在线客户端刷新专家列表
+    const io = req.app.get('io');
+    if (io) {
+        io.emit('doctor-list-updated', {
+            doctorId: cardId,
+            status: newStatus,
+            updateTime: new Date().toISOString()
+        });
+    }
+
     res.json({
         success: true,
         message: action === 'approve' ? '已通过，名片已上架专家列表' : '已拒绝，名片保持下架状态'

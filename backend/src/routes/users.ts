@@ -304,7 +304,22 @@ router.get('/me', authenticate, asyncHandler(async (req: any, res: any) => {
 // 在 users.ts 中添加或修改 logout 路由
 router.post('/logout', authenticate, asyncHandler(async (req: any, res: any) => {
     const userId = req.user.id;
-    
+    const token = req.headers.authorization?.slice(7) || '';
+
+    // 真注销：JWT 加入黑名单（剩余有效期内拒绝），Redis 会话映射同步删除
+    if (token) {
+        try {
+            const decoded = jwt.decode(token) as any;
+            const ttl = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 0;
+            if (ttl > 0) {
+                await TokenManager.blacklistToken(token, ttl);
+            }
+        } catch (e) {
+            console.error('token 黑名单写入失败:', e);
+        }
+    }
+    await TokenManager.removeToken(userId, token);
+
     // 获取 Socket.IO 实例和用户映射
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');

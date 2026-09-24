@@ -20,10 +20,12 @@ import LockScreen from './components/LockScreen.vue'
 import CustomDialog from './components/CustomDialog.vue'
 import { useLoadingStore } from './stores/loading'
 import { useSettingsStore } from './stores/settings'
+import { useUserStore } from './stores/user'
 import { setDialogInstance } from './utils/dialog'
 
 const loadingStore = useLoadingStore()
 const settingsStore = useSettingsStore()
+const userStore = useUserStore()
 const dialogRef = ref()
 
 // ===== 离开自动锁定：闲置超时后显示锁屏（pointerdown/keydown 任意活动即重置） =====
@@ -33,11 +35,25 @@ let idleTimer: number | undefined
 function resetIdle() {
   window.clearTimeout(idleTimer)
   if (isLocked.value) return
+  // 未登录（登录/注册页）不触发锁屏
+  if (!userStore.isLoggedIn) return
   if (!settingsStore.lockOnLeave || !settingsStore.lockTimeout) return
-  idleTimer = window.setTimeout(() => {
+  idleTimer = window.setTimeout(async () => {
+    // 锁定瞬间注销服务端 token：解锁须凭密码重新登录换取新 token
+    try {
+      await userStore.logoutForLock()
+    } catch (e) {
+      console.error('锁定注销失败:', e)
+    }
     isLocked.value = true
   }, settingsStore.lockTimeout * 60 * 1000)
 }
+
+// 登录状态变化时重置/取消闲置计时（登出后立即停止计时）
+watch(() => userStore.isLoggedIn, (loggedIn) => {
+  if (!loggedIn) window.clearTimeout(idleTimer)
+  else resetIdle()
+})
 
 watch(() => [settingsStore.lockOnLeave, settingsStore.lockTimeout], resetIdle)
 
