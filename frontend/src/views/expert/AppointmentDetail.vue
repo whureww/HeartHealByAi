@@ -187,6 +187,7 @@ import { ref, onMounted, onUnmounted, nextTick, computed, watch, shallowRef } fr
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getAppointmentDetail, updateAppointmentStatus, getChatMessages } from '@/api/expert'
+import { handleSessionExpired } from '@/api/request'
 import { success, error, alert as dialogAlert } from '@/utils/dialog'
 import { showToast } from '@/utils/notify'
 import { useUserStore } from '@/stores/user'
@@ -468,7 +469,9 @@ const setupSocketListeners = (sock: Socket) => {
   sock.on('force-logout', (data: { message: string }) => {
     dialogAlert(data.message || '您的账号已登出', '提示').then(() => {
       userStore.logout()
-      window.location.href = '/login'
+      // 复用 HTTP 侧的会话过期处理：先清凭据（含加密会话文件）再跳转，
+      // 避免脏 token 残留导致登录页会话恢复失败多绕一圈
+      handleSessionExpired()
     })
   })
 
@@ -492,7 +495,13 @@ const sendMessage = async () => {
   if (isChatClosed.value) return
 
   const content = newMessage.value.trim()
-  if (!content || !socket.value || !isSelfConnected.value) return
+  if (!content) return
+
+  // 连接断开时明确提示，避免消息静默滞留输入框让用户误以为已发出
+  if (!socket.value || !isSelfConnected.value) {
+    showToast('发送失败', '网络连接已断开，请稍后重试', false)
+    return
+  }
 
   socket.value.emit('send-message', {
     appointmentId,

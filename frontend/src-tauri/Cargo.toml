@@ -1,6 +1,6 @@
 [package]
 name = "xinyu-app"
-version = "0.0.9"
+version = "0.0.10"
 description = "心愈 · 心理健康服务平台桌面端"
 authors = ["you"]
 edition = "2021"
