@@ -11,6 +11,7 @@ import { errorHandler, notFound } from './middleware/error';
 import adminRouter from './routes/admin';
 import expertRouter from './routes/expert';
 import { pool } from './db/mysql';
+import { isAppointmentParticipant } from './utils/guards';
 import aiRouter from './routes/ai';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth';
@@ -165,9 +166,18 @@ io.on('connection', (socket) => {
     });
 
     // 加入预约房间
-    socket.on('join-room', (appointmentId: number) => {
+    socket.on('join-room', async (appointmentId: number) => {
+        const userId = (socket as any).userId;
+
+        // 安全修复：归属校验——仅预约本人或对应专家可加入房间
+        const part = await isAppointmentParticipant(Number(appointmentId), userId);
+        if (!part.ok) {
+            socket.emit('error', { message: '无权访问该预约' });
+            return;
+        }
+
         socket.join(`appointment-${appointmentId}`);
-        console.log(`用户 ${(socket as any).userId} 加入房间: appointment-${appointmentId}`);
+        console.log(`用户 ${userId} 加入房间: appointment-${appointmentId}`);
         
         // 推送房间内已在线的其他用户状态给当前用户
         const room = io.sockets.adapter.rooms.get(`appointment-${appointmentId}`);
@@ -212,10 +222,23 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            // 安全修复：归属校验 + 接收方由服务端按预约关系推导（忽略客户端传值），
+            // 防止参与方伪造 receiverId 向任意第三方投递通知
+            const part = await isAppointmentParticipant(Number(data.appointmentId), senderId);
+            if (!part.ok) {
+                socket.emit('error', { message: '无权在该预约下发言' });
+                return;
+            }
+            const receiverId = senderId === part.userId ? part.doctorUserId : part.userId;
+            if (!receiverId) {
+                socket.emit('error', { message: '预约对方信息缺失' });
+                return;
+            }
+
             await pool.execute(
                 `INSERT INTO expert_chat (sender_id, receiver_id, content, appointment_id, created_at)
                  VALUES (?, ?, ?, ?, NOW())`,
-                [senderId, data.receiverId, data.content, data.appointmentId]
+                [senderId, receiverId, data.content, data.appointmentId]
             );
 
             const [senderRows] = await pool.execute(
@@ -227,7 +250,7 @@ io.on('connection', (socket) => {
             const messageData = {
                 id: Date.now(),
                 sender_id: senderId,
-                receiver_id: data.receiverId,
+                receiver_id: receiverId,
                 content: data.content,
                 appointment_id: data.appointmentId,
                 sender_name: senderName,
@@ -236,7 +259,7 @@ io.on('connection', (socket) => {
 
             io.to(`appointment-${data.appointmentId}`).emit('new-message', messageData);
 
-            const receiverSocket = getUserSocket(data.receiverId);
+            const receiverSocket = getUserSocket(receiverId);
             if (receiverSocket) {
                 receiverSocket.emit('chat-notification', {
                     appointmentId: data.appointmentId,
@@ -253,10 +276,15 @@ io.on('connection', (socket) => {
     // 标记消息已读
     socket.on('mark-read', async (data: { appointmentId: number, userId: number }) => {
         try {
+            // 安全修复：归属校验，且已读目标以服务端身份为准（防止伪造他人 userId 批量置已读）
+            const userId = (socket as any).userId;
+            const part = await isAppointmentParticipant(Number(data.appointmentId), userId);
+            if (!part.ok) return;
+
             await pool.execute(
-                `UPDATE expert_chat SET is_read = TRUE 
+                `UPDATE expert_chat SET is_read = TRUE
                  WHERE appointment_id = ? AND receiver_id = ?`,
-                [data.appointmentId, data.userId]
+                [data.appointmentId, userId]
             );
         } catch (e) {
             console.error('标记已读失败:', e);

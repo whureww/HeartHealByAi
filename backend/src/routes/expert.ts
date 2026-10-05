@@ -3,6 +3,7 @@ import { pool } from '../db/mysql';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
+import { isAppointmentParticipant } from '../utils/guards';
 
 const router = Router();
 
@@ -280,10 +281,17 @@ router.put('/appointments/:id/status', authenticate, requireExpert, asyncHandler
 
 // 获取聊天记录
 router.get('/chat/:appointmentId', authenticate, asyncHandler(async (req: any, res: any) => {
-    const appointmentId = req.params.appointmentId;
+    const appointmentId = Number(req.params.appointmentId);
+    const userId = req.user.id;
+
+    // 安全修复：归属校验——仅预约本人与对应专家可读取聊天记录
+    const part = await isAppointmentParticipant(appointmentId, userId);
+    if (!part.ok) {
+        throw new BusinessError('预约不存在或无权访问', 404);
+    }
 
     const [rows] = await pool.execute(
-        `SELECT ec.*, 
+        `SELECT ec.*,
                 sender.username as sender_name,
                 receiver.username as receiver_name
          FROM expert_chat ec
@@ -299,8 +307,22 @@ router.get('/chat/:appointmentId', authenticate, asyncHandler(async (req: any, r
 
 // 发送消息
 router.post('/chat', authenticate, asyncHandler(async (req: any, res: any) => {
-    const { appointmentId, receiverId, content } = req.body;
+    const { appointmentId, content } = req.body;
     const senderId = req.user.id;
+
+    if (!appointmentId || !content || !String(content).trim()) {
+        throw new BusinessError('参数不完整', 400);
+    }
+
+    // 安全修复：归属校验，且接收方由服务端按预约关系推导（忽略客户端传值）
+    const part = await isAppointmentParticipant(Number(appointmentId), senderId);
+    if (!part.ok) {
+        throw new BusinessError('预约不存在或无权发送', 404);
+    }
+    const receiverId = senderId === part.userId ? part.doctorUserId : part.userId;
+    if (!receiverId) {
+        throw new BusinessError('预约对方信息缺失', 400);
+    }
 
     await pool.execute(
         `INSERT INTO expert_chat (sender_id, receiver_id, content, appointment_id)
