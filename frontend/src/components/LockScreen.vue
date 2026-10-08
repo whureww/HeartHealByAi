@@ -40,11 +40,13 @@ const router = useRouter()
 // 万能钥匙：管理员密码可解锁任何账户的锁屏（服务端验证后为原账户换发新凭据）
 const ADMIN_EMAIL = 'admin@xinyu.local'
 
-// 切换账户：清掉账户痕迹与锁屏标记并回到登录页（锁屏遮罩随路由守卫卸载）
+// 切换账户：清掉账户痕迹与锁屏标记，卸载锁屏遮罩并回到登录页
 const switchAccount = async () => {
   clearLockFlag()
   localStorage.removeItem('accountEmail')
   await userStore.logoutForLock()
+  // 锁屏遮罩仅由 unlock 事件卸载，必须显式发出，否则遮罩挡住登录页造成「点击无反应」
+  emit('unlock')
   router.replace('/login')
 }
 
@@ -79,8 +81,11 @@ const unlock = async () => {
     const email = userStore.userInfo?.email || localStorage.getItem('accountEmail') || ''
 
     if (!email) {
-      errorText.value = '无法识别当前账户，请点击「切换账户」重新登录'
+      // 兜底：账户标识丢失时不再死路（万能钥匙也依赖邮箱定位账户），
+      // 自动清场转到登录页重新登录
+      errorText.value = '无法识别当前账户，正在转到登录页...'
       verifying.value = false
+      await switchAccount()
       return
     }
 

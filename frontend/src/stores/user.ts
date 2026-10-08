@@ -79,6 +79,8 @@ export const useUserStore = defineStore('user', {
       this.onlyId = data.onlyId
       this.fixedId = data.fixedId || ''
       this.userInfo = (data.user as UserInfo) || null
+      // 万能钥匙等途径换发会话时同步记录账户邮箱（锁屏解锁的兜底凭据）
+      if (this.userInfo?.email) localStorage.setItem('accountEmail', this.userInfo.email)
       setAuthToken(this.token)
       persistSession(this)
     },
@@ -91,6 +93,8 @@ export const useUserStore = defineStore('user', {
         this.fixedId = res.data.fixedId || ''
         setAuthToken(this.token)
         this.userInfo = res.data.user || null
+        // 注册即记录账户邮箱，与 login 一致（锁屏解锁的兜底凭据）
+        localStorage.setItem('accountEmail', data.email)
         persistSession(this)
       }
       return res
@@ -237,7 +241,11 @@ export const useUserStore = defineStore('user', {
       this.currentResultId = null
       this.avatarBase64 = ''
       clearAuthToken()
-      localStorage.removeItem('accountEmail')
+      // 锁屏仍挂起时保留 accountEmail：守卫在锁定期间因 401 触发完整登出，
+      // 若清掉邮箱，解锁界面将「无法识别当前账户」且万能钥匙无从定位账户
+      if (localStorage.getItem('lockFlag') !== '1') {
+        localStorage.removeItem('accountEmail')
+      }
       // 清除加密会话文件（必须等待完成，防止整页跳转时被中断导致 token 复活）
       await secureRemove('session')
     },
@@ -249,10 +257,13 @@ export const useUserStore = defineStore('user', {
      */
     async logoutForLock() {
       const email = this.userInfo?.email || localStorage.getItem('accountEmail') || ''
-      try {
-        await logoutApi()
-      } catch (e) {
-        console.error('锁定注销 API 失败（token 可能已无效）:', e)
+      // token 已在本地清空时无需再调服务端注销（避免无谓 401 触发整页重载打断锁屏流程）
+      if (this.token) {
+        try {
+          await logoutApi()
+        } catch (e) {
+          console.error('锁定注销 API 失败（token 可能已无效）:', e)
+        }
       }
       this.token = ''
       this.onlyId = ''
