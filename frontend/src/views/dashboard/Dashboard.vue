@@ -565,7 +565,7 @@ import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
 import AppIcon from '@/components/AppIcon.vue'
 import { showToast } from '@/utils/notify'
-import { checkUpdate, downloadUpdate, cancelDownload, installUpdate, onUpdateProgress, type UpdateInfo, type UpdatePhase, type DownloadProgress } from '@/utils/updater'
+import { checkUpdate, downloadUpdate, cancelDownload, installUpdate, onUpdateProgress, hasRemindedUpdate, markUpdateReminded, type UpdateInfo, type UpdatePhase, type DownloadProgress } from '@/utils/updater'
 import { isTauri } from '@/utils/secureStore'
 
 const streamingContent = ref('')
@@ -1030,7 +1030,12 @@ const silentCheckUpdate = async () => {
     updateInfo.value = info
     if (info.has_update) {
       updatePhase.value = info.download_url ? 'available' : 'idle'
-      await showToast(`发现新版本 v${info.latest_version}，请到 设置-关于 下载更新`, '')
+      // 每次运行只弹一次提醒：从管理后台返回前台会重新挂载本组件，
+      // 但模块级标记保证 toast 不再重复
+      if (!hasRemindedUpdate()) {
+        markUpdateReminded()
+        await showToast(`发现新版本 v${info.latest_version}，请到 设置-关于 下载更新`, '')
+      }
     }
   } catch {
     // 静默失败不打扰用户

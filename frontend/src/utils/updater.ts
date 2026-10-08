@@ -55,3 +55,16 @@ export function onUpdateProgress(
 ): Promise<() => void> {
   return listen<DownloadProgress>('update-progress', (e) => cb(e.payload))
 }
+
+// ===== 新版本提醒去重（每次应用运行只提醒一次） =====
+// 模块级状态：Dashboard 从管理后台返回时会重新挂载，但模块不会重新加载，
+// 由此保证静默检查的 toast 在一次运行内只弹一次
+let updateRemindedThisRun = false
+
+export function hasRemindedUpdate(): boolean {
+  return updateRemindedThisRun
+}
+
+export function markUpdateReminded(): void {
+  updateRemindedThisRun = true
+}
