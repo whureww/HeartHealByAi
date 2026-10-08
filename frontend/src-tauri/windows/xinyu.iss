@@ -1,12 +1,12 @@
 ; ============================================================
-; 心愈 XinYu 0.1.1 —— Inno Setup 7 安装包脚本
+; 心愈 XinYu 0.1.2 —— Inno Setup 7 安装包脚本
 ; 用户级安装（与原 NSIS currentUser 模式一致）
 ; 打包命令: ISCC.exe D:\AIHeartHealProject\frontend\src-tauri\windows\xinyu.iss
 ; ============================================================
 
 #define MyAppName "心愈"
 #define MyAppNameEn "XinYu"
-#define MyAppVersion "0.1.1"
+#define MyAppVersion "0.1.2"
 #define MyAppPublisher "XinYu"
 #define MyAppExeName "心愈.exe"
 #define MyAppRoot "D:\AIHeartHealProject\frontend\src-tauri"
@@ -37,6 +37,8 @@ Name: "chs"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Source: "{#MyAppRoot}\target\release\xinyu-app.exe"; DestName: "{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 ; 独立图标文件：快捷方式指向它而非 exe（Windows 图标缓存按路径缓存，独立文件可避免覆盖安装后快捷方式图标不刷新）
 Source: "{#MyAppRoot}\icons\icon.ico"; DestName: "xinyu.ico"; DestDir: "{app}"; Flags: ignoreversion
+; 通知图标：Toast 通知的 IconUri 仅支持 PNG（不支持 .ico，否则显示黑色方块）
+Source: "{#MyAppRoot}\icons\128x128.png"; DestName: "notification.png"; DestDir: "{app}"; Flags: ignoreversion
 ; WebView2 引导器（缺失运行时时装入临时目录执行）
 Source: "{#MyAppRoot}\windows\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: dontcopy noencryption
 
@@ -47,7 +49,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 ; 注册 AUMID：系统通知横幅显示「心愈」名称与应用图标（Tauri 通知插件以 identifier 作为 AUMID）
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.xinyu.heart"; ValueType: string; ValueName: "DisplayName"; ValueData: "心愈"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.xinyu.heart"; ValueType: string; ValueName: "IconUri"; ValueData: "{app}\xinyu.ico"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.xinyu.heart"; ValueType: string; ValueName: "IconUri"; ValueData: "{app}\notification.png"; Flags: uninsdeletekey
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"

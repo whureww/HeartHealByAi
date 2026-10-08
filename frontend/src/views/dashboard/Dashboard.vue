@@ -311,7 +311,7 @@
                 </div>
               </div>
             </div>
-            <div class="setting-item" @click="sendTestNotification">
+            <div v-if="userStore.userInfo?.role === 3" class="setting-item" @click="sendTestNotification">
               <div class="setting-item-left">
                 <span>测试系统通知</span>
                 <span class="setting-desc">发送一条 Windows 通知中心弹窗验证效果</span>
@@ -905,7 +905,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.1.1'
+  const cur = updateInfo.value?.current_version || '0.1.2'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
