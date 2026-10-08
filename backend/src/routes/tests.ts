@@ -30,7 +30,7 @@ function extractJson(text: string): any {
     }
 }
 
-async function callDeepSeek(systemPrompt: string, userPrompt: string, maxTokens = 2000): Promise<any> {
+async function callDeepSeek(systemPrompt: string, userPrompt: string, maxTokens = 2000, temperature = 0.8): Promise<any> {
     if (!DEEPSEEK_KEY) {
         throw new BusinessError('AI 服务未配置（缺少 DEEPSEEK_API_KEY）', 500);
     }
@@ -42,8 +42,9 @@ async function callDeepSeek(systemPrompt: string, userPrompt: string, maxTokens 
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt }
             ],
-            temperature: 0.8,
-            max_tokens: maxTokens
+            temperature,
+            max_tokens: maxTokens,
+            response_format: { type: 'json_object' }
         },
         {
             headers: { Authorization: 'Bearer ' + DEEPSEEK_KEY, 'Content-Type': 'application/json' },
@@ -51,6 +52,35 @@ async function callDeepSeek(systemPrompt: string, userPrompt: string, maxTokens 
         }
     );
     return response.data.choices?.[0]?.message?.content || '';
+}
+
+/**
+ * 调用 AI 并解析 JSON，失败自动重试（最多 3 次）。
+ * JSON 模式下输出基本可靠，重试只为兜底网络/服务抖动。
+ * 最终失败时给用户友好提示，不暴露内部细节。
+ */
+async function callDeepSeekJson(
+    systemPrompt: string,
+    userPrompt: string,
+    maxTokens: number,
+    temperature: number,
+    label: string
+): Promise<any> {
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const raw = await callDeepSeek(systemPrompt, userPrompt, maxTokens, temperature);
+            const parsed = extractJson(raw);
+            if (parsed && typeof parsed === 'object') {
+                return parsed;
+            }
+            lastErr = new Error('empty');
+        } catch (e) {
+            lastErr = e;
+        }
+    }
+    console.error(`[${label}] AI 调用重试 3 次仍失败:`, lastErr);
+    throw new BusinessError('AI 服务繁忙，请稍后重试', 503);
 }
 
 const AI_GEN_PROMPT = `你是心理测评问卷设计专家。请为一位用户生成一套个性化的心理健康自评问卷。
@@ -72,8 +102,7 @@ const AI_SCORE_PROMPT = `你是心理测评分析师。以下是一份心理健�
 
 // ===== AI 智能测评：生成个性化问卷 =====
 router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res: Response) => {
-    const raw = await callDeepSeek(AI_GEN_PROMPT, '请现在生成一套心理健康自评问卷。');
-    const data = extractJson(raw);
+    const data = await callDeepSeekJson(AI_GEN_PROMPT, '请生成一套心理健康自评问卷。', 2200, 0.8, 'ai-gen');
 
     const questions = Array.isArray(data.questions) ? data.questions : null;
     if (!questions || questions.length < 3) {
@@ -156,12 +185,14 @@ router.post('/ai/submit', authenticate, asyncHandler(async (req: Request, res: R
         };
     });
 
-    const raw = await callDeepSeek(
+    // 温度调低保证分级稳定；token 上限加大避免分析文字截断 JSON
+    const judged = await callDeepSeekJson(
         AI_SCORE_PROMPT,
         '题目与用户作答如下（JSON）：\n' + JSON.stringify(qaList),
-        1500
+        2500,
+        0.3,
+        'ai-score'
     );
-    const judged = extractJson(raw);
 
     const totalScore = Math.max(0, Math.min(100, Number(judged.total_score) || 0));
     const level = String(judged.level || '未知');
