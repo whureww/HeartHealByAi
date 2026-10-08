@@ -94,9 +94,16 @@ router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res
         throw new BusinessError('AI 生成的问卷不完整，请重试', 502);
     }
 
+    // 问卷内容持久化：每次生成的完整题目与选项入库（ai_test_papers）
+    const [paperResult] = await pool.execute(
+        'INSERT INTO ai_test_papers (user_id, questions) VALUES (?, ?)',
+        [req.user!.id, JSON.stringify(normalized)]
+    );
+
     res.json({
         success: true,
         data: {
+            paper_id: (paperResult as any).insertId,
             name: AI_TEST_NAME,
             description: '由 AI 根据常见心理健康维度实时生成的个性化自评问卷',
             questions: normalized
@@ -107,12 +114,35 @@ router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res
 // ===== AI 智能测评：根据回答由 AI 评分并保存 =====
 router.post('/ai/submit', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { questions, answers } = req.body || {};
+    const { paper_id, answers } = req.body || {};
+    const clientQuestions = (req.body || {}).questions;
 
-    if (!Array.isArray(questions) || !Array.isArray(answers)
-        || questions.length === 0 || answers.length !== questions.length) {
+    // 优先使用数据库中留存的问卷内容（paper_id），保证评分依据与用户所见一致
+    let sourceQuestions: any[] | null = null;
+    if (paper_id) {
+        const [prows] = await pool.execute(
+            'SELECT questions FROM ai_test_papers WHERE id = ? AND user_id = ?',
+            [paper_id, userId]
+        );
+        const paper = (prows as any[])[0];
+        if (!paper) {
+            throw new BusinessError('问卷不存在或已失效，请重新生成', 404);
+        }
+        try {
+            sourceQuestions = JSON.parse(paper.questions);
+        } catch {
+            sourceQuestions = null;
+        }
+    }
+    if (!Array.isArray(sourceQuestions)) {
+        // 兼容旧客户端：直接传 questions 数组
+        sourceQuestions = Array.isArray(clientQuestions) ? clientQuestions : null;
+    }
+    if (!sourceQuestions || !Array.isArray(answers)
+        || sourceQuestions.length === 0 || answers.length !== sourceQuestions.length) {
         throw new BusinessError('参数不完整', 400);
     }
+    const questions = sourceQuestions;
 
     // 组装评分材料：题目 + 用户所选选项文本（不信任前端直接给的分数，仅作参考）
     const qaList = questions.map((q: any, i: number) => {
@@ -154,13 +184,20 @@ router.post('/ai/submit', authenticate, asyncHandler(async (req: Request, res: R
         throw new BusinessError('测评记录初始化失败', 500);
     }
 
-    // 存储带题干的作答明细，专家端可直接展示「问题 + 用户选择」
-    const answersJson = JSON.stringify(qaList.map((qa, i) => ({
-        question_id: i + 1,
-        content: qa.question,
-        selected_text: qa.selected,
-        score: qa.ref_score
-    })));
+    // 存储带题干与完整选项的作答明细，专家端可直接展示「问题 + 全部选项 + 用户选择」
+    const answersJson = JSON.stringify(qaList.map((qa, i) => {
+        const q = questions[i] || {};
+        const ans = answers[i] || {};
+        const opt = (q.options || []).find((o: any) => o.label === ans.label || o.text === ans.text);
+        return {
+            question_id: i + 1,
+            content: qa.question,
+            options: q.options || [],
+            selected_label: opt?.label ?? ans.label ?? '',
+            selected_text: qa.selected,
+            score: qa.ref_score
+        };
+    }));
 
     const [result] = await pool.execute(
         `INSERT INTO test_results (user_id, test_id, test_code, answers, total_score, result_level, result_desc)

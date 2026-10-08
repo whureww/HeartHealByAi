@@ -85,6 +85,15 @@ CREATE TABLE IF NOT EXISTS test_results (
     KEY idx_result_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ========== AI 生成问卷表（AI 智能测评每次生成的完整题目与选项） ==========
+CREATE TABLE IF NOT EXISTS ai_test_papers (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    questions TEXT NOT NULL COMMENT 'JSON: [{number,content,options:[{label,text,score}]}]',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_paper_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ========== AI 聊天记录表 ==========
 CREATE TABLE IF NOT EXISTS chat_records (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

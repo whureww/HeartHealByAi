@@ -116,6 +116,7 @@ const phase = ref<Phase>('generating')
 const errorMsg = ref('')
 const questions = ref<any[]>([])
 const answers = ref<(any | undefined)[]>([])
+const paperId = ref<number | undefined>(undefined)
 const currentIndex = ref(0)
 const submitting = ref(false)
 const resultData = ref<any>(null)
@@ -137,6 +138,7 @@ const generate = async () => {
   try {
     const res = await generateAiTest()
     questions.value = res.data?.questions || []
+    paperId.value = res.data?.paper_id
     answers.value = new Array(questions.value.length).fill(undefined)
     currentIndex.value = 0
     phase.value = 'answering'
@@ -169,7 +171,7 @@ const handleSubmit = async () => {
   phase.value = 'scoring'
   try {
     const res = await submitAiTest({
-      questions: questions.value,
+      paper_id: paperId.value,
       answers: answers.value.map(a => a || { label: '', text: '', score: 0 })
     })
     resultData.value = res.data

@@ -322,10 +322,26 @@ const parseAnswers = (result: any) => {
 
     return parsed.map((item: any, index: number) => {
       const question = questions.find((q: any) => q.id === item.question_id)
-      const options: any[] = question?.options || []
+      const questionOptions: any[] = question?.options || []
 
-      // 没有题库选项时（如 AI 生成问卷）不再伪造默认选项，直接展示用户所选文字
+      // AI 问卷：作答明细内嵌完整选项（label/text/score），与题库选项统一为 {id,label,text,score}
+      const embeddedOptions: any[] = Array.isArray(item.options) && item.options.length
+        ? item.options.map((o: any, j: number) => ({
+            id: j + 1,
+            label: String(o.label || String.fromCharCode(65 + j)),
+            text: String(o.text || ''),
+            score: Number(o.score) || 0
+          }))
+        : []
+      const options = embeddedOptions.length ? embeddedOptions : questionOptions
       const hasOptions = options.length > 0
+
+      // 选中项：AI 问卷按 selected_label 匹配；普通问卷按 option_id/score
+      let selected = Number(item.option_id || item.score)
+      if (item.selected_label && embeddedOptions.length) {
+        const idx = embeddedOptions.findIndex(o => o.label === item.selected_label)
+        if (idx >= 0) selected = idx + 1
+      }
 
       return {
         no: index + 1,
@@ -333,7 +349,7 @@ const parseAnswers = (result: any) => {
         questionId: item.question_id,
         options: options,
         hasOptions,
-        selected: Number(item.option_id || item.score),
+        selected,
         selectedText: item.selected_text || '',
         score: Number(item.score)
       }

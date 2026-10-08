@@ -30,9 +30,10 @@ export const generateAiTest = () => {
   return request.post('/tests/ai/questions')
 }
 
-// AI 智能测评：提交回答，由 AI 评分
+// AI 智能测评：提交回答，由 AI 评分（paper_id 引用服务端留存的问卷内容）
 export const submitAiTest = (data: {
-  questions: any[]
+  paper_id?: number
+  questions?: any[]
   answers: { label: string; text: string; score: number }[]
 }) => {
   return request.post('/tests/ai/submit', data)
