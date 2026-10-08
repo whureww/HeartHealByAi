@@ -553,6 +553,7 @@ import { useUserStore } from '@/stores/user'
 import { useSettingsStore } from '@/stores/settings'
 import { saveChat, saveAnalysisReport, clearAllData, createAppointment } from '@/api/user'
 import { chatWithAIStream, generateReport } from '@/api/ai'
+import { getTestHistory } from '@/api/tests'
 import { alert, success, confirm, error } from '@/utils/dialog'
 import TestList from './TestList.vue'
 import TestHistory from '../tests/TestHistory.vue'
@@ -905,7 +906,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.1.5'
+  const cur = updateInfo.value?.current_version || '0.1.6'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -1295,9 +1296,30 @@ const createReport = async () => {
   reportLoading.value = true
 
   try {
+    // 拉取用户已完成的测评记录，按报告时间段过滤后一并提供给 AI 分析
+    let results: any[] = []
+    try {
+      const hres = await getTestHistory() as any
+      const rows: any[] = hres?.data || []
+      results = rows
+        .filter((r) => {
+          const day = String(r.completed_at || '').slice(0, 10)
+          return day && day >= startDate.value && day <= endDate.value
+        })
+        .map((r) => ({
+          test_name: r.name,
+          total_score: r.total_score,
+          result_level: r.result_level,
+          result_desc: r.result_desc,
+          completed_at: r.completed_at
+        }))
+    } catch (e) {
+      console.error('获取测评历史失败（报告将仅基于对话数据生成）:', e)
+    }
+
     const res = await generateReport({
       chatHistory: chatMessages.value,
-      testResults: [],
+      testResults: results,
       startDate: startDate.value,
       endDate: endDate.value
     })
