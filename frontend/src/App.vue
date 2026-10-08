@@ -67,9 +67,15 @@ onMounted(() => {
   document.body.style.height = '100vh'
   window.addEventListener('pointerdown', resetIdle, true)
   window.addEventListener('keydown', resetIdle, true)
-  // 程序重启后恢复锁屏状态：锁定期间关闭的程序，打开仍应先解锁而非静默登出
+  // 程序重启后恢复锁屏状态：锁定期间关闭的程序，打开仍应先解锁而非静默登出。
+  // 仅当能识别待解锁账户时才恢复锁屏；账户标识缺失（完全登出/匿名状态）时锁屏
+  // 是无账户可解锁的死路，清除标记直接走登录流程，避免「未登录却出现锁定状态」
   if (localStorage.getItem('lockFlag') === '1') {
-    isLocked.value = true
+    if (userStore.userInfo?.email || localStorage.getItem('accountEmail')) {
+      isLocked.value = true
+    } else {
+      localStorage.removeItem('lockFlag')
+    }
   }
   resetIdle()
 })
