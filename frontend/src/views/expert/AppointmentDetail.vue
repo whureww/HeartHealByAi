@@ -1154,7 +1154,9 @@ watch(() => appointment.value, (newVal) => {
 }
 
 .msg-me {
-  justify-content: flex-end;
+  /* 反转排列：头像在气泡右侧（行方向反转后 flex-start 对齐右缘），与对方消息左右分明 */
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 .msg-other {
