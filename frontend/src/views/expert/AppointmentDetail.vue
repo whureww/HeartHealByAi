@@ -84,6 +84,15 @@
           :key="msg.id"
           :class="['msg', msg.sender_id === currentUserId ? 'msg-me' : 'msg-other']"
         >
+          <img
+            v-if="avatarFor(msg.sender_id)"
+            class="msg-avatar"
+            :src="avatarFor(msg.sender_id)"
+            alt=""
+          />
+          <span v-else class="msg-avatar msg-avatar-fallback">
+            {{ (msg.sender_name || '?').slice(0, 1) }}
+          </span>
           <div class="msg-bubble">
             <div class="msg-sender">{{ msg.sender_name }}</div>
             <div class="msg-content">{{ msg.content }}</div>
@@ -149,7 +158,7 @@
 
               <div class="question-content">{{ answer.question }}</div>
 
-              <div class="options-list">
+              <div class="options-list" v-if="answer.hasOptions">
                 <div
                   v-for="(opt, idx) in answer.options"
                   :key="idx"
@@ -259,6 +268,20 @@ const statusText = (status: string) => {
   return map[status] || status
 }
 
+// ===== 聊天头像 =====
+// 自己取登录态头像；对方按视角取预约数据里的 user_avatar / doctor_avatar
+const selfAvatar = computed(() => userStore.userInfo?.avatar || '')
+
+const otherAvatar = computed(() => {
+  const ap = appointment.value
+  if (!ap) return ''
+  return currentUserId.value === ap.user_id ? (ap.doctor_avatar || '') : (ap.user_avatar || '')
+})
+
+const avatarFor = (senderId: number): string => {
+  return senderId === currentUserId.value ? selfAvatar.value : otherAvatar.value
+}
+
 const formatTime = (date: string) => {
   return new Date(date).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
@@ -301,24 +324,17 @@ const parseAnswers = (result: any) => {
       const question = questions.find((q: any) => q.id === item.question_id)
       const options: any[] = question?.options || []
 
-      // 如果没有选项，生成默认选项
-      if (options.length === 0) {
-        for (let i = 1; i <= 4; i++) {
-          options.push({
-            id: i,
-            label: String.fromCharCode(64 + i),
-            text: getDefaultOptionText(i),
-            score: i
-          })
-        }
-      }
+      // 没有题库选项时（如 AI 生成问卷）不再伪造默认选项，直接展示用户所选文字
+      const hasOptions = options.length > 0
 
       return {
         no: index + 1,
-        question: question?.content || `问题 ${item.question_id}`,
+        question: question?.content || item.content || `问题 ${item.question_id}`,
         questionId: item.question_id,
         options: options,
+        hasOptions,
         selected: Number(item.option_id || item.score),
+        selectedText: item.selected_text || '',
         score: Number(item.score)
       }
     })
@@ -328,14 +344,12 @@ const parseAnswers = (result: any) => {
   }
 }
 
-// 默认选项文字
-const getDefaultOptionText = (index: number): string => {
-  const texts: string[] = ['从不', '偶尔', '有时', '经常', '总是']
-  return texts[index - 1] || `选项${index}`
-}
-
 // 获取用户选择的文字
 const getSelectedText = (answer: any): string => {
+  // AI 问卷等无题库选项的场景：直接展示存储的用户所选文字
+  if (answer.selectedText) {
+    return `${answer.selectedText} (${answer.score}分)`
+  }
   const opt = answer.options.find((o: any) => Number(o.id) === Number(answer.selected))
   if (opt) {
     return `${opt.label}. ${opt.text} (${opt.score}分)`
@@ -483,6 +497,14 @@ const setupSocketListeners = (sock: Socket) => {
     const senderId = msg.sender_id ?? msg.senderId
     if (senderId !== userStore.userInfo?.id) {
       showToast('新消息', String(msg.content || '').slice(0, 60))
+    }
+  })
+
+  // 内容审核：被服务端拦截的消息不入库，恢复输入框内容便于修改后重发
+  sock.on('message-blocked', (data: { content?: string; reason?: string }) => {
+    showToast('发送被拦截', data?.reason || '消息包含不文明或违规内容，已被拦截', false)
+    if (data?.content) {
+      newMessage.value = data.content
     }
   })
 
@@ -1111,6 +1133,8 @@ watch(() => appointment.value, (newVal) => {
 
 .msg {
   display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .msg-me {
@@ -1119,6 +1143,27 @@ watch(() => appointment.value, (newVal) => {
 
 .msg-other {
   justify-content: flex-start;
+}
+
+.msg-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.msg-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: none;
 }
 
 .msg-bubble {

@@ -24,6 +24,11 @@ const routes = [
     component: () => import('../views/tests/DoTest.vue'),
     meta: { auth: true }
   },
+  {
+    path: '/tests/ai',
+    component: () => import('../views/tests/AiTest.vue'),
+    meta: { auth: true }
+  },
   // 专家工作台
   {
     path: '/expert',

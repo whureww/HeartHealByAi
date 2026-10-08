@@ -12,6 +12,7 @@ import adminRouter from './routes/admin';
 import expertRouter from './routes/expert';
 import { pool } from './db/mysql';
 import { isAppointmentParticipant } from './utils/guards';
+import { checkMessageContent } from './utils/moderation';
 import aiRouter from './routes/ai';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth';
@@ -232,6 +233,17 @@ io.on('connection', (socket) => {
             const receiverId = senderId === part.userId ? part.doctorUserId : part.userId;
             if (!receiverId) {
                 socket.emit('error', { message: '预约对方信息缺失' });
+                return;
+            }
+
+            // 内容审核：不文明 / 违规内容直接拦截，不入库不广播
+            const moderation = checkMessageContent(data.content);
+            if (!moderation.ok) {
+                socket.emit('message-blocked', {
+                    appointmentId: data.appointmentId,
+                    content: data.content,
+                    reason: '消息包含不文明或违规内容，已被拦截'
+                });
                 return;
             }
 

@@ -21,6 +21,24 @@
     </div>
 
     <div v-else class="test-list">
+      <!-- AI 智能测评：固定置顶，内容由 AI 实时生成 -->
+      <div class="test-row ai-row" @click="onStartAiTest">
+        <div class="test-icon ai-icon"><AppIcon name="edit" :size="19" /></div>
+        <div class="test-body">
+          <h3>AI 智能测评<span class="ai-badge">AI</span></h3>
+          <p class="desc">由 AI 实时生成专属问卷，并根据你的回答智能评分与解读</p>
+          <div class="test-meta">
+            <span class="tag ai-tag">每次内容不同</span>
+            <span class="tag">AI 评分解读</span>
+            <span class="tag ai-tag category">智能生成</span>
+          </div>
+        </div>
+        <div class="test-actions">
+          <button class="btn-start btn-ai" @click.stop="onStartAiTest">开始测评</button>
+          <AppIcon name="chevronRight" :size="16" class="row-arrow" />
+        </div>
+      </div>
+
       <div
         v-for="test in tests"
         :key="test.id"
@@ -56,7 +74,7 @@ import { ref, onMounted } from 'vue'
 import { getTestList } from '@/api/tests'
 import AppIcon from '@/components/AppIcon.vue'
 
-const emit = defineEmits(['view-history', 'start-test'])
+const emit = defineEmits(['view-history', 'start-test', 'start-ai-test'])
 
 const tests = ref<any[]>([])
 const loading = ref(false)
@@ -89,6 +107,10 @@ onMounted(() => {
 
 const onStartTest = (testId: number) => {
   emit('start-test', testId)
+}
+
+const onStartAiTest = () => {
+  emit('start-ai-test')
 }
 
 const onViewHistory = () => {
@@ -204,6 +226,43 @@ const onViewHistory = () => {
 
 .test-row:hover {
   background: var(--accent-soft);
+}
+
+/* AI 智能测评卡片 */
+.ai-row {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 65%);
+}
+
+.ai-icon {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.ai-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  vertical-align: 2px;
+  letter-spacing: 0.5px;
+}
+
+.ai-tag {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.btn-ai {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+}
+
+.ai-row:hover {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), var(--accent-soft) 65%);
 }
 
 .test-icon {

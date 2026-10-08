@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { isAppointmentParticipant } from '../utils/guards';
+import { checkMessageContent } from '../utils/moderation';
 
 const router = Router();
 
@@ -160,7 +161,7 @@ router.get('/appointments/:id', authenticate, asyncHandler(async (req: any, res:
     const userId = req.user.id;
     const userRole = req.user.role;
     
-    let sql = `SELECT ar.*, u.username as user_name, u.email as user_email, u.phone as user_phone
+    let sql = `SELECT ar.*, u.username as user_name, u.email as user_email, u.phone as user_phone, u.avatar as user_avatar
                FROM appointment_records ar
                JOIN users u ON ar.user_id = u.id
                WHERE ar.id = ?`;
@@ -192,10 +193,12 @@ router.get('/appointments/:id', authenticate, asyncHandler(async (req: any, res:
     let doctorUserId = null;
     if (appointment.doctor_id) {
         const [docRows] = await pool.execute(
-            'SELECT user_id FROM doctors WHERE id = ?',
+            'SELECT d.user_id, u.avatar AS doctor_avatar FROM doctors d LEFT JOIN users u ON d.user_id = u.id WHERE d.id = ?',
             [appointment.doctor_id]
         );
-        doctorUserId = (docRows as any[])[0]?.user_id || null;
+        const doc = (docRows as any[])[0];
+        doctorUserId = doc?.user_id || null;
+        appointment.doctor_avatar = doc?.doctor_avatar || null;
     }
     appointment.doctor_user_id = doctorUserId;
 
@@ -208,6 +211,23 @@ router.get('/appointments/:id', authenticate, asyncHandler(async (req: any, res:
          LIMIT 5`,
         [appointment.user_id]
     );
+
+    // 为每份结果附带题目与选项文本，供专家端完整展示「问题 + 用户选择」
+    const testList = testRows as any[];
+    const testIds = [...new Set(testList.map((r) => r.test_id).filter(Boolean))];
+    if (testIds.length > 0) {
+        const placeholders = testIds.map(() => '?').join(',');
+        const [qRows] = await pool.execute(
+            `SELECT id, test_id, content, options FROM test_questions WHERE test_id IN (${placeholders})`,
+            testIds
+        );
+        for (const r of testList) {
+            const qs = (qRows as any[]).filter((q) => q.test_id === r.test_id);
+            r.test_questions = qs.length
+                ? JSON.stringify(qs.map((q) => ({ id: q.id, content: q.content, options: JSON.parse(q.options) })))
+                : null;
+        }
+    }
 
     res.json({
         success: true,
@@ -322,6 +342,12 @@ router.post('/chat', authenticate, asyncHandler(async (req: any, res: any) => {
     const receiverId = senderId === part.userId ? part.doctorUserId : part.userId;
     if (!receiverId) {
         throw new BusinessError('预约对方信息缺失', 400);
+    }
+
+    // 内容审核：不文明 / 违规内容直接拦截
+    const moderation = checkMessageContent(content);
+    if (!moderation.ok) {
+        throw new BusinessError('消息包含不文明或违规内容，已被拦截', 400);
     }
 
     await pool.execute(

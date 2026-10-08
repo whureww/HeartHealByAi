@@ -3,13 +3,190 @@ import { pool } from '../db/mysql';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
+import axios from 'axios';
 
 const router = Router();
+
+// AI 智能测评的特殊量表编码（在普通列表中隐藏，由前端单独置顶展示）
+const AI_TEST_CODE = 'AI-GEN';
+const AI_TEST_NAME = 'AI 智能测评';
+
+const DEEPSEEK_BASE = 'https://api.deepseek.com';
+const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || '';
+const AI_MODEL = 'deepseek-v4-flash';
+
+// 从 AI 回复中稳健地提取 JSON（容忍 ```json 包裹或前后说明文字）
+function extractJson(text: string): any {
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    try {
+        return JSON.parse(cleaned);
+    } catch {
+        const s = cleaned.indexOf('{');
+        const e = cleaned.lastIndexOf('}');
+        if (s !== -1 && e > s) {
+            return JSON.parse(cleaned.slice(s, e + 1));
+        }
+        throw new Error('AI 返回格式异常');
+    }
+}
+
+async function callDeepSeek(systemPrompt: string, userPrompt: string, maxTokens = 2000): Promise<any> {
+    if (!DEEPSEEK_KEY) {
+        throw new BusinessError('AI 服务未配置（缺少 DEEPSEEK_API_KEY）', 500);
+    }
+    const response = await axios.post(
+        DEEPSEEK_BASE + '/chat/completions',
+        {
+            model: AI_MODEL,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.8,
+            max_tokens: maxTokens
+        },
+        {
+            headers: { Authorization: 'Bearer ' + DEEPSEEK_KEY, 'Content-Type': 'application/json' },
+            timeout: 60000
+        }
+    );
+    return response.data.choices?.[0]?.message?.content || '';
+}
+
+const AI_GEN_PROMPT = `你是心理测评问卷设计专家。请为一位用户生成一套个性化的心理健康自评问卷。
+要求：
+- 共 8 道题，覆盖近期情绪状态、睡眠、压力感受、社交意愿、自我评价、兴趣动力等维度，题目表述具体、温和、贴近日常生活
+- 每题 4 个选项，得分依次为 0/1/2/3，分数越高代表该维度越需要关注
+- 选项文字要口语化、有区分度，避免机械重复
+- 严格只输出如下 JSON，不要任何其他文字：
+{"questions":[{"number":1,"content":"题干","options":[{"label":"A","text":"选项文字","score":0},{"label":"B","text":"选项文字","score":1},{"label":"C","text":"选项文字","score":2},{"label":"D","text":"选项文字","score":3}]}]}`;
+
+const AI_SCORE_PROMPT = `你是心理测评分析师。以下是一份心理健康自评问卷的题目与用户的作答，请综合分析用户的整体心理状态。
+要求：
+- total_score：0-100 的整数，分数越高代表越需要关注
+- level：仅从「正常 / 轻度 / 中度 / 重度」中选一个
+- desc：一句话总体评价
+- analysis：200-350 字的详细分析，结合用户在具体题目上的选择展开，最后给出 2-3 条温和可执行的建议；语气温和不评判，不构成医学诊断
+- 严格只输出如下 JSON，不要任何其他文字：
+{"total_score":0,"level":"正常","desc":"...","analysis":"..."}`;
+
+// ===== AI 智能测评：生成个性化问卷 =====
+router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const raw = await callDeepSeek(AI_GEN_PROMPT, '请现在生成一套心理健康自评问卷。');
+    const data = extractJson(raw);
+
+    const questions = Array.isArray(data.questions) ? data.questions : null;
+    if (!questions || questions.length < 3) {
+        throw new BusinessError('AI 生成的问卷不完整，请重试', 502);
+    }
+    // 基础结构校验与规整
+    const normalized = questions.map((q: any, i: number) => ({
+        number: i + 1,
+        content: String(q.content || '').trim(),
+        options: (Array.isArray(q.options) ? q.options : []).map((o: any, j: number) => ({
+            label: String(o.label || String.fromCharCode(65 + j)),
+            text: String(o.text || '').trim(),
+            score: Number(o.score) || 0
+        }))
+    })).filter((q: any) => q.content && q.options.length >= 2);
+
+    if (normalized.length < 3) {
+        throw new BusinessError('AI 生成的问卷不完整，请重试', 502);
+    }
+
+    res.json({
+        success: true,
+        data: {
+            name: AI_TEST_NAME,
+            description: '由 AI 根据常见心理健康维度实时生成的个性化自评问卷',
+            questions: normalized
+        }
+    });
+}));
+
+// ===== AI 智能测评：根据回答由 AI 评分并保存 =====
+router.post('/ai/submit', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { questions, answers } = req.body || {};
+
+    if (!Array.isArray(questions) || !Array.isArray(answers)
+        || questions.length === 0 || answers.length !== questions.length) {
+        throw new BusinessError('参数不完整', 400);
+    }
+
+    // 组装评分材料：题目 + 用户所选选项文本（不信任前端直接给的分数，仅作参考）
+    const qaList = questions.map((q: any, i: number) => {
+        const ans = answers[i] || {};
+        const opt = (q.options || []).find((o: any) => o.label === ans.label || o.text === ans.text);
+        return {
+            number: i + 1,
+            question: String(q.content || ''),
+            selected: String(ans.text || opt?.text || '未作答'),
+            ref_score: Number(ans.score ?? opt?.score ?? 0)
+        };
+    });
+
+    const raw = await callDeepSeek(
+        AI_SCORE_PROMPT,
+        '题目与用户作答如下（JSON）：\n' + JSON.stringify(qaList),
+        1500
+    );
+    const judged = extractJson(raw);
+
+    const totalScore = Math.max(0, Math.min(100, Number(judged.total_score) || 0));
+    const level = String(judged.level || '未知');
+    const desc = String(judged.desc || '');
+    const analysis = String(judged.analysis || '');
+
+    // 确保 AI 智能测评的量表记录存在（test_results 外键需要 test_id）
+    await pool.execute(
+        `INSERT INTO psychological_tests (code, name, description, category, total_questions, estimated_minutes, scoring_method, status)
+         SELECT ?, ?, ?, '智能', ?, ?, 'ai', 1
+         WHERE NOT EXISTS (SELECT 1 FROM psychological_tests WHERE code = ?)`,
+        [AI_TEST_CODE, AI_TEST_NAME, '由 AI 实时生成题目并评分的个性化测评', 8, 5, AI_TEST_CODE]
+    );
+    const [testRows] = await pool.execute(
+        'SELECT id FROM psychological_tests WHERE code = ?',
+        [AI_TEST_CODE]
+    );
+    const testId = (testRows as any[])[0]?.id;
+    if (!testId) {
+        throw new BusinessError('测评记录初始化失败', 500);
+    }
+
+    // 存储带题干的作答明细，专家端可直接展示「问题 + 用户选择」
+    const answersJson = JSON.stringify(qaList.map((qa, i) => ({
+        question_id: i + 1,
+        content: qa.question,
+        selected_text: qa.selected,
+        score: qa.ref_score
+    })));
+
+    const [result] = await pool.execute(
+        `INSERT INTO test_results (user_id, test_id, test_code, answers, total_score, result_level, result_desc)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [userId, testId, AI_TEST_CODE, answersJson, totalScore, level, desc + (analysis ? '\n\n' + analysis : '')]
+    );
+
+    res.json({
+        success: true,
+        data: {
+            id: (result as any).insertId,
+            test_code: AI_TEST_CODE,
+            test_name: AI_TEST_NAME,
+            total_score: totalScore,
+            result_level: level,
+            result_desc: desc,
+            analysis,
+            completed_at: new Date().toISOString()
+        }
+    });
+}));
 
 // ===== 获取测评列表 =====
 router.get('/list', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const [rows] = await pool.execute(
-        'SELECT id, code, name, description, category, total_questions, estimated_minutes, scoring_method FROM psychological_tests WHERE status = 1'
+        "SELECT id, code, name, description, category, total_questions, estimated_minutes, scoring_method FROM psychological_tests WHERE status = 1 AND code != 'AI-GEN'"
     );
 
     res.json({

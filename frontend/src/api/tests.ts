@@ -24,3 +24,16 @@ export const getTestHistory = () => {
 export const getTestResult = (resultId: number) => {
   return request.get(`/tests/result/${resultId}`)
 }
+
+// AI 智能测评：生成个性化问卷
+export const generateAiTest = () => {
+  return request.post('/tests/ai/questions')
+}
+
+// AI 智能测评：提交回答，由 AI 评分
+export const submitAiTest = (data: {
+  questions: any[]
+  answers: { label: string; text: string; score: number }[]
+}) => {
+  return request.post('/tests/ai/submit', data)
+}

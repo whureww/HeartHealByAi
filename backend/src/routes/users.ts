@@ -602,7 +602,7 @@ router.post('/chat', authenticate, asyncHandler(async (req: Request, res: Respon
 // ========== 获取心理测评列表 ==========
 router.get('/tests', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const [rows] = await pool.execute(
-        'SELECT id, code, name, description, category, total_questions, estimated_minutes, scoring_method FROM psychological_tests WHERE status = 1'
+        "SELECT id, code, name, description, category, total_questions, estimated_minutes, scoring_method FROM psychological_tests WHERE status = 1 AND code != 'AI-GEN'"
     );
 
     res.json({

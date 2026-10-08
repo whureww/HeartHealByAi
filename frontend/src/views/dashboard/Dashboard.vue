@@ -78,10 +78,11 @@
 
       <!-- 2. 心理测评页面 -->
       <div v-if="currentPage === 'test'" class="page show">
-        <TestList 
-          v-if="userStore.currentTestView === 'list'" 
+        <TestList
+          v-if="userStore.currentTestView === 'list'"
           @view-history="userStore.switchTestView('history')"
           @start-test="onStartTest"
+          @start-ai-test="onStartAiTest"
         />
         <TestHistory 
           v-else-if="userStore.currentTestView === 'history'" 
@@ -1186,6 +1187,10 @@ const onStatusUpdated = async () => {
 
 const onStartTest = (testId: number) => {
   router.push(`/tests/do/${testId}`)
+}
+
+const onStartAiTest = () => {
+  router.push('/tests/ai')
 }
 
 const onViewDetail = (resultId: number) => {
