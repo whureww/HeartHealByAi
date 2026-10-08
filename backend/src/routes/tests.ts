@@ -3,89 +3,20 @@ import { pool } from '../db/mysql';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
-import axios from 'axios';
+import { callAIJson } from '../utils/aiClient';
 
 const router = Router();
 
 // AI 智能测评的特殊量表编码（在普通列表中隐藏，由前端单独置顶展示）
 const AI_TEST_CODE = 'AI-GEN';
 const AI_TEST_NAME = 'AI 智能测评';
-
-const DEEPSEEK_BASE = 'https://api.deepseek.com';
-const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || '';
-const AI_MODEL = 'deepseek-v4-flash';
-
-// 从 AI 回复中稳健地提取 JSON（容忍 ```json 包裹或前后说明文字）
-function extractJson(text: string): any {
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    try {
-        return JSON.parse(cleaned);
-    } catch {
-        const s = cleaned.indexOf('{');
-        const e = cleaned.lastIndexOf('}');
-        if (s !== -1 && e > s) {
-            return JSON.parse(cleaned.slice(s, e + 1));
-        }
-        throw new Error('AI 返回格式异常');
-    }
-}
-
-async function callDeepSeek(systemPrompt: string, userPrompt: string, maxTokens = 2000, temperature = 0.8): Promise<any> {
-    if (!DEEPSEEK_KEY) {
-        throw new BusinessError('AI 服务未配置（缺少 DEEPSEEK_API_KEY）', 500);
-    }
-    const response = await axios.post(
-        DEEPSEEK_BASE + '/chat/completions',
-        {
-            model: AI_MODEL,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-            ],
-            temperature,
-            max_tokens: maxTokens,
-            response_format: { type: 'json_object' }
-        },
-        {
-            headers: { Authorization: 'Bearer ' + DEEPSEEK_KEY, 'Content-Type': 'application/json' },
-            timeout: 60000
-        }
-    );
-    return response.data.choices?.[0]?.message?.content || '';
-}
-
-/**
- * 调用 AI 并解析 JSON，失败自动重试（最多 3 次）。
- * JSON 模式下输出基本可靠，重试只为兜底网络/服务抖动。
- * 最终失败时给用户友好提示，不暴露内部细节。
- */
-async function callDeepSeekJson(
-    systemPrompt: string,
-    userPrompt: string,
-    maxTokens: number,
-    temperature: number,
-    label: string
-): Promise<any> {
-    let lastErr: unknown = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-            const raw = await callDeepSeek(systemPrompt, userPrompt, maxTokens, temperature);
-            const parsed = extractJson(raw);
-            if (parsed && typeof parsed === 'object') {
-                return parsed;
-            }
-            lastErr = new Error('empty');
-        } catch (e) {
-            lastErr = e;
-        }
-    }
-    console.error(`[${label}] AI 调用重试 3 次仍失败:`, lastErr);
-    throw new BusinessError('AI 服务繁忙，请稍后重试', 503);
-}
+// 题目数量范围（业务约束：生成少于下限自动重试，超过上限自动截取）
+const AI_QUESTIONS_MIN = 8;
+const AI_QUESTIONS_MAX = 20;
 
 const AI_GEN_PROMPT = `你是心理测评问卷设计专家。请为一位用户生成一套个性化的心理健康自评问卷。
 要求：
-- 共 8 道题，覆盖近期情绪状态、睡眠、压力感受、社交意愿、自我评价、兴趣动力等维度，题目表述具体、温和、贴近日常生活
+- 出 ${AI_QUESTIONS_MIN} 到 ${AI_QUESTIONS_MAX} 道题（建议 10-15 道），覆盖近期情绪状态、睡眠、压力感受、社交意愿、自我评价、兴趣动力等维度，题目表述具体、温和、贴近日常生活
 - 每题 4 个选项，得分依次为 0/1/2/3，分数越高代表该维度越需要关注
 - 选项文字要口语化、有区分度，避免机械重复
 - 严格只输出如下 JSON，不要任何其他文字：
@@ -102,26 +33,31 @@ const AI_SCORE_PROMPT = `你是心理测评分析师。以下是一份心理健�
 
 // ===== AI 智能测评：生成个性化问卷 =====
 router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res: Response) => {
-    const data = await callDeepSeekJson(AI_GEN_PROMPT, '请生成一套心理健康自评问卷。', 2200, 0.8, 'ai-gen');
+    // 数量约束：< MIN 自动重试一次，> MAX 截取到上限
+    let normalized: any[] = [];
+    for (let attempt = 0; attempt < 2 && normalized.length < AI_QUESTIONS_MIN; attempt++) {
+        const data = await callAIJson(AI_GEN_PROMPT, '请生成一套心理健康自评问卷。', { maxTokens: 4500, temperature: 0.8, label: 'ai-gen' });
+        const questions = Array.isArray(data.questions) ? data.questions : null;
+        if (!questions) continue;
+        // 基础结构校验与规整
+        normalized = questions.map((q: any, i: number) => ({
+            number: i + 1,
+            content: String(q.content || '').trim(),
+            options: (Array.isArray(q.options) ? q.options : []).map((o: any, j: number) => ({
+                label: String(o.label || String.fromCharCode(65 + j)),
+                text: String(o.text || '').trim(),
+                score: Number(o.score) || 0
+            }))
+        })).filter((q: any) => q.content && q.options.length >= 2);
+        if (normalized.length > AI_QUESTIONS_MAX) {
+            normalized = normalized.slice(0, AI_QUESTIONS_MAX);
+        }
+    }
 
-    const questions = Array.isArray(data.questions) ? data.questions : null;
-    if (!questions || questions.length < 3) {
+    if (normalized.length < AI_QUESTIONS_MIN) {
         throw new BusinessError('AI 生成的问卷不完整，请重试', 502);
     }
-    // 基础结构校验与规整
-    const normalized = questions.map((q: any, i: number) => ({
-        number: i + 1,
-        content: String(q.content || '').trim(),
-        options: (Array.isArray(q.options) ? q.options : []).map((o: any, j: number) => ({
-            label: String(o.label || String.fromCharCode(65 + j)),
-            text: String(o.text || '').trim(),
-            score: Number(o.score) || 0
-        }))
-    })).filter((q: any) => q.content && q.options.length >= 2);
-
-    if (normalized.length < 3) {
-        throw new BusinessError('AI 生成的问卷不完整，请重试', 502);
-    }
+    normalized.forEach((q, i) => { q.number = i + 1; });
 
     // 问卷内容持久化：每次生成的完整题目与选项入库（ai_test_papers）
     const [paperResult] = await pool.execute(
@@ -186,25 +122,32 @@ router.post('/ai/submit', authenticate, asyncHandler(async (req: Request, res: R
     });
 
     // 温度调低保证分级稳定；token 上限加大避免分析文字截断 JSON
-    const judged = await callDeepSeekJson(
-        AI_SCORE_PROMPT,
-        '题目与用户作答如下（JSON）：\n' + JSON.stringify(qaList),
-        2500,
-        0.3,
-        'ai-score'
-    );
+    let judged: any;
+    try {
+        judged = await callAIJson(
+            AI_SCORE_PROMPT,
+            '题目与用户作答如下（JSON）：\n' + JSON.stringify(qaList),
+            { maxTokens: 2500, temperature: 0.3, label: 'ai-score' }
+        );
+    } catch {
+        throw new BusinessError('AI 服务繁忙，请稍后重试', 503);
+    }
 
     const totalScore = Math.max(0, Math.min(100, Number(judged.total_score) || 0));
     const level = String(judged.level || '未知');
     const desc = String(judged.desc || '');
     const analysis = String(judged.analysis || '');
 
-    // 确保 AI 智能测评的量表记录存在（test_results 外键需要 test_id）
+    // 确保 AI 智能测评的量表记录存在（test_results 外键需要 test_id），题数随每次生成同步
     await pool.execute(
         `INSERT INTO psychological_tests (code, name, description, category, total_questions, estimated_minutes, scoring_method, status)
          SELECT ?, ?, ?, '智能', ?, ?, 'ai', 1
          WHERE NOT EXISTS (SELECT 1 FROM psychological_tests WHERE code = ?)`,
-        [AI_TEST_CODE, AI_TEST_NAME, '由 AI 实时生成题目并评分的个性化测评', 8, 5, AI_TEST_CODE]
+        [AI_TEST_CODE, AI_TEST_NAME, '由 AI 实时生成题目并评分的个性化测评', questions.length, 5, AI_TEST_CODE]
+    );
+    await pool.execute(
+        'UPDATE psychological_tests SET total_questions = ? WHERE code = ?',
+        [questions.length, AI_TEST_CODE]
     );
     const [testRows] = await pool.execute(
         'SELECT id FROM psychological_tests WHERE code = ?',

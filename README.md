@@ -166,7 +166,8 @@ npm run tauri:build  # 打包 Windows 桌面应用（产出 target/release/心�
 | `PORT` | 服务端口 | `3001` |
 | `JWT_SECRET` | JWT 签名密钥（生产必须配置） | 内置开发用密钥 |
 | `BCRYPT_ROUNDS` | 密码哈希轮数 | `12` |
-| `DEEPSEEK_API_KEY` | DeepSeek API 密钥（AI 功能必需） | 无 |
+| `DEEPSEEK_API_KEY` | DeepSeek API 密钥（AI 功能必需；也可由 `AI_API_KEY` 代替） | 无 |
+| `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` | 通用 AI 配置：兼容任意 OpenAI Chat Completions 协议的大模型厂商（DeepSeek / Kimi / Qwen / GLM 等），仅需替换接口地址、密钥与模型名 | 沿用 DeepSeek 配置 |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | 邮件服务器（验证码邮件） | `smtp.qq.com` / `465` / `true` |
 | `SMTP_USER` / `SMTP_PASS` | 发件邮箱账号与授权码 | 无（未配置时进入开发模式，验证码仅打印日志） |
 | `APP_URL` | OAuth 回调使用的服务端地址 | 无 |
