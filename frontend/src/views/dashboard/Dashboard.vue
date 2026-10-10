@@ -907,7 +907,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.1.8'
+  const cur = updateInfo.value?.current_version || '0.1.9'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -2471,14 +2471,21 @@ const scrollToBottom = () => {
 .setting-select {
   appearance: none;
   -webkit-appearance: none;
-  min-width: 136px;
-  padding: 6px 32px 6px 12px;
+  min-width: 118px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 30px 0 12px;
   border-radius: var(--radius-ctl);
   border: 1px solid var(--border-color);
-  /* 自绘下拉箭头（原生箭头样式不可控且与设计系统不符） */
-  background: var(--input-bg) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a93a6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center;
+  /* 自绘下拉箭头（SVG 全量百分号编码，空格未转义会导致 WebView2 渲染失败、箭头缺失） */
+  background-color: var(--input-bg);
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='12'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23a8947a'%20stroke-width='2.4'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='m6%209%206%206%206-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
   color: var(--text-primary);
   font-size: 13px;
+  line-height: 30px;
+  text-overflow: ellipsis;
   outline: none;
   cursor: pointer;
   transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);

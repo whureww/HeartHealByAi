@@ -5323,7 +5323,7 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "xinyu-app"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -5334,6 +5334,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-notification",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

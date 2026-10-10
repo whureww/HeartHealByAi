@@ -22,6 +22,7 @@ import { useLoadingStore } from './stores/loading'
 import { useSettingsStore } from './stores/settings'
 import { useUserStore } from './stores/user'
 import { setDialogInstance } from './utils/dialog'
+import { initTaskbarNotifier } from './utils/taskbar'
 
 const loadingStore = useLoadingStore()
 const settingsStore = useSettingsStore()
@@ -61,6 +62,7 @@ watch(() => [settingsStore.lockOnLeave, settingsStore.lockTimeout], resetIdle)
 
 onMounted(() => {
   setDialogInstance(dialogRef.value)
+  initTaskbarNotifier()
   document.documentElement.style.overflow = 'hidden'
   document.body.style.overflow = 'hidden'
   document.documentElement.style.height = '100vh'

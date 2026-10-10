@@ -108,6 +108,30 @@ fn exit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// 任务栏闪烁提醒（QQ 式新消息）：窗口失焦时橙色频闪任务栏图标直至回到前台。
+/// stop=true 立即停止闪烁（获得焦点/已读时由前端调用）。
+#[tauri::command]
+fn flash_taskbar(window: tauri::WebviewWindow, stop: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            FlashWindowEx, FLASHWINFO, FLASHW_ALL, FLASHW_STOP, FLASHW_TIMERNOFG,
+        };
+        // tauri 的 HWND.0 为 *mut c_void，windows-sys 0.52 的 HWND 为 isize，需转换
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+        let dw_flags = if stop { FLASHW_STOP } else { FLASHW_ALL | FLASHW_TIMERNOFG };
+        let mut info = FLASHWINFO {
+            cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
+            hwnd,
+            dwFlags: dw_flags,
+            uCount: 0, // 0 = 持续闪烁直到 FLASHW_STOP 或窗口到前台
+            dwTimeout: 0,
+        };
+        unsafe { FlashWindowEx(&mut info) };
+    }
+    Ok(())
+}
+
 // ===== 检查更新（Gitee Releases） =====
 
 const GITEE_RELEASES_LATEST: &str =
@@ -379,6 +403,7 @@ fn main() {
             secure_read,
             secure_delete,
             exit_app,
+            flash_taskbar,
             check_update,
             download_update,
             cancel_download,

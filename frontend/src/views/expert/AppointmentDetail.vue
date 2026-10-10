@@ -199,6 +199,7 @@ import { getAppointmentDetail, updateAppointmentStatus, getChatMessages } from '
 import { handleSessionExpired } from '@/api/request'
 import { success, error, alert as dialogAlert } from '@/utils/dialog'
 import { showToast } from '@/utils/notify'
+import { flashForMessage } from '@/utils/taskbar'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
 
@@ -513,6 +514,8 @@ const setupSocketListeners = (sock: Socket) => {
     const senderId = msg.sender_id ?? msg.senderId
     if (senderId !== userStore.userInfo?.id) {
       showToast('新消息', String(msg.content || '').slice(0, 60))
+      // QQ 式任务栏提醒：窗口不在前台时任务栏频闪 + 悬浮预览消息摘要
+      flashForMessage(String(msg.sender_name || '新消息'), String(msg.content || ''))
     }
   })
 
