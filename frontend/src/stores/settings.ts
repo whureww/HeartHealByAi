@@ -114,6 +114,22 @@ export const useSettingsStore = defineStore('settings', () => {
     lockOnLeave.value = !lockOnLeave.value
   }
 
+  // 从 localStorage 重新水合（数据备份导入后调用，让 UI 与恢复后的设置保持一致）
+  const refreshFromLocal = () => {
+    const themeVal = localStorage.getItem('theme') as Theme | null
+    if (themeVal) theme.value = themeVal
+    const notifyVal = localStorage.getItem('notifications') as NotifyType | null
+    if (notifyVal) notifications.value = notifyVal
+    soundEnabled.value = localStorage.getItem('soundEnabled') !== 'false'
+    const closeVal = localStorage.getItem('closeAction') as CloseAction | null
+    if (closeVal) closeAction.value = closeVal
+    autoBackup.value = localStorage.getItem('autoBackup') === 'true'
+    backupInterval.value = Number(localStorage.getItem('backupInterval')) || 7
+    lockOnLeave.value = localStorage.getItem('lockOnLeave') === 'true'
+    lockTimeout.value = Number(localStorage.getItem('lockTimeout')) || 5
+    applyTheme(theme.value)
+  }
+
   return {
     theme,
     notifications,
@@ -129,6 +145,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setNotifications,
     toggleSound,
     toggleAutoBackup,
-    toggleLockOnLeave
+    toggleLockOnLeave,
+    refreshFromLocal
   }
 })

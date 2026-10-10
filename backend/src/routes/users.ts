@@ -642,6 +642,16 @@ router.post('/analysis-report', authenticate, asyncHandler(async (req: Request, 
     });
 }));
 
+// ========== 获取分析报告列表 ==========
+router.get('/analysis-reports', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const [rows] = await pool.execute(
+        'SELECT id, start_date, end_date, content, created_at FROM analysis_reports WHERE user_id = ? ORDER BY created_at DESC',
+        [userId]
+    );
+    res.json({ success: true, data: rows });
+}));
+
 // ========== 清空用户所有数据 ==========
 router.post('/clear-all', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;

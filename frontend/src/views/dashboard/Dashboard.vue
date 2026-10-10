@@ -551,7 +551,8 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useSettingsStore } from '@/stores/settings'
-import { saveChat, saveAnalysisReport, clearAllData, createAppointment } from '@/api/user'
+import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getUserAppointments, getAnalysisReports } from '@/api/user'
+import { useLoadingStore } from '@/stores/loading'
 import { chatWithAIStream, generateReport } from '@/api/ai'
 import { getTestHistory } from '@/api/tests'
 import { alert, success, confirm, error } from '@/utils/dialog'
@@ -906,7 +907,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.1.7'
+  const cur = updateInfo.value?.current_version || '0.1.8'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -1348,42 +1349,135 @@ const createReport = async () => {
   }
 }
 
+// 本地设置快照键（与 main.ts DEFAULT_CONFIG 一致，排除会话凭据）
+const BACKUP_SETTING_KEYS = ['theme', 'notifications', 'soundEnabled', 'closeAction', 'autoBackup', 'backupInterval', 'lockOnLeave', 'lockTimeout']
+
 const exportData = async () => {
+  const loadingStore = useLoadingStore()
+  loadingStore.show('正在收集数据...')
   try {
-    const data = {
-      chatHistory: chatMessages.value,
-      stats: userStore.stats,
-      exportTime: new Date().toISOString()
+    // 并行拉取四类服务端数据（单项失败不阻断整体导出）
+    const [chat, tests, appts, reports] = await Promise.all([
+      getChatHistory().catch(() => null),
+      getTestHistory().catch(() => null),
+      getUserAppointments().catch(() => null),
+      getAnalysisReports().catch(() => null)
+    ])
+
+    // 本地设置快照（纯偏好项，不含 token/邮箱等凭据）
+    const localSettings: Record<string, string> = {}
+    for (const k of BACKUP_SETTING_KEYS) {
+      const v = localStorage.getItem(k)
+      if (v !== null) localSettings[k] = v
     }
+
+    const data = {
+      app: 'xinyu-backup',
+      version: 2,
+      exportTime: new Date().toISOString(),
+      user: {
+        username: userStore.userInfo?.username || '',
+        email: userStore.userInfo?.email || ''
+      },
+      chatHistory: chat?.data || [],
+      testResults: tests?.data || [],
+      appointments: appts?.data || [],
+      analysisReports: reports?.data || [],
+      localSettings
+    }
+
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
+    const day = new Date().toISOString().slice(0, 10)
     a.href = url
-    a.download = `心愈数据备份_${new Date().toLocaleDateString()}.json`
+    a.download = `心愈数据备份_${day}.json`
     a.click()
     URL.revokeObjectURL(url)
-    await success('数据导出成功', '导出成功')
+
+    const total = data.chatHistory.length + data.testResults.length + data.appointments.length + data.analysisReports.length
+    await success(`已导出 ${data.chatHistory.length} 条聊天、${data.testResults.length} 条测评、${data.appointments.length} 条预约、${data.analysisReports.length} 份报告`, total ? '导出成功' : '当前暂无数据，已导出设置项')
   } catch (e) {
-    await error('导出失败', '导出失败')
+    console.error('导出失败:', e)
+    await error('导出过程中出现问题，请重试', '导出失败')
+  } finally {
+    loadingStore.hide()
   }
 }
 
 const importData = async () => {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = '.json'
+  input.accept = '.json,application/json'
   input.onchange = async (e: any) => {
-    const file = e.target.files[0]
+    const file = e.target.files?.[0]
     if (!file) return
+
+    let data: any
     try {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      if (data.chatHistory) {
-        chatMessages.value = data.chatHistory
+      data = JSON.parse(await file.text())
+    } catch {
+      await error('文件不是有效的 JSON 格式', '导入失败')
+      return
+    }
+
+    // 备份文件校验：应用标识 + 聊天记录数组
+    if (data?.app !== 'xinyu-backup' || !Array.isArray(data.chatHistory)) {
+      await error('所选文件不是心愈导出的备份文件', '文件格式错误')
+      return
+    }
+
+    const chatCount = data.chatHistory.filter((m: any) => m?.content && m?.type).length
+    const testCount = Array.isArray(data.testResults) ? data.testResults.length : 0
+    const reportCount = Array.isArray(data.analysisReports) ? data.analysisReports.length : 0
+    const apptCount = Array.isArray(data.appointments) ? data.appointments.length : 0
+
+    const ok = await confirm(
+      `该备份包含：聊天记录 ${chatCount} 条、测评结果 ${testCount} 条（存档参考）、预约 ${apptCount} 条、报告 ${reportCount} 份（存档参考）。\n\n导入将把聊天记录恢复到当前账户（重复导入会产生重复记录），并应用备份中的本地设置。是否继续？`,
+      '确认导入'
+    )
+    if (!ok) return
+
+    const loadingStore = useLoadingStore()
+    loadingStore.show(`正在恢复聊天记录（0/${chatCount}）...`)
+    try {
+      // 恢复聊天记录到服务端（逐条写入，chat_records 仅存 content/type）
+      let done = 0
+      for (const msg of data.chatHistory) {
+        if (msg?.content && msg?.type) {
+          await saveChat({ content: String(msg.content), type: String(msg.type) })
+          done++
+          if (done % 20 === 0) loadingStore.show(`正在恢复聊天记录（${done}/${chatCount}）...`)
+        }
       }
-      await success('数据导入成功', '导入成功')
-    } catch (e) {
-      await error('文件格式错误', '导入失败')
+
+      // 应用备份中的本地设置（自动备份开关、周期等偏好）
+      let applied = 0
+      if (data.localSettings && typeof data.localSettings === 'object') {
+        for (const [k, v] of Object.entries(data.localSettings)) {
+          if (BACKUP_SETTING_KEYS.includes(k)) {
+            localStorage.setItem(k, String(v))
+            applied++
+          }
+        }
+        // 同步设置 store（周期/开关等直接改了 localStorage，需要刷新 Pinia 状态）
+        await settingsStore.refreshFromLocal()
+      }
+
+      // 重新拉取聊天与统计
+      await userStore.getChatHistory()
+      chatMessages.value = userStore.chatHistory.map((msg: any) => ({
+        type: msg.type,
+        content: msg.content
+      }))
+      await userStore.getStats()
+
+      await success(`聊天记录已恢复 ${done} 条${applied ? `，已应用 ${applied} 项本地设置` : ''}`, '导入成功')
+    } catch (err) {
+      console.error('导入失败:', err)
+      await error('导入过程中出现问题，已恢复的部分数据仍保留', '导入失败')
+    } finally {
+      loadingStore.hide()
     }
   }
   input.click()
@@ -2375,10 +2469,14 @@ const scrollToBottom = () => {
 }
 
 .setting-select {
-  padding: 6px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 136px;
+  padding: 6px 32px 6px 12px;
   border-radius: var(--radius-ctl);
   border: 1px solid var(--border-color);
-  background: var(--input-bg);
+  /* 自绘下拉箭头（原生箭头样式不可控且与设计系统不符） */
+  background: var(--input-bg) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a93a6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center;
   color: var(--text-primary);
   font-size: 13px;
   outline: none;
@@ -2386,9 +2484,19 @@ const scrollToBottom = () => {
   transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
 }
 
+.setting-select:hover {
+  border-color: var(--border-strong);
+}
+
 .setting-select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* 下拉展开项：WebView 暗色主题下原生白底白字不可读，强制跟随卡片配色 */
+.setting-select option {
+  background: var(--card-bg);
+  color: var(--text-primary);
 }
 
 .theme-options {

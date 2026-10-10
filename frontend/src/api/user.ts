@@ -82,6 +82,10 @@ export const saveAnalysisReport = (data: { startDate: string; endDate: string; c
   return request.post('/users/analysis-report', data)
 }
 
+export const getAnalysisReports = () => {
+  return request.get('/users/analysis-reports')
+}
+
 // ========== 数据管理 ==========
 export const clearAllData = () => {
   return request.post('/users/clear-all')
