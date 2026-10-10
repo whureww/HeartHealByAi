@@ -62,15 +62,26 @@ const
   // WebView2 Evergreen Runtime 的 EdgeUpdate 客户端 GUID
   WV2_GUID = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
 
-function IsWebView2Installed: Boolean;
+// 单一位置检测：键存在且版本号有效（pv 非 0.0.0.0 占位）才算已安装
+function CheckWebView2(root: Integer; path: String): Boolean;
 var
   pv: String;
 begin
-  Result := False;
-  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\' + WV2_GUID, 'pv', pv) or
-     RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\' + WV2_GUID, 'pv', pv) or
-     RegQueryStringValue(HKEY_CURRENT_USER, 'Software\Microsoft\EdgeUpdate\Clients\' + WV2_GUID, 'pv', pv) then
-    Result := (pv <> '') and (pv <> '0.0.0.0');
+  Result := RegQueryStringValue(root, path + WV2_GUID, 'pv', pv) and
+            (pv <> '') and (pv <> '0.0.0.0');
+end;
+
+function IsWebView2Installed: Boolean;
+begin
+  // 覆盖全部安装位置：64/32 位注册表视图 x 机器级/用户级
+  //（64 位安装模式下 HKLM 即 64 位视图，HKLM32 为 32 位视图；
+  //  WebView2 不在"程序和功能"卸载列表显示条目的系统同样能正确检出）
+  Result :=
+    CheckWebView2(HKEY_LOCAL_MACHINE, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\') or
+    CheckWebView2(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\') or
+    CheckWebView2(HKLM32, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\') or
+    CheckWebView2(HKLM32, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\') or
+    CheckWebView2(HKEY_CURRENT_USER, 'Software\Microsoft\EdgeUpdate\Clients\');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
