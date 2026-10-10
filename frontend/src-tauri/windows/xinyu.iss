@@ -1,12 +1,12 @@
 ; ============================================================
-; 心愈 XinYu 0.1.9 —— Inno Setup 7 安装包脚本
+; 心愈 XinYu 0.2.0 —— Inno Setup 7 安装包脚本
 ; 用户级安装（与原 NSIS currentUser 模式一致）
 ; 打包命令: ISCC.exe D:\AIHeartHealProject\frontend\src-tauri\windows\xinyu.iss
 ; ============================================================
 
 #define MyAppName "心愈"
 #define MyAppNameEn "XinYu"
-#define MyAppVersion "0.1.9"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "XinYu"
 #define MyAppExeName "心愈.exe"
 #define MyAppRoot "D:\AIHeartHealProject\frontend\src-tauri"
@@ -80,13 +80,22 @@ begin
   Result := '';
   if not IsWebView2Installed then
   begin
-    ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');
-    if Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/install /silent /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+    // 检测到缺失：先询问用户，同意才安装；拒绝则中止并给出手动安装指引
+    if MsgBox('检测到系统缺少 WebView2 运行时，心愈的界面渲染依赖此组件。' + #13#10#13#10 +
+              '是否现在为您安装？需要联网下载运行时（通常数十秒完成）。' + #13#10 +
+              '选择「否」将中止安装，您可手动安装后重新运行本程序。',
+              mbConfirmation, MB_YESNO) = IDYES then
     begin
-      if not IsWebView2Installed then
-        Result := 'WebView2 运行时安装未完成（需要联网），请检查网络后重新运行安装程序。';
+      ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');
+      if Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/install /silent /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+      begin
+        if not IsWebView2Installed then
+          Result := 'WebView2 运行时安装未完成（需要联网），请检查网络后重新运行安装程序。';
+      end
+      else
+        Result := 'WebView2 运行时安装器启动失败，请手动访问 https://developer.microsoft.com/microsoft-edge/webview2/ 安装。';
     end
     else
-      Result := 'WebView2 运行时安装器启动失败，请手动访问 https://developer.microsoft.com/microsoft-edge/webview2/ 安装。';
+      Result := '您选择暂不安装 WebView2 运行时，心愈无法启动。请访问 https://developer.microsoft.com/microsoft-edge/webview2/ 手动安装后重新运行本安装程序。';
   end;
 end;
