@@ -1,17 +1,67 @@
 # 心愈（XinYu）前后端接口文档
 
-> **基础地址**：`http://<服务器IP>:3001/api`
-> **认证方式**：请求头 `Authorization: Bearer <token>`（登录/注册接口除外）
-> **请求体格式**：`application/json`
-> **通用成功响应**：
-> ```json
-> { "success": true, "message": "操作成功", "data": {} }
-> ```
-> **通用错误响应**：
-> ```json
-> { "success": false, "message": "错误描述" }
-> ```
->
+## 0. 请求约定（务必先看）
+
+**基础地址（Base URL）**：`http://<服务器IP>:3001/api`
+> 完整 URL = Base URL + 文档中每个接口给出的路径。
+> 例：登录接口路径 `/users/login`，完整 URL 为 `http://<服务器IP>:3001/api/users/login`。
+
+**请求方法**：每个接口标题处明确标注 `GET / POST / PUT / DELETE`。
+
+**请求头（Request Headers）**：
+
+| Header | 值 | 是否必填 |
+|--------|-----|---------|
+| `Content-Type` | `application/json` | 有请求体时必填（POST/PUT） |
+| `Authorization` | `Bearer <token>` | 除登录/注册/验证码外都必填 |
+
+**参数传递位置**：
+
+| 类型 | 位置 | 示例 |
+|------|------|------|
+| 路径参数 | URL 中 `{}` 部分 | `/users/appointments/56/cancel` 中的 `56` |
+| 查询参数 | URL `?` 之后 | `/admin/users?page=1&pageSize=20&keyword=张` |
+| 请求体 | Body（JSON） | 见各接口「请求体」代码块 |
+
+**通用成功响应**：
+```json
+{ "success": true, "message": "操作成功", "data": {} }
+```
+**通用错误响应**（HTTP 状态码非 2xx）：
+```json
+{ "success": false, "message": "错误描述" }
+```
+
+### 三种调用方式示例（以登录接口为例）
+
+**① curl**
+```bash
+curl -X POST "http://<服务器IP>:3001/api/users/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "123456"
+  }'
+```
+
+**② 前端 fetch（需认证的接口）**
+```js
+const res = await fetch("http://<服务器IP>:3001/api/users/me", {
+  method: "GET",
+  headers: {
+    "Authorization": "Bearer " + localStorage.getItem("token")
+  }
+});
+const json = await res.json();
+```
+
+**③ axios（项目实际封装，见 frontend/src/api/request.ts）**
+```js
+import request from '@/api/request'
+// baseURL 已配为 API_BASE，token 拦截器自动携带
+const res = await request.post('/users/login', { email: "test@example.com", password: "123456" })
+```
+
 > **角色 role 取值**：
 >
 > | 值 | 角色 |
