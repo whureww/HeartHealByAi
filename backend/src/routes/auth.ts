@@ -3,6 +3,7 @@ import { pool } from '../db/mysql';
 import { generateToken } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
+import { getActiveRestriction } from '../utils/restrict';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
@@ -119,6 +120,11 @@ router.post('/sms-login', asyncHandler(async (req: Request, res: Response) => {
         role = 1;
         username = `user_${phone.slice(-4)}`;
     } else {
+        // 封禁中的账号禁止通过短信验证码登录（到期自动解除）
+        const restriction = await getActiveRestriction(users[0].id);
+        if (restriction?.type === 'banned') {
+            throw new BusinessError(restriction.message, 403);
+        }
         userId = users[0].id;
         role = users[0].role;
         username = users[0].username;

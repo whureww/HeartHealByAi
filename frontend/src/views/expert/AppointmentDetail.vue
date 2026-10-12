@@ -72,17 +72,33 @@
           <AppIcon name="chat" :size="16" />
           {{ chatTitle }}
         </h3>
-        <div class="connection-status" :class="{ online: isOtherOnline, closed: isChatClosed }">
-          <span v-if="isChatClosed" class="status-dot"></span>
-          <span v-else class="status-dot" :class="{ online: isOtherOnline, offline: !isOtherOnline }"></span>
-          {{ connectionStatusText }}
+        <div class="chat-header-actions">
+          <button
+            v-if="!isChatClosed"
+            class="report-toggle-btn"
+            :class="{ active: reportMode }"
+            @click="toggleReportMode"
+          >
+            <AppIcon name="warning" :size="13" />
+            {{ reportMode ? '退出举报' : '举报' }}
+          </button>
+          <div class="connection-status" :class="{ online: isOtherOnline, closed: isChatClosed }">
+            <span v-if="isChatClosed" class="status-dot"></span>
+            <span v-else class="status-dot" :class="{ online: isOtherOnline, offline: !isOtherOnline }"></span>
+            {{ connectionStatusText }}
+          </div>
         </div>
       </div>
       <div class="chat-messages" ref="chatBox">
         <div
           v-for="msg in messages"
           :key="msg.id"
-          :class="['msg', msg.sender_id === currentUserId ? 'msg-me' : 'msg-other']"
+          :class="[
+            'msg',
+            msg.sender_id === currentUserId ? 'msg-me' : 'msg-other',
+            { 'msg-selectable': reportMode && canReportMsg(msg), 'msg-selected': selectedIds.includes(msg.id) }
+          ]"
+          @click="reportMode && canReportMsg(msg) && toggleMsgSelect(msg)"
         >
           <img
             v-if="avatarFor(msg.sender_id)"
@@ -103,21 +119,60 @@
           暂无消息，开始聊天吧
         </div>
       </div>
+      <!-- 举报选择模式：底部操作条 -->
+      <div v-if="reportMode" class="report-bar">
+        <span class="report-hint">点击对方的消息进行勾选（已选 {{ selectedIds.length }} 条）</span>
+        <div class="report-actions">
+          <button class="report-cancel" @click="toggleReportMode">取消</button>
+          <button class="report-submit" :disabled="selectedIds.length === 0" @click="showReportPanel = true">
+            提交举报
+          </button>
+        </div>
+      </div>
+      <!-- 举报信息填写面板 -->
+      <div v-if="showReportPanel" class="report-panel">
+        <div class="report-panel-title">举报对方的消息（{{ selectedIds.length }} 条）</div>
+        <div class="report-reasons">
+          <label v-for="r in REPORT_REASONS" :key="r" class="report-reason">
+            <input type="radio" :value="r" v-model="reportReason" name="report-reason" />
+            <span>{{ r }}</span>
+          </label>
+        </div>
+        <textarea
+          v-model="reportDetail"
+          class="report-detail"
+          rows="2"
+          maxlength="500"
+          placeholder="补充说明（选填，可描述具体情况）"
+        ></textarea>
+        <div class="report-panel-actions">
+          <button class="report-cancel" @click="closeReportPanel">返回</button>
+          <button class="report-submit" :disabled="reportSubmitting" @click="submitReport">
+            {{ reportSubmitting ? '提交中...' : '确认提交' }}
+          </button>
+        </div>
+      </div>
       <!-- 已完成或已取消：显示禁止输入提示 -->
       <div v-if="isChatClosed" class="chat-closed-tip">
         <AppIcon name="lock" :size="14" />
         <span>本次咨询已结束，无法继续发送消息</span>
       </div>
-      <!-- 发送前预检命中提示（不阻塞输入，修改后可重发） -->
+      <!-- 被禁言：禁止输入提示（管理员处置实时生效） -->
+      <div v-else-if="mutedInfo" class="chat-closed-tip muted-tip">
+        <AppIcon name="warning" :size="14" />
+        <span>{{ mutedInfo }}</span>
+      </div>
+      <!-- 发送前预检命中提示：仅提示，不阻塞输入，修改后可直接重发 -->
       <div v-if="precheckWarning" class="precheck-warning">
         <AppIcon name="warning" :size="14" />
         <span>{{ precheckWarning }}</span>
       </div>
-      <!-- 正常聊天输入 -->
-      <div v-else-if="!isChatClosed" class="chat-input">
+      <!-- 正常聊天输入（预检命中时输入框保留，便于直接修改重发） -->
+      <div v-if="!isChatClosed && !mutedInfo" class="chat-input">
         <input
           v-model="newMessage"
           @keyup.enter="sendMessage"
+          @input="precheckWarning = ''"
           placeholder="输入消息..."
           :disabled="!isSelfConnected"
         />
@@ -202,6 +257,7 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getAppointmentDetail, updateAppointmentStatus, getChatMessages } from '@/api/expert'
 import { precheckContent } from '@/api/moderation'
+import { submitChatReport } from '@/api/user'
 import { showToast } from '@/utils/notify'
 import { bindChatNotification, notifyIfBackground } from '@/utils/taskbar'
 import { handleSessionExpired } from '@/api/request'
@@ -243,6 +299,52 @@ const testResults = ref<any[]>([])
 const messages = ref<any[]>([])
 const newMessage = ref('')
 const precheckWarning = ref('')
+
+// ===== 聊天举报：选中对方消息 → 填写理由 → 提交管理员处置 =====
+const REPORT_REASONS = ['辱骂攻击', '骚扰', '广告推销', '色情低俗', '其他违规']
+const reportMode = ref(false)
+const selectedIds = ref<number[]>([])
+const showReportPanel = ref(false)
+const reportReason = ref(REPORT_REASONS[0])
+const reportDetail = ref('')
+const reportSubmitting = ref(false)
+
+// 管理员禁言（实时生效）：非空时输入区整体替换为禁言提示
+const mutedInfo = ref('')
+
+const canReportMsg = (msg: any) => msg.sender_id !== currentUserId.value
+const toggleMsgSelect = (msg: any) => {
+  const idx = selectedIds.value.indexOf(msg.id)
+  if (idx >= 0) selectedIds.value.splice(idx, 1)
+  else selectedIds.value.push(msg.id)
+}
+function toggleReportMode() {
+  reportMode.value = !reportMode.value
+  selectedIds.value = []
+  showReportPanel.value = false
+}
+function closeReportPanel() {
+  showReportPanel.value = false
+}
+async function submitReport() {
+  if (selectedIds.value.length === 0 || reportSubmitting.value) return
+  reportSubmitting.value = true
+  try {
+    await submitChatReport({
+      appointment_id: appointmentId,
+      message_ids: selectedIds.value,
+      reason: reportReason.value,
+      detail: reportDetail.value
+    })
+    success('举报已提交，管理员会尽快核实处理')
+    toggleReportMode()
+    reportDetail.value = ''
+  } catch (e: any) {
+    error(e?.response?.data?.message || '举报提交失败，请稍后重试')
+  } finally {
+    reportSubmitting.value = false
+  }
+}
 const chatBox = ref<HTMLElement | null>(null)
 const socket = shallowRef<Socket | null>(null)
 const isSelfConnected = ref(false)
@@ -535,6 +637,18 @@ const setupSocketListeners = (sock: Socket) => {
     }
   })
 
+  // 管理员处置实时生效：禁言期间无法发言；封禁由服务端直接断开连接（走重连/登录拦截）
+  sock.on('account-restricted', (data: { type?: string; message?: string }) => {
+    if (data?.type === 'muted') {
+      mutedInfo.value = data.message || '您的账号已被管理员禁言，期间无法发送消息'
+    }
+    showToast('账号受限', data?.message || '您的账号已被管理员限制', false)
+  })
+  sock.on('restriction-lifted', (data: { message?: string }) => {
+    mutedInfo.value = ''
+    showToast('限制解除', data?.message || '您的账号限制已解除', true)
+  })
+
   sock.on('error', (err: any) => {
     console.error('Socket 错误:', err)
   })
@@ -542,6 +656,7 @@ const setupSocketListeners = (sock: Socket) => {
 
 const sendMessage = async () => {
   if (isChatClosed.value) return
+  if (mutedInfo.value) return // 禁言期间拦截（输入区已隐藏，此处兜底回车发送）
 
   const content = newMessage.value.trim()
   if (!content) return
@@ -1280,6 +1395,159 @@ watch(() => appointment.value, (newVal) => {
   background: color-mix(in srgb, var(--danger) 8%, transparent);
   color: var(--danger);
   font-size: 12.5px;
+}
+
+/* ===== 聊天举报 ===== */
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.report-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.report-toggle-btn:hover,
+.report-toggle-btn.active {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.msg.msg-selectable {
+  cursor: pointer;
+}
+
+.msg.msg-selectable .msg-bubble {
+  transition: box-shadow 0.15s, outline-color 0.15s;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+}
+
+.msg.msg-selectable:hover .msg-bubble {
+  outline-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.msg.msg-selected .msg-bubble {
+  outline: 2px solid var(--danger);
+}
+
+.msg.msg-selected::after {
+  content: '已选';
+  font-size: 11px;
+  color: #fff;
+  background: var(--danger);
+  border-radius: 4px;
+  padding: 1px 6px;
+  align-self: center;
+  margin: 0 4px;
+}
+
+.report-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 22px 10px;
+  padding: 9px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--radius-ctl);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+
+.report-hint {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.report-actions,
+.report-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.report-cancel,
+.report-submit {
+  padding: 6px 16px;
+  border-radius: var(--radius-ctl);
+  font-size: 12.5px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.report-submit {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.report-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.report-panel {
+  margin: 0 22px 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.report-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.report-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.report-reason {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.report-detail {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+  resize: none;
+}
+
+.muted-tip {
+  border-color: color-mix(in srgb, var(--warning, #e6a23c) 45%, transparent);
+  background: color-mix(in srgb, var(--warning, #e6a23c) 10%, transparent);
+  color: var(--warning, #e6a23c);
 }
 
 .chat-input input {

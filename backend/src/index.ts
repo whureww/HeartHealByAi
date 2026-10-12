@@ -15,6 +15,7 @@ import { isAppointmentParticipant } from './utils/guards';
 import { checkMessageContentAI, loadSensitiveWords, ModerationContextItem } from './utils/moderation';
 import aiRouter from './routes/ai';
 import moderationRouter from './routes/moderation';
+import { registerRestrictBroadcaster, getActiveRestriction, Restriction } from './utils/restrict';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth';
 
@@ -260,6 +261,13 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            // 账号限制检查：禁言/封禁期间禁止发言（管理员处置实时生效）
+            const restriction = await getActiveRestriction(senderId);
+            if (restriction) {
+                socket.emit('account-restricted', restriction);
+                return;
+            }
+
             // 内容审核：词库秒拦 + AI 复核隐晦变体（结合上下文），违规内容不入库不广播
             const chatContext = await recentChatContext(Number(data.appointmentId), senderId);
             const moderation = await checkMessageContentAI(data.content, chatContext);
@@ -349,4 +357,24 @@ httpServer.listen(PORT, () => {
     console.log(`✅ Socket.IO 已启用`);
     // 启动时加载敏感词库（表为空自动播种默认词库；admin 增删后实时重载）
     loadSensitiveWords();
+});
+
+// 注册管理端处置的实时广播器：封禁/禁言即时通知目标用户，封禁同时强制断开其全部连接
+registerRestrictBroadcaster({
+    notify: (userId, payload: Restriction) => {
+        getUserSocket(userId)?.emit('account-restricted', payload);
+    },
+    notifyLifted: (userId) => {
+        getUserSocket(userId)?.emit('restriction-lifted', { message: '您的账号限制已解除，恢复正常使用' });
+    },
+    disconnect: (userId) => {
+        const socketSet = userSockets.get(userId);
+        if (socketSet) {
+            for (const socketId of socketSet) {
+                io.sockets.sockets.get(socketId)?.disconnect(true);
+            }
+            userSockets.delete(userId);
+            broadcastUserStatus(userId, false);
+        }
+    }
 });

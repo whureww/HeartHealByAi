@@ -5,6 +5,14 @@ export const login = (data: { email: string; password: string }) => {
   return request.post('/users/login', data)
 }
 
+// ========== 聊天举报 ==========
+export const submitChatReport = (data: {
+  appointment_id: number
+  message_ids: number[]
+  reason: string
+  detail?: string
+}) => request.post('/users/reports', data)
+
 export const register = (data: { username: string; email: string; password: string; code: string }) => {
   return request.post('/users/register', data)
 }

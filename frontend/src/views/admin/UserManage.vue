@@ -32,6 +32,7 @@
             <th>邮箱</th>
             <th>手机号</th>
             <th>当前角色</th>
+            <th>账号状态</th>
             <th>注册时间</th>
             <th>角色调整</th>
             <th>操作</th>
@@ -53,6 +54,12 @@
                 {{ roleText(user.role) }}
               </span>
             </td>
+            <td>
+              <span v-if="activeRestriction(user)" class="restrict-tag">
+                {{ activeRestriction(user) }}
+              </span>
+              <span v-else class="restrict-tag normal">正常</span>
+            </td>
             <td class="date-cell">{{ formatDate(user.created_at) }}</td>
             <td>
               <select
@@ -67,6 +74,14 @@
             </td>
             <td>
               <button
+                v-if="activeRestriction(user)"
+                class="btn-lift"
+                title="解除禁言/封禁"
+                @click="liftRestriction(user)"
+              >
+                <AppIcon name="check" :size="14" />
+              </button>
+              <button
                 class="btn-del"
                 :disabled="user.id === userStore.userInfo?.id"
                 :title="user.id === userStore.userInfo?.id ? '不能删除当前登录账号' : '删除该用户'"
@@ -77,7 +92,7 @@
             </td>
           </tr>
           <tr v-if="users.length === 0">
-            <td colspan="8" class="empty-cell">
+            <td colspan="9" class="empty-cell">
               <AppIcon name="list" :size="28" />
               <p>暂无用户数据</p>
             </td>
@@ -155,7 +170,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import request from '@/api/request'
-import { createUser, deleteUser } from '@/api/admin'
+import { createUser, deleteUser, unrestrictUser } from '@/api/admin'
 import { success, error, confirm } from '@/utils/dialog'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
@@ -221,6 +236,27 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.v
 const roleText = (role: number) => {
   const map: Record<number, string> = { 1: '普通用户', 2: '专家', 3: '管理员' }
   return map[role] || '未知'
+}
+
+// 账号限制状态展示（含到期自动解除判断）
+const activeRestriction = (user: any) => {
+  const status = Number(user.status || 0)
+  if (status !== 1 && status !== 2) return ''
+  if (user.restricted_until && new Date(user.restricted_until).getTime() <= Date.now()) return ''
+  return status === 2 ? '已封禁' : '禁言中'
+}
+
+const liftRestriction = async (user: any) => {
+  const ok = await confirm(`确定解除「${user.username}」的禁言/封禁限制吗？`, '解除限制')
+  if (!ok) return
+  try {
+    await unrestrictUser(user.id)
+    user.status = 0
+    user.restricted_until = null
+    success('已解除该账号的限制')
+  } catch (e: any) {
+    await error(e?.response?.data?.message || '解除失败，请稍后重试')
+  }
 }
 
 const formatDate = (date: string) => {
@@ -301,6 +337,36 @@ onMounted(loadUsers)
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s var(--ease-out);
+}
+
+/* 账号限制状态标签与解除按钮 */
+.restrict-tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.restrict-tag.normal {
+  background: color-mix(in srgb, #52c41a 12%, transparent);
+  color: #52c41a;
+}
+
+.btn-lift {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  background: transparent;
+  border-radius: var(--radius-ctl);
+  color: var(--accent);
+  cursor: pointer;
+  margin-right: 6px;
 }
 
 .btn-del:hover:not(:disabled) {
