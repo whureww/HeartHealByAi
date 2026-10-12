@@ -679,14 +679,21 @@ fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
 
 /// 下载新版本安装包到临时目录（流式，向前端广播进度事件 update-progress），
 /// 返回本地文件路径。可被 cancel_download 命令随时中断。
+/// 阻塞工作跑在 blocking 线程池：同步命令会占死主线程，导致 cancel_download
+/// 排队到下载结束才执行——表现为「点取消卡一下但继续下载、完成后直接可安装」。
 #[tauri::command]
-fn download_update(app: tauri::AppHandle, download_url: String) -> Result<String, String> {
+async fn download_update(app: tauri::AppHandle, download_url: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || download_update_blocking(app, download_url))
+        .await
+        .map_err(|e| format!("下载任务异常: {e}"))?
+}
+
+fn download_update_blocking(app: tauri::AppHandle, download_url: String) -> Result<String, String> {
     if !download_url.ends_with(SETUP_SUFFIX) {
         return Err("下载地址异常，已阻止".into());
     }
 
-    // 取消标志：cancel_download 置位后，读循环检测到即中断
-    CANCEL_FLAG.store(true, Ordering::SeqCst); // 先清掉上次残留
+    // 清掉上次残留的取消标志（取消路径自身也会复位，这里兜底）
     CANCEL_FLAG.store(false, Ordering::SeqCst);
 
     let resp = reqwest::blocking::Client::builder()
