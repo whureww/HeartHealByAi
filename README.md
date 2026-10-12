@@ -2,6 +2,8 @@
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-blue) ![Desktop](https://img.shields.io/badge/desktop-Tauri%202-orange) ![Frontend](https://img.shields.io/badge/frontend-Vue%203-brightgreen) ![Backend](https://img.shields.io/badge/backend-Node.js%20%2B%20Express-green) ![DB](https://img.shields.io/badge/database-MySQL%208%20%2B%20Redis-red)
 
+
+
 一个桌面端心理健康服务平台：AI 心理咨询（流式对话）、心理测评（量表作答 → 自动计分 → 分级报告）、周期性 AI 分析报告、专家预约与实时私聊。
 
 定位是把「AI 陪伴 → 测评 → 报告 → 真人专家」做成一条连续的心理关怀闭环，而非孤立的聊天机器人或量表工具。

@@ -649,7 +649,7 @@ fn tray_popup_open_chat(app: tauri::AppHandle) {
 const GITEE_RELEASES_LATEST: &str =
     "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/latest";
 const GITHUB_RELEASES_LATEST: &str =
-    "https://api.github.com/repos/whureww/HeartHealByAi/releases/latest";
+    "https://api.github.com/repos/yxpil/aisprithill/releases/latest";
 const SETUP_SUFFIX: &str = "_x64-setup.exe";
 
 /// 语义化版本比较：返回 Some(true) 表示 remote 更新，None 表示解析失败
