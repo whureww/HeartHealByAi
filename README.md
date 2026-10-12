@@ -2,7 +2,7 @@
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-blue) ![Desktop](https://img.shields.io/badge/desktop-Tauri%202-orange) ![Frontend](https://img.shields.io/badge/frontend-Vue%203-brightgreen) ![Backend](https://img.shields.io/badge/backend-Node.js%20%2B%20Express-green) ![DB](https://img.shields.io/badge/database-MySQL%208%20%2B%20Redis-red)
 
-![GitHub Card](https://alittlecatgirlpanel.yxp.hk/card?repo=yxpil%2FBrainTentacle)
+![GitHub Card](https://alittlecatgirlpanel.yxp.hk/card?repo=yxpil%2Faisprithill)
 
 一个桌面端心理健康服务平台：AI 心理咨询（流式对话）、心理测评（量表作答 → 自动计分 → 分级报告）、周期性 AI 分析报告、专家预约与实时私聊。
 
