@@ -406,8 +406,8 @@ fn clear_taskbar_preview(window: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-// ===== 托盘 QQ 化：未读角标 + 整图标频闪 + 动态 tooltip + 悬浮消息卡片 =====
-// 后台收到消息时托盘图标叠加红色数字角标，并与「全透明帧」交替（QQ 式整体
+// ===== 托盘 QQ 化：未读角标 + 整图标消失/重现频闪 + 动态 tooltip + 悬浮消息卡片 =====
+// 后台收到消息时托盘图标叠加红色数字角标，并与「图标整体从托盘移除」交替（QQ 式
 // 消失/重现闪烁，而非明暗变化）；鼠标悬浮托盘图标弹出消息卡片小窗，点击直达聊天。
 
 const TRAY_ID: &str = "xinyu-tray";
@@ -432,12 +432,12 @@ static POPUP_HOVER: AtomicBool = AtomicBool::new(false);
 /// 卡片隐藏任务代际：每次重新触发隐藏时递增，旧任务发现代际不符自行作废
 static POPUP_HIDE_GEN: AtomicUsize = AtomicUsize::new(0);
 
-/// 内置托盘图标资源：cache[0..7]=badge_1..8，cache[8]=badge_9p，cache[9]=全透明帧（频闪「灭」帧）
-fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 10] {
-    static CACHE: std::sync::OnceLock<[Option<tauri::image::Image<'static>>; 10]> =
+/// 内置托盘图标资源：cache[0..7]=badge_1..8，cache[8]=badge_9p
+fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 9] {
+    static CACHE: std::sync::OnceLock<[Option<tauri::image::Image<'static>>; 9]> =
         std::sync::OnceLock::new();
     CACHE.get_or_init(|| {
-        const ENTRIES: [(&[u8], usize); 10] = [
+        const ENTRIES: [(&[u8], usize); 9] = [
             (include_bytes!("../icons/tray/badge_1.png"), 0),
             (include_bytes!("../icons/tray/badge_2.png"), 1),
             (include_bytes!("../icons/tray/badge_3.png"), 2),
@@ -447,9 +447,8 @@ fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 10] {
             (include_bytes!("../icons/tray/badge_7.png"), 6),
             (include_bytes!("../icons/tray/badge_8.png"), 7),
             (include_bytes!("../icons/tray/badge_9p.png"), 8),
-            (include_bytes!("../icons/tray/blank.png"), 9),
         ];
-        let mut arr: [Option<tauri::image::Image<'static>>; 10] = std::array::from_fn(|_| None);
+        let mut arr: [Option<tauri::image::Image<'static>>; 9] = std::array::from_fn(|_| None);
         for (bytes, slot) in ENTRIES {
             arr[slot] = tauri::image::Image::from_bytes(bytes).ok();
         }
@@ -462,37 +461,35 @@ fn badge_image(n: usize) -> Option<tauri::image::Image<'static>> {
     tray_icon_cache()[idx].clone()
 }
 
-/// 频闪「灭」帧：全透明图标（托盘图标短暂消失，QQ 式消失/重现闪烁）
-fn blank_image() -> Option<tauri::image::Image<'static>> {
-    tray_icon_cache()[9].clone()
-}
-
-/// 频闪线程：未读时 600ms 交替「角标帧 ↔ 全透明帧」（QQ 式整体消失/重现），
+/// 频闪线程：未读时 600ms 交替「隐藏托盘图标 ↔ 显示角标帧」（QQ 式整体消失/重现）。
+/// 不能用全透明图标当「灭」帧：Windows 托盘会把全透明图标渲染成黑色色块；
+/// 只有把图标整个从托盘移除（set_visible(false)）才是真正的消失效果。
 /// 停止后恢复常态图标（仅恢复一次）
 fn spawn_tray_flasher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        let mut blank_shown = false;
+        let mut hidden = false;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(600));
             let Some(tray) = app.tray_by_id(TRAY_ID) else { continue };
             if !TRAY_FLASH.load(Ordering::SeqCst) {
-                if blank_shown {
-                    blank_shown = false;
+                if hidden {
+                    hidden = false;
+                    let _ = tray.set_visible(true);
                     if let Some(icon) = app.default_window_icon().cloned() {
                         let _ = tray.set_icon(Some(icon));
                     }
                 }
                 continue;
             }
-            let next = if blank_shown {
-                badge_image(TRAY_BADGE.load(Ordering::SeqCst))
+            if hidden {
+                let _ = tray.set_visible(true);
+                if let Some(img) = badge_image(TRAY_BADGE.load(Ordering::SeqCst)) {
+                    let _ = tray.set_icon(Some(img));
+                }
             } else {
-                blank_image()
-            };
-            if let Some(img) = next {
-                let _ = tray.set_icon(Some(img));
+                let _ = tray.set_visible(false);
             }
-            blank_shown = !blank_shown;
+            hidden = !hidden;
         }
     });
 }
@@ -554,6 +551,7 @@ fn clear_tray_unread(app: tauri::AppHandle) {
         let _ = popup.hide();
     }
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_visible(true); // 频闪可能正处于「消失」半周期，强制恢复显示
         let _ = tray.set_tooltip(Some(TRAY_TOOLTIP_DEFAULT));
         if let Some(icon) = app.default_window_icon().cloned() {
             let _ = tray.set_icon(Some(icon));
@@ -990,7 +988,7 @@ fn main() {
         .setup(|app| {
             // 托盘悬浮消息卡片窗口（QQ 式）：无边框透明置顶小窗，默认隐藏、
             // 不进任务栏、不可聚焦（不抢主窗口焦点），仅在有未读时随托盘悬浮弹出
-            let _ = tauri::WebviewWindowBuilder::new(
+            let popup_window = tauri::WebviewWindowBuilder::new(
                 app,
                 "tray-popup",
                 tauri::WebviewUrl::App("/tray-popup".into()),
@@ -1006,6 +1004,30 @@ fn main() {
             .resizable(false)
             .inner_size(340.0, 156.0)
             .build();
+
+            // 去掉 Windows 11 给窗口加的圆角与非客户区边框光晕（透明窗口上
+            // 会呈现为一圈半透明毛玻璃描边，用户反馈碍眼）；仅卡片本体自绘圆角
+            if let Ok(popup) = popup_window {
+                if let Ok(hwnd) = popup.hwnd() {
+                    let hwnd = hwnd.0 as isize;
+                    unsafe {
+                        let ncrp: i32 = 2; // DWMNCRP_DISABLED：禁用非客户区边框渲染
+                        windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute(
+                            hwnd,
+                            2, // DWMWA_NCRENDERING_POLICY
+                            &ncrp as *const i32 as *const core::ffi::c_void,
+                            4,
+                        );
+                        let pref: i32 = 1; // DWMWCP_DONOTROUND：禁用系统圆角
+                        windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute(
+                            hwnd,
+                            33, // DWMWA_WINDOW_CORNER_PREFERENCE
+                            &pref as *const i32 as *const core::ffi::c_void,
+                            4,
+                        );
+                    }
+                }
+            }
 
             // 系统托盘：左键单击唤起窗口，菜单提供“显示心愈 / 退出心愈”
             let show = MenuItem::with_id(app, "show", "显示心愈", true, None::<&str>)?;
