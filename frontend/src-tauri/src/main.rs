@@ -565,7 +565,7 @@ fn show_tray_popup(app: &tauri::AppHandle, rect: &tauri::Rect) {
     let scale = popup.scale_factor().unwrap_or(1.0);
     let pos: tauri::PhysicalPosition<f64> = rect.position.to_physical(scale);
     let icon_size: tauri::PhysicalSize<f64> = rect.size.to_physical(scale);
-    let wsize = popup.outer_size().unwrap_or(tauri::PhysicalSize::new(340, 156));
+    let wsize = popup.outer_size().unwrap_or(tauri::PhysicalSize::new(360, 172));
     let mut x = pos.x as i32 + icon_size.width as i32 / 2 - wsize.width as i32 / 2;
     let mut y = pos.y as i32 - wsize.height as i32 - 8;
     if y < 0 {
@@ -1002,11 +1002,12 @@ fn main() {
             .skip_taskbar(true)
             .focusable(false)
             .resizable(false)
-            .inner_size(340.0, 156.0)
+            .inner_size(360.0, 172.0)
             .build();
 
-            // 去掉 Windows 11 给窗口加的圆角与非客户区边框光晕（透明窗口上
-            // 会呈现为一圈半透明毛玻璃描边，用户反馈碍眼）；仅卡片本体自绘圆角
+            // 去掉 Windows 11 给窗口加的圆角、非客户区边框光晕与 1px 系统边框
+            // （透明窗口上会呈现为一圈半透明毛玻璃描边/淡边，用户反馈碍眼）；
+            // 仅保留卡片本体自绘的圆角与阴影
             if let Ok(popup) = popup_window {
                 if let Ok(hwnd) = popup.hwnd() {
                     let hwnd = hwnd.0 as isize;
@@ -1023,6 +1024,14 @@ fn main() {
                             hwnd,
                             33, // DWMWA_WINDOW_CORNER_PREFERENCE
                             &pref as *const i32 as *const core::ffi::c_void,
+                            4,
+                        );
+                        // DWMWA_COLOR_NONE(0xFFFFFFFE)：彻底移除 DWM 窗口边框描线
+                        let border: i32 = -2;
+                        windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute(
+                            hwnd,
+                            34, // DWMWA_BORDER_COLOR
+                            &border as *const i32 as *const core::ffi::c_void,
                             4,
                         );
                     }
