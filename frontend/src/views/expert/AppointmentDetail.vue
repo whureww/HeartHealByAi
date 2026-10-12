@@ -108,8 +108,13 @@
         <AppIcon name="lock" :size="14" />
         <span>本次咨询已结束，无法继续发送消息</span>
       </div>
+      <!-- 发送前预检命中提示（不阻塞输入，修改后可重发） -->
+      <div v-if="precheckWarning" class="precheck-warning">
+        <AppIcon name="warning" :size="14" />
+        <span>{{ precheckWarning }}</span>
+      </div>
       <!-- 正常聊天输入 -->
-      <div v-else class="chat-input">
+      <div v-else-if="!isChatClosed" class="chat-input">
         <input
           v-model="newMessage"
           @keyup.enter="sendMessage"
@@ -196,10 +201,11 @@ import { ref, onMounted, onUnmounted, nextTick, computed, watch, shallowRef } fr
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getAppointmentDetail, updateAppointmentStatus, getChatMessages } from '@/api/expert'
+import { precheckContent } from '@/api/moderation'
+import { showToast } from '@/utils/notify'
+import { flashForMessage, bindChatNotification } from '@/utils/taskbar'
 import { handleSessionExpired } from '@/api/request'
 import { success, error, alert as dialogAlert } from '@/utils/dialog'
-import { showToast } from '@/utils/notify'
-import { flashForMessage } from '@/utils/taskbar'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
 
@@ -236,6 +242,7 @@ const appointment = ref<any>({})
 const testResults = ref<any[]>([])
 const messages = ref<any[]>([])
 const newMessage = ref('')
+const precheckWarning = ref('')
 const chatBox = ref<HTMLElement | null>(null)
 const socket = shallowRef<Socket | null>(null)
 const isSelfConnected = ref(false)
@@ -480,6 +487,9 @@ const initSocket = () => {
 }
 
 const setupSocketListeners = (sock: Socket) => {
+  // 后台私聊消息提醒（幂等绑定；窗口在前台时由页面内 new-message 处理，不重复打扰）
+  bindChatNotification(sock)
+
   sock.on('disconnect', () => {
     isSelfConnected.value = false
     isOtherOnline.value = false
@@ -542,6 +552,18 @@ const sendMessage = async () => {
   if (!socket.value || !isSelfConnected.value) {
     showToast('发送失败', '网络连接已断开，请稍后重试', false)
     return
+  }
+
+  // 发送前预检：词库命中即时标红提示，不发出（完整审核仍在服务端强制执行）
+  precheckWarning.value = ''
+  try {
+    const res = await precheckContent(content) as any
+    if (res?.data && res.data.ok === false) {
+      precheckWarning.value = `消息包含违禁内容（${res.data.hit || '敏感词'}），请修改后重新发送`
+      return
+    }
+  } catch {
+    // 预检接口异常不阻塞发送，服务端审核兜底
   }
 
   socket.value.emit('send-message', {
@@ -1247,6 +1269,19 @@ watch(() => appointment.value, (newVal) => {
   gap: 10px;
   padding: 14px 22px;
   border-top: 1px solid var(--border-color);
+}
+
+.precheck-warning {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 22px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: var(--radius-ctl);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: 12.5px;
 }
 
 .chat-input input {

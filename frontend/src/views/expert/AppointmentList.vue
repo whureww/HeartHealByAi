@@ -112,6 +112,7 @@ import { SOCKET_URL, getAuthToken } from '@/config'
 import { getExpertAppointments, updateAppointmentStatus } from '@/api/expert'
 import { success, error, confirm } from '@/utils/dialog'
 import { showToast } from '@/utils/notify'
+import { bindChatNotification } from '@/utils/taskbar'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
 
@@ -223,6 +224,9 @@ const initSocket = () => {
 }
 
 const setupListeners = (sock: Socket) => {
+  // 后台私聊消息提醒（系统通知 + 任务栏频闪），幂等绑定
+  bindChatNotification(sock)
+
   sock.on('appointment-updated', (data: {
     appointmentId: number
     status: string

@@ -140,6 +140,17 @@ CREATE TABLE IF NOT EXISTS user_oauth (
     UNIQUE KEY uk_oauth (provider, openid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ========== 聊天审核敏感词表 ==========
+-- 服务启动时加载进内存；表为空时自动播种内置默认词库；管理员后台增删实时生效
+CREATE TABLE IF NOT EXISTS sensitive_words (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    word VARCHAR(64) NOT NULL,
+    category VARCHAR(20) NOT NULL DEFAULT '其他' COMMENT '侮辱/色情/违禁/自伤/缩写/其他',
+    is_short TINYINT NOT NULL DEFAULT 0 COMMENT '1=短词（独立词边界匹配）0=主词（包含匹配）',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_sensitive_word (word)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ============================================================
 -- 示例数据
 -- ============================================================

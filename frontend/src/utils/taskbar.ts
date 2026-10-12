@@ -49,3 +49,36 @@ export function initTaskbarNotifier() {
     })
     .catch((e) => console.error('注册焦点监听失败:', e))
 }
+
+/**
+ * 后台消息提醒：仅在窗口不在前台（最小化/隐藏/失焦）时触发——
+ * 系统通知（Windows 通知中心，隐藏到托盘也可见）+ 任务栏频闪 + 标题预览。
+ * 窗口在前台时不打扰（聊天页内的来信提示由页面自身处理）。
+ */
+export async function notifyIfBackground(sender: string, content: string) {
+  if (!isTauri()) return
+  try {
+    const win = getCurrentWindow()
+    const [focused, visible] = await Promise.all([win.isFocused(), win.isVisible()])
+    if (focused && visible) return
+
+    const { showToast } = await import('./notify')
+    showToast(`${sender} 发来新消息`, String(content || '').slice(0, 80), true)
+    await flashForMessage(sender, content)
+  } catch (e) {
+    console.error('后台消息提醒失败:', e)
+  }
+}
+
+/**
+ * 全局绑定聊天通知事件（幂等：同一 socket 实例只绑一次）。
+ * 挂在全局 socket 上，无论用户当前在哪个页面，后台收到私聊消息都能提醒。
+ */
+export function bindChatNotification(sock: { on: (event: string, cb: (data: any) => void) => unknown }) {
+  const s = sock as any
+  if (s.__chatNotifyBound__) return
+  s.__chatNotifyBound__ = true
+  s.on('chat-notification', (data: { senderName?: string; content?: string }) => {
+    void notifyIfBackground(String(data?.senderName || '新消息'), String(data?.content || ''))
+  })
+}

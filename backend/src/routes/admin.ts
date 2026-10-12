@@ -4,20 +4,21 @@ import { pool } from '../db/mysql';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
+import { invalidateWords } from '../utils/moderation';
 
 const router = Router();
 
-//  м        Ƿ  ǹ   Ա
+// 校验是否是管理员
 const requireAdmin = asyncHandler(async (req: Request, res: Response, next: any) => {
     if (req.user!.role !== 3) {
-        throw new BusinessError('  Ȩ    ', 403);
+        throw new BusinessError('仅管理员可执行此操作', 403);
     }
     next();
 });
 
-// ==========  û      ==========
+// ========== 用户管理 ==========
 
-// routes/admin.ts -   ȡ û  б 
+// routes/admin.ts - 获取用户列表
 router.get('/users', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = parseInt(req.query.pageSize as string) || 20;
@@ -32,12 +33,12 @@ router.get('/users', authenticate, requireAdmin, asyncHandler(async (req: Reques
         params = [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`];
     }
 
-    //   ѯ     - ʹ   query        execute       Bun + mysql2        ⣩
+    // 计数查询 - 使用 query 而非 execute（规避 Bun + mysql2 的兼容问题）
     const countSql = `SELECT COUNT(*) as total FROM users${whereClause}`;
     const [countRows] = await pool.query(countSql, params);
     const total = (countRows as any[])[0].total;
 
-    //   ѯ б  - LIMIT    OFFSET תΪ    
+    // 查询列表 - LIMIT 与 OFFSET 转换为数字传入
     const sql = `SELECT id, username, email, phone, role, avatar, created_at FROM users${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
     const queryParams = [...params, Number(pageSize), Number(offset)];
     
@@ -55,18 +56,18 @@ router.get('/users', authenticate, requireAdmin, asyncHandler(async (req: Reques
 }));
 
 
-//  ޸  û   ɫ
+// 修改用户角色
 router.put('/users/:id/role', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const userId = parseInt(req.params.id);
     const { role } = req.body;
 
     if (![1, 2, 3].includes(role)) {
-        throw new BusinessError('  Ч Ľ ɫ', 400);
+        throw new BusinessError('无效的角色', 400);
     }
 
     await pool.execute('UPDATE users SET role = ? WHERE id = ?', [role, userId]);
 
-    res.json({ success: true, message: '  ɫ ޸ĳɹ ' });
+    res.json({ success: true, message: '角色修改成功' });
 }));
 // admin.ts - 修复后的 stats 路由
 router.get('/stats', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
@@ -105,9 +106,9 @@ router.get('/stats', authenticate, requireAdmin, asyncHandler(async (req: Reques
 }));
 
 
-// ==========  ʾ      ==========
+// ========== 问卷管理 ==========
 
-//   ȡ ʾ  б       δ  ˵ģ 
+// 获取问卷列表（status 未传时返回全部）
 router.get('/tests', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const status = req.query.status as string;
     
@@ -125,7 +126,7 @@ router.get('/tests', authenticate, requireAdmin, asyncHandler(async (req: Reques
     res.json({ success: true, data: rows });
 }));
 
-//      ʾ 
+// 新建问卷
 router.post('/tests', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const {
         code, name, description, category,
@@ -133,17 +134,17 @@ router.post('/tests', authenticate, requireAdmin, asyncHandler(async (req: Reque
         scoring_method, result_levels, questions
     } = req.body;
 
-    //      ʾ 
+    // 创建问卷
     const [testResult] = await pool.execute(
-        `INSERT INTO psychological_tests 
+        `INSERT INTO psychological_tests
          (code, name, description, category, total_questions, estimated_minutes, scoring_method, result_levels, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,  // Ĭ  ״̬Ϊ0      ˣ 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,  // 默认状态为0（未上架）
         [code, name, description, category, total_questions, estimated_minutes, scoring_method, JSON.stringify(result_levels)]
     );
 
     const testId = (testResult as any).insertId;
 
-    //       Ŀ
+    // 写入题目
     if (questions && questions.length > 0) {
         for (const q of questions) {
             await pool.execute(
@@ -155,34 +156,34 @@ router.post('/tests', authenticate, requireAdmin, asyncHandler(async (req: Reque
         }
     }
 
-    res.json({ success: true, message: ' ʾ      ɹ    ȴ    ', data: { id: testId } });
+    res.json({ success: true, message: '问卷创建成功，默认未上架', data: { id: testId } });
 }));
 
-//     ʾ    ϼ / ¼ܣ 
+// 设置问卷状态（上架 / 下架）
 router.put('/tests/:id/status', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const testId = parseInt(req.params.id);
-    const { status } = req.body;  // 0=     , 1=   ϼ , 2=   ¼ 
+    const { status } = req.body;  // 0=未上架, 1=已上架, 2=已下架
 
     if (![0, 1, 2].includes(status)) {
-        throw new BusinessError('  Ч  ״̬', 400);
+        throw new BusinessError('无效的状态', 400);
     }
 
     await pool.execute('UPDATE psychological_tests SET status = ? WHERE id = ?', [status, testId]);
 
-    const statusText = { 0: '     ', 1: '   ϼ ', 2: '   ¼ ' };
-    res.json({ success: true, message: ` ʾ   ${statusText[status as keyof typeof statusText]}` });
+    const statusText = { 0: '未上架', 1: '已上架', 2: '已下架' };
+    res.json({ success: true, message: `问卷已${statusText[status as keyof typeof statusText]}` });
 }));
 
-// ɾ   ʾ 
+// 删除问卷
 router.delete('/tests/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const testId = parseInt(req.params.id);
-    
+
     await pool.execute('DELETE FROM test_questions WHERE test_id = ?', [testId]);
     await pool.execute('DELETE FROM psychological_tests WHERE id = ?', [testId]);
-    
-    res.json({ success: true, message: ' ʾ   ɾ  ' });
+
+    res.json({ success: true, message: '问卷已删除' });
 }));
-// ==========   ȡ    ԤԼ ==========
+// ========== 平台预约 ==========
 router.get('/appointments', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const [rows] = await pool.execute(
         `SELECT ar.*, u.username as user_name, u.email as user_email,
@@ -335,6 +336,47 @@ router.delete('/appointments/:id', authenticate, requireAdmin, asyncHandler(asyn
         throw new BusinessError('预约记录不存在', 404);
     }
     res.json({ success: true, message: '预约记录已删除' });
+}));
+
+// ========== 敏感词库管理（聊天审核词库，实时生效） ==========
+router.get('/sensitive-words', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const [rows] = await pool.execute(
+        'SELECT id, word, category, is_short, created_at FROM sensitive_words ORDER BY id DESC'
+    );
+    res.json({ success: true, data: rows });
+}));
+
+router.post('/sensitive-words', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { word, category, is_short } = req.body;
+    const w = String(word || '').trim();
+    if (!w || w.length > 64) {
+        throw new BusinessError('敏感词不能为空且不超过 64 字', 400);
+    }
+    const cat = ['侮辱', '色情', '违禁', '自伤', '缩写', '其他'].includes(category) ? category : '其他';
+    const short = is_short ? 1 : 0;
+    try {
+        const [r] = await pool.execute(
+            'INSERT INTO sensitive_words (word, category, is_short) VALUES (?, ?, ?)',
+            [w, cat, short]
+        );
+        invalidateWords();
+        res.json({ success: true, message: '敏感词已添加并即时生效', data: { id: (r as any).insertId } });
+    } catch (e: any) {
+        if (e && e.code === 'ER_DUP_ENTRY') {
+            throw new BusinessError('该敏感词已存在', 400);
+        }
+        throw e;
+    }
+}));
+
+router.delete('/sensitive-words/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    const [r] = await pool.execute('DELETE FROM sensitive_words WHERE id = ?', [id]);
+    if ((r as any).affectedRows === 0) {
+        throw new BusinessError('敏感词不存在', 404);
+    }
+    invalidateWords();
+    res.json({ success: true, message: '敏感词已删除并即时生效' });
 }));
 
 export default router;

@@ -87,6 +87,7 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getUserAppointments, cancelAppointment } from '@/api/user'
 import { showToast } from '@/utils/notify'
+import { bindChatNotification } from '@/utils/taskbar'
 import { confirm, success, error } from '@/utils/dialog'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
@@ -229,6 +230,9 @@ const initSocket = () => {
 }
 
 const setupListeners = (sock: Socket) => {
+  // 后台私聊消息提醒（系统通知 + 任务栏频闪），幂等绑定
+  bindChatNotification(sock)
+
   // 监听预约列表更新（专家端操作后广播）
   sock.on('appointment-list-updated', (data: {
     userId: number

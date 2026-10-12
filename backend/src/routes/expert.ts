@@ -344,8 +344,18 @@ router.post('/chat', authenticate, asyncHandler(async (req: any, res: any) => {
         throw new BusinessError('预约对方信息缺失', 400);
     }
 
-    // 内容审核：词库秒拦 + AI 复核隐晦变体
-    const moderation = await checkMessageContentAI(content);
+    // 内容审核：词库秒拦 + AI 复核隐晦变体（结合上下文）
+    const [ctxRows] = await pool.execute(
+        'SELECT sender_id, content FROM expert_chat WHERE appointment_id = ? ORDER BY id DESC LIMIT 6',
+        [Number(appointmentId)]
+    );
+    const chatContext = (ctxRows as any[])
+        .reverse()
+        .map(r => ({
+            role: Number(r.sender_id) === senderId ? ('user' as const) : ('expert' as const),
+            content: String(r.content || '').slice(0, 200)
+        }));
+    const moderation = await checkMessageContentAI(content, chatContext);
     if (!moderation.ok) {
         throw new BusinessError('消息包含不文明或违规内容，已被拦截', 400);
     }

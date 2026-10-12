@@ -577,6 +577,7 @@ import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
 import AppIcon from '@/components/AppIcon.vue'
 import { showToast } from '@/utils/notify'
+import { bindChatNotification } from '@/utils/taskbar'
 import { checkUpdate, downloadUpdate, cancelDownload, installUpdate, onUpdateProgress, hasRemindedUpdate, markUpdateReminded, type UpdateInfo, type UpdatePhase, type DownloadProgress } from '@/utils/updater'
 import { isTauri } from '@/utils/secureStore'
 import { renderReportHtml, reportToPlainText } from '@/utils/reportRender'
@@ -709,6 +710,9 @@ const initSocket = () => {
 }
 
 const setupDashboardListeners = (sock: Socket) => {
+  // 后台私聊消息提醒（系统通知 + 任务栏频闪），幂等绑定，任意页面均生效
+  bindChatNotification(sock)
+
   sock.on('disconnect', () => {
     console.log('Dashboard Socket 已断开')
     onlineUserIds.value.clear()
@@ -920,7 +924,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.2.2'
+  const cur = updateInfo.value?.current_version || '0.2.3'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`

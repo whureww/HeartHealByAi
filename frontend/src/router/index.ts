@@ -86,6 +86,10 @@ const routes = [
       {
         path: 'doctor-cards',
         component: () => import('../views/admin/DoctorCardReview.vue')
+      },
+      {
+        path: 'sensitive-words',
+        component: () => import('../views/admin/SensitiveWordManage.vue')
       }
     ]
   }

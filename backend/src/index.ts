@@ -12,8 +12,9 @@ import adminRouter from './routes/admin';
 import expertRouter from './routes/expert';
 import { pool } from './db/mysql';
 import { isAppointmentParticipant } from './utils/guards';
-import { checkMessageContentAI } from './utils/moderation';
+import { checkMessageContentAI, loadSensitiveWords, ModerationContextItem } from './utils/moderation';
 import aiRouter from './routes/ai';
+import moderationRouter from './routes/moderation';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth';
 
@@ -73,6 +74,7 @@ app.use('/api/tests', testRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/expert', expertRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/moderation', moderationRouter);
 
 // ===== 6. 错误处理（最后）=====
 app.use(notFound);
@@ -103,6 +105,20 @@ const getUserSocket = (userId: number): any => {
     if (!socketIds || socketIds.size === 0) return null;
     const socketId = Array.from(socketIds).pop();
     return socketId ? io.sockets.sockets.get(socketId) : null;
+};
+
+// 拉取同一预约最近几条消息作为 AI 审核上下文（role 相对发送方：user=发送方本人，expert=对方）
+const recentChatContext = async (appointmentId: number, senderId: number): Promise<ModerationContextItem[]> => {
+    const [rows] = await pool.execute(
+        'SELECT sender_id, content FROM expert_chat WHERE appointment_id = ? ORDER BY id DESC LIMIT 6',
+        [appointmentId]
+    );
+    return (rows as any[])
+        .reverse()
+        .map(r => ({
+            role: Number(r.sender_id) === senderId ? ('user' as const) : ('expert' as const),
+            content: String(r.content || '').slice(0, 200)
+        }));
 };
 
 io.on('connection', (socket) => {
@@ -236,8 +252,9 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            // 内容审核：词库秒拦 + AI 复核隐晦变体，违规内容不入库不广播
-            const moderation = await checkMessageContentAI(data.content);
+            // 内容审核：词库秒拦 + AI 复核隐晦变体（结合上下文），违规内容不入库不广播
+            const chatContext = await recentChatContext(Number(data.appointmentId), senderId);
+            const moderation = await checkMessageContentAI(data.content, chatContext);
             if (!moderation.ok) {
                 socket.emit('message-blocked', {
                     appointmentId: data.appointmentId,
@@ -322,4 +339,6 @@ io.on('connection', (socket) => {
 httpServer.listen(PORT, () => {
     console.log(`✅ 服务已启动: http://localhost:${PORT}`);
     console.log(`✅ Socket.IO 已启用`);
+    // 启动时加载敏感词库（表为空自动播种默认词库；admin 增删后实时重载）
+    loadSensitiveWords();
 });

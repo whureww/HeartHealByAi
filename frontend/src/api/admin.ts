@@ -17,3 +17,9 @@ export const deleteAppointment = (id: number) => request.delete(`/admin/appointm
 export const getDoctorCards = () => request.get('/admin/doctor-cards')
 export const reviewDoctorCard = (id: number, action: 'approve' | 'reject') =>
   request.put(`/admin/doctor-cards/${id}/review`, { action })
+
+// 敏感词库管理（聊天审核，增删实时生效）
+export const getSensitiveWords = () => request.get('/admin/sensitive-words')
+export const addSensitiveWord = (data: { word: string; category: string; is_short?: boolean }) =>
+  request.post('/admin/sensitive-words', data)
+export const deleteSensitiveWord = (id: number) => request.delete(`/admin/sensitive-words/${id}`)
