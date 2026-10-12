@@ -282,7 +282,7 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            await pool.execute(
+            const [insertResult] = await pool.execute(
                 `INSERT INTO expert_chat (sender_id, receiver_id, content, appointment_id, created_at)
                  VALUES (?, ?, ?, ?, NOW())`,
                 [senderId, receiverId, data.content, data.appointmentId]
@@ -296,7 +296,8 @@ io.on('connection', (socket) => {
             const senderAvatar = (senderRows as any[])[0]?.avatar || null;
 
             const messageData = {
-                id: Date.now(),
+                // 使用数据库真实自增 id，保证 Socket 推送与 HTTP 历史记录 id 一致（举报等依赖消息 id 的功能依赖此一致性）
+                id: (insertResult as any).insertId,
                 sender_id: senderId,
                 receiver_id: receiverId,
                 content: data.content,

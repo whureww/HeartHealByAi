@@ -340,7 +340,7 @@ async function submitReport() {
     toggleReportMode()
     reportDetail.value = ''
   } catch (e: any) {
-    error(e?.response?.data?.message || '举报提交失败，请稍后重试')
+    error(e?.message || '举报提交失败，请稍后重试')
   } finally {
     reportSubmitting.value = false
   }
