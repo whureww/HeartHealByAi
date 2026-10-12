@@ -1,6 +1,6 @@
 ; ============================================================
 ; 心愈 XinYu 0.2.9 —— Inno Setup 7 安装包脚本
-; 用户级安装（与原 NSIS currentUser 模式一致）
+; 机器级安装（默认 Program Files，UAC 提权；无管理员权限时可在向导中切换为仅当前用户安装）
 ; 打包命令: ISCC.exe D:\AIHeartHealProject\frontend\src-tauri\windows\xinyu.iss
 ; ============================================================
 
@@ -26,7 +26,10 @@ UninstallDisplayIcon={app}\xinyu.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=lowest
+; 机器级安装：{autopf} 解析为 C:\Program Files（64 位模式），不再落入用户低权限目录；
+; OverridesAllowed 允许无管理员权限的用户在向导中降级为「仅当前用户」安装
+PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
