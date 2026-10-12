@@ -577,7 +577,7 @@ import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
 import AppIcon from '@/components/AppIcon.vue'
 import { showToast } from '@/utils/notify'
-import { bindChatNotification } from '@/utils/taskbar'
+import { bindChatNotification, registerChatOpener } from '@/utils/taskbar'
 import { checkUpdate, downloadUpdate, cancelDownload, installUpdate, onUpdateProgress, hasRemindedUpdate, markUpdateReminded, type UpdateInfo, type UpdatePhase, type DownloadProgress } from '@/utils/updater'
 import { isTauri } from '@/utils/secureStore'
 import { renderReportHtml, reportToPlainText } from '@/utils/reportRender'
@@ -924,7 +924,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.2.4'
+  const cur = updateInfo.value?.current_version || '0.2.5'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -1193,6 +1193,12 @@ const onViewUserAppointmentDetail = (id: number) => {
   currentAppointmentId.value = id
   currentPage.value = 'user-appointment-detail'
 }
+
+// QQ 式后台消息点击直达：任务栏提醒回前台后跳到未读聊天（用户端入口）
+registerChatOpener((id) => {
+  currentAppointmentId.value = id
+  currentPage.value = 'user-appointment-detail'
+})
 
 // ===== 新增：处理预约状态更新事件 =====
 const onStatusUpdated = async () => {

@@ -115,6 +115,7 @@ fn exit_app(app: tauri::AppHandle) {
 /// 通知即可展示心愈的应用图标（幂等，每次启动覆盖写入）。
 #[cfg(target_os = "windows")]
 fn register_notification_app_id(app: &tauri::AppHandle) {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
 
     let app_id = app.config().identifier.clone();
@@ -159,6 +160,248 @@ fn flash_taskbar(window: tauri::WebviewWindow, stop: bool) -> Result<(), String>
             dwTimeout: 0,
         };
         unsafe { FlashWindowEx(&mut info) };
+    }
+    Ok(())
+}
+
+// ===== 任务栏缩略图消息卡片（QQ 式悬浮预览） =====
+// 原理：DWM「图标位图」——后台未读时对主窗口启用 FORCE_ICONIC_REPRESENTATION，
+// 任务栏悬浮缩略图改由本进程提供（GDI 绘制的消息卡片：发送者/内容/未读数），
+// 还原前台后关闭该模式，缩略图恢复实时窗口内容。
+
+#[cfg(target_os = "windows")]
+mod iconic_preview {
+    use std::sync::Mutex;
+    use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmInvalidateIconicBitmaps, DwmSetIconicLivePreviewBitmap, DwmSetIconicThumbnail,
+        DwmSetWindowAttribute,
+    };
+    use windows_sys::Win32::Graphics::Gdi::{
+        CreateCompatibleDC, CreateDIBSection, CreateFontW, CreateSolidBrush, DeleteDC,
+        DeleteObject, DrawTextW, FillRect, GetDC, ReleaseDC, SelectObject, SetBkMode,
+        SetTextColor, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DT_END_ELLIPSIS,
+        DT_WORDBREAK, HDC, HFONT, HBITMAP,
+    };
+    use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetClientRect;
+
+    pub const WM_DWMSENDICONICTHUMBNAIL: u32 = 0x0323;
+    pub const WM_DWMSENDICONICLIVEPREVIEWBITMAP: u32 = 0x0326;
+    const DWMWA_HAS_ICONIC_BITMAP: u32 = 10;
+    const DWMWA_FORCE_ICONIC_REPRESENTATION: u32 = 11;
+    const SUBCLASS_ID: usize = 0x5849_4E59; // "XINY"
+
+    #[derive(Clone)]
+    struct PreviewData {
+        sender: String,
+        content: String,
+        unread: u32,
+    }
+
+    pub static PREVIEW: Mutex<Option<PreviewData>> = Mutex::new(None);
+    static SUBCLASS_INSTALLED: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    // COLORREF = 0x00BBGGRR
+    fn rgb(r: u32, g: u32, b: u32) -> u32 {
+        (b << 16) | (g << 8) | r
+    }
+
+    unsafe fn make_font(size: i32, bold: bool) -> HFONT {
+        CreateFontW(
+            -size, 0, 0, 0,
+            if bold { 700 } else { 400 },
+            0, 0, 0,
+            1, // DEFAULT_CHARSET
+            0, 0, 5, // OUT_DEFAULT / CLIP_DEFAULT / CLEARTYPE_QUALITY
+            0,
+            wide("Microsoft YaHei UI").as_ptr(),
+        )
+    }
+
+    /// 绘制消息卡片位图（深色底 + 发送者 + 摘要 + 未读数）
+    unsafe fn render_card(w: i32, h: i32) -> Option<HBITMAP> {
+        if w <= 0 || h <= 0 {
+            return None;
+        }
+        let data = PREVIEW.lock().ok()?.clone();
+        let (sender, content, unread) = match data {
+            Some(d) => (d.sender, d.content, d.unread),
+            None => ("心愈".to_string(), String::new(), 0),
+        };
+
+        let screen: HDC = GetDC(0);
+        if screen == 0 {
+            return None;
+        }
+        let mut bi: BITMAPINFO = unsafe { std::mem::zeroed() };
+        bi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bi.bmiHeader.biWidth = w;
+        bi.bmiHeader.biHeight = -h; // top-down
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = 0; // BI_RGB
+        let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
+        let bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &mut bits, 0, 0);
+        if bmp == 0 {
+            ReleaseDC(0, screen);
+            return None;
+        }
+        let mem = CreateCompatibleDC(screen);
+        let old = SelectObject(mem, bmp as _);
+
+        // 背景
+        let full = RECT { left: 0, top: 0, right: w, bottom: h };
+        let bg = CreateSolidBrush(rgb(24, 30, 42));
+        FillRect(mem, &full, bg);
+        DeleteObject(bg as _);
+
+        // 顶部强调条
+        let bar = RECT { left: 0, top: 0, right: w, bottom: 4 };
+        let accent = CreateSolidBrush(rgb(122, 156, 245));
+        FillRect(mem, &bar, accent);
+        DeleteObject(accent as _);
+
+        SetBkMode(mem, 1); // TRANSPARENT
+
+        // 发送者行
+        let f1 = make_font(if h > 90 { 20 } else { 17 }, true);
+        let old_font = SelectObject(mem, f1 as _);
+        SetTextColor(mem, rgb(140, 172, 246));
+        let title = if unread > 1 {
+            wide(format!("【新消息 ×{unread}】{}", sender).as_str())
+        } else {
+            wide(format!("【新消息】{}", sender).as_str())
+        };
+        let mut rc1 = RECT { left: 14, top: 12, right: w - 14, bottom: 44 };
+        // DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS：单行截断
+        DrawTextW(mem, title.as_ptr() as *mut u16, -1, &mut rc1, 0x0020 | 0x0800 | DT_END_ELLIPSIS);
+
+        // 内容行
+        let f2 = make_font(if h > 90 { 18 } else { 15 }, false);
+        SelectObject(mem, f2 as _);
+        SetTextColor(mem, rgb(214, 222, 236));
+        let mut rc2 = RECT { left: 14, top: 46, right: w - 14, bottom: h - 12 };
+        if h <= 90 {
+            rc2.top = 38;
+        }
+        if !content.is_empty() {
+            let body = wide(content.as_str());
+            // DT_WORDBREAK | DT_NOPREFIX：多行折行
+            DrawTextW(mem, body.as_ptr() as *mut u16, -1, &mut rc2, DT_WORDBREAK | 0x0800);
+        }
+
+        SelectObject(mem, old_font as _);
+        SelectObject(mem, old);
+        DeleteObject(f1 as _);
+        DeleteObject(f2 as _);
+        DeleteDC(mem);
+        ReleaseDC(0, screen);
+        Some(bmp)
+    }
+
+    unsafe fn set_iconic(hwnd: HWND, on: bool) {
+        let v: i32 = if on { 1 } else { 0 };
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_HAS_ICONIC_BITMAP,
+            &v as *const i32 as *const core::ffi::c_void,
+            4,
+        );
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_FORCE_ICONIC_REPRESENTATION,
+            &v as *const i32 as *const core::ffi::c_void,
+            4,
+        );
+    }
+
+    unsafe extern "system" fn preview_proc(
+        hwnd: HWND,
+        msg: u32,
+        wp: WPARAM,
+        lp: LPARAM,
+        _id: usize,
+        _data: usize,
+    ) -> LRESULT {
+        if msg == WM_DWMSENDICONICTHUMBNAIL {
+            // lParam：HIWORD = 最大宽，LOWORD = 最大高
+            let max_w = ((lp as usize >> 16) & 0xFFFF) as i32;
+            let max_h = ((lp as usize) & 0xFFFF) as i32;
+            let w = max_w.min(480);
+            let h = max_h.min(300);
+            if let Some(bmp) = render_card(w, h) {
+                DwmSetIconicThumbnail(hwnd, bmp, 0);
+                DeleteObject(bmp as _);
+            }
+            return 0;
+        }
+        if msg == WM_DWMSENDICONICLIVEPREVIEWBITMAP {
+            let mut rc = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+            GetClientRect(hwnd, &mut rc);
+            let w = (rc.right - rc.left).clamp(120, 640);
+            let h = (rc.bottom - rc.top).clamp(80, 480);
+            if let Some(bmp) = render_card(w, h) {
+                DwmSetIconicLivePreviewBitmap(hwnd, bmp, std::ptr::null(), 0);
+                DeleteObject(bmp as _);
+            }
+            return 0;
+        }
+        DefSubclassProc(hwnd, msg, wp, lp)
+    }
+
+    /// 未读状态：启用图标位图模式并刷新缩略图
+    pub fn activate(hwnd: isize, sender: String, content: String, unread: u32) {
+        unsafe {
+            *PREVIEW.lock().unwrap() = Some(PreviewData { sender, content, unread });
+            if !SUBCLASS_INSTALLED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                SetWindowSubclass(hwnd, Some(preview_proc), SUBCLASS_ID, 0);
+            }
+            set_iconic(hwnd, true);
+            DwmInvalidateIconicBitmaps(hwnd);
+        }
+    }
+
+    /// 已读还原：关闭图标位图模式，缩略图恢复窗口实时内容
+    pub fn deactivate(hwnd: isize) {
+        unsafe {
+            *PREVIEW.lock().unwrap() = None;
+            set_iconic(hwnd, false);
+            DwmInvalidateIconicBitmaps(hwnd);
+        }
+    }
+}
+
+/// 设置任务栏缩略图消息卡片（后台未读时悬浮任务栏显示发送者/内容/未读数）
+#[tauri::command]
+fn set_taskbar_preview(
+    window: tauri::WebviewWindow,
+    sender: String,
+    content: String,
+    unread: u32,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+        iconic_preview::activate(hwnd, sender, content, unread);
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = (sender, content, unread);
+    Ok(())
+}
+
+/// 清除缩略图消息卡片（回前台/已读时调用）
+#[tauri::command]
+fn clear_taskbar_preview(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+        iconic_preview::deactivate(hwnd);
     }
     Ok(())
 }
@@ -489,6 +732,8 @@ fn main() {
             secure_delete,
             exit_app,
             flash_taskbar,
+            set_taskbar_preview,
+            clear_taskbar_preview,
             check_update,
             download_update,
             cancel_download,
@@ -542,7 +787,7 @@ fn main() {
             }
             tray.build(app)?;
 
-            register_notification_app_id(app);
+            register_notification_app_id(app.handle());
 
             Ok(())
         })

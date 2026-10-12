@@ -203,7 +203,7 @@ import { SOCKET_URL, getAuthToken } from '@/config'
 import { getAppointmentDetail, updateAppointmentStatus, getChatMessages } from '@/api/expert'
 import { precheckContent } from '@/api/moderation'
 import { showToast } from '@/utils/notify'
-import { flashForMessage, bindChatNotification } from '@/utils/taskbar'
+import { bindChatNotification, notifyIfBackground } from '@/utils/taskbar'
 import { handleSessionExpired } from '@/api/request'
 import { success, error, alert as dialogAlert } from '@/utils/dialog'
 import { useUserStore } from '@/stores/user'
@@ -519,13 +519,11 @@ const setupSocketListeners = (sock: Socket) => {
   sock.on('new-message', (msg: any) => {
     messages.value.push(msg)
     scrollToBottom()
-    // 对方来信时轻提示（后端广播字段为 sender_id，兼容 senderId；
-    // 字段缺失时退回 sender_name 判断不可靠，直接比较两种字段名）
+    // 对方来信且窗口不在前台时提醒（单入口：系统通知 + 任务栏频闪 + 缩略图卡片；
+    // 已在本聊天页，不传 appointmentId 避免回前台重复跳转）
     const senderId = msg.sender_id ?? msg.senderId
     if (senderId !== userStore.userInfo?.id) {
-      showToast('新消息', String(msg.content || '').slice(0, 60))
-      // QQ 式任务栏提醒：窗口不在前台时任务栏频闪 + 悬浮预览消息摘要
-      flashForMessage(String(msg.sender_name || '新消息'), String(msg.content || ''))
+      void notifyIfBackground(String(msg.sender_name || '新消息'), String(msg.content || ''))
     }
   })
 

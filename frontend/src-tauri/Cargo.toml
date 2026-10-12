@@ -1,6 +1,6 @@
 [package]
 name = "xinyu-app"
-version = "0.2.4"
+version = "0.2.5"
 description = "心愈 · 心理健康服务平台桌面端"
 authors = ["you"]
 edition = "2021"
@@ -18,9 +18,16 @@ aes-gcm = "0.10"
 base64 = "0.22"
 # 检查更新：HTTP 请求（Gitee Releases API）
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-# 任务栏闪烁提醒（QQ 式新消息）：调用 Win32 FlashWindowEx
+# 任务栏闪烁提醒（QQ 式新消息）：调用 Win32 FlashWindowEx；
+# 缩略图消息卡片：DWM 图标位图 + GDI 文字渲染 + 窗口子类化
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+] }
 
 [profile.release]
 strip = true

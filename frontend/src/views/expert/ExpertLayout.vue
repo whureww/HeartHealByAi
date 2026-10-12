@@ -43,12 +43,18 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
+import { registerChatOpener } from '@/utils/taskbar'
 
 const router = useRouter()
 
 const goToUserCenter = () => {
   router.push('/dashboard')
 }
+
+// QQ 式后台消息点击直达：任务栏提醒回前台后跳到未读聊天（专家端入口）
+registerChatOpener((appointmentId) => {
+  router.push(`/expert/appointments/${appointmentId}`)
+})
 </script>
 
 <style scoped>

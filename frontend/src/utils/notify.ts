@@ -105,12 +105,27 @@ function inAppToast(title: string, body: string) {
   }, 4000)
 }
 
+// 通知去重：同一消息可能经多条链路（全局 chat-notification + 页面 new-message）到达，
+// 按「内容」做 3 秒窗口去重，保证一条消息只弹一次系统通知（忽略标题措辞差异）
+const recentToasts = new Map<string, number>()
+
+function isDuplicateToast(body: string): boolean {
+  const now = Date.now()
+  for (const [k, t] of recentToasts) {
+    if (now - t > 3000) recentToasts.delete(k)
+  }
+  if (recentToasts.has(body)) return true
+  recentToasts.set(body, now)
+  return false
+}
+
 /**
  * 消息提醒统一入口：提示音 + 真实系统通知（不可用时降级为应用内 toast）。
  * 调用方签名保持不变。
  */
 export function showToast(title: string, body: string, important = false) {
   if (!shouldNotify(important)) return
+  if (isDuplicateToast(body)) return
   playChime()
   void sendSystemNotification(title, body).then((sent) => {
     if (!sent) inAppToast(title, body)
