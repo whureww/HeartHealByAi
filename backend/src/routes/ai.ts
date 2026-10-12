@@ -84,30 +84,47 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
     // 转发流式数据（增量文本经 extractDeltaChunk 归一化，兼容各家格式）
     const stream = response.data;
 
-    stream.on('data', (chunk: Buffer) => {
-      const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+    // 跨 chunk 缓冲：TCP 分包可能把一行 data: {...} 拆到两个 chunk，
+    // 按 chunk 直接切行会把拆断的行静默丢弃（回复随机丢字）；
+    // 这里保留不完整尾行待下次拼接，并用流式解码避免多字节 UTF-8 字符被分包切坏
+    const decoder = new TextDecoder('utf-8');
+    let lineBuffer = '';
 
-      for (const line of lines) {
-        if (line.trim() === 'data: [DONE]') {
-          res.write('data: [DONE]\n\n');
-          continue;
-        }
+    const handleLine = (line: string) => {
+      if (line.trim() === '') return;
 
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            const content = extractDeltaChunk(data);
-            if (content) {
-              res.write(`data: ${JSON.stringify({ content })}\n\n`);
-            }
-          } catch (e) {
-            // 忽略解析失败的行
+      if (line.trim() === 'data: [DONE]') {
+        res.write('data: [DONE]\n\n');
+        return;
+      }
+
+      if (line.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          const content = extractDeltaChunk(data);
+          if (content) {
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
+        } catch (e) {
+          // 忽略解析失败的行
         }
+      }
+    };
+
+    stream.on('data', (chunk: Buffer) => {
+      lineBuffer += decoder.decode(chunk, { stream: true });
+      const lines = lineBuffer.split('\n');
+      lineBuffer = lines.pop() || '';   // 不完整的尾行留到下一个 chunk 拼接
+      for (const line of lines) {
+        handleLine(line);
       }
     });
 
     stream.on('end', () => {
+      lineBuffer += decoder.decode();   // flush 解码器残留字节
+      if (lineBuffer.trim() !== '') {
+        handleLine(lineBuffer);         // 处理结尾未带换行符的最后一行
+      }
       res.end();
     });
 
