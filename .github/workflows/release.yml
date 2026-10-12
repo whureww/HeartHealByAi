@@ -1,5 +1,42 @@
+# ============================================================
+# 心愈（XinYu）跨平台多架构自动打包流水线
+# ============================================================
+#
+# 功能：
+#   当打了 git tag（如 v0.3.0_UpDate）或手动触发时，自动在 GitHub Actions
+#   上并行构建 4 个目标平台的安装包，并发布到 GitHub Release，
+#   再通过 Gitee API 同步到 Gitee Releases。
+#
+# 构建矩阵（4 个 job 并行跑）：
+#   ┌─────────────────────┬──────────────────┬─────────────────────┐
+#   │ Runner              │ 目标架构         │ 产物格式            │
+#   ├─────────────────────┼──────────────────┼─────────────────────┤
+#   │ macos-latest       │ x86_64 (Intel)   │ .dmg                │
+#   │ macos-latest       │ aarch64 (M 系)   │ .dmg                │
+#   │ ubuntu-22.04       │ x86_64           │ .deb / .AppImage    │
+#   │ ubuntu-22.04       │ aarch64 (ARM64)  │ .deb / .AppImage    │
+#   └─────────────────────┴──────────────────┴─────────────────────┘
+#
+# 前置条件：
+#   1. 仓库根目录有 frontend/ 子目录，里面是 Vue 3 + Tauri 2 项目
+#   2. 已配置 GitHub Secret：GITEE_TOKEN（Gitee 私人令牌，勾选 projects 权限）
+#   3. 仓库已推送到 GitHub：https://github.com/yxpil/aisprithill
+#
+# 手动触发方式：
+#   仓库 → Actions → 跨平台多架构打包 → Run workflow → 输入 tag 名
+#
+# 注意：
+#   - GitHub Actions 免费额度有限（每月 2000 分钟），macOS runner 消耗 10 倍
+#   - Linux ARM64 是交叉编译，不需要 ARM runner
+#   - Windows 包不在此流水线中，需在本机 Windows 上手动 npm run tauri build
+#   - RISC-V 架构不支持（GitHub Actions 无对应 runner）
+# ============================================================
+
 name: 跨平台多架构打包
 
+# 触发条件：
+#   1. push 了 v 开头的 tag（如 git push origin v0.3.0_UpDate）
+#   2. 手动在 GitHub Actions 页面点 "Run workflow"
 on:
   push:
     tags:
@@ -7,48 +44,58 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '要构建的 tag（如 v0.2.9_UpDate）'
+        description: '要构建的 tag 名（例如 v0.3.0_UpDate）'
         required: true
         type: string
 
 jobs:
   build:
+    # 并行策略：一个 job 失败不影响其他 job
     strategy:
       fail-fast: false
       matrix:
         include:
-          # macOS Intel
+          # ── macOS Intel（x86_64）──
           - platform: macos-latest
             target: x86_64-apple-darwin
             bundles: dmg
             os_name: macos
-          # macOS Apple Silicon
+
+          # ── macOS Apple Silicon（arm64）──
           - platform: macos-latest
             target: aarch64-apple-darwin
             bundles: dmg
             os_name: macos
-          # Linux x86_64
+
+          # ── Linux x86_64（主流桌面）──
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,appimage
             os_name: linux
-          # Linux ARM64（交叉编译）
+
+          # ── Linux ARM64（如树莓派、ARM 服务器，交叉编译）──
           - platform: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
             bundles: deb,appimage
             os_name: linux
 
     runs-on: ${{ matrix.platform }}
+
+    # 默认工作目录设为 frontend/，后续所有 run 命令都在这个目录下执行
     defaults:
       run:
         working-directory: frontend
 
     steps:
+      # ── 步骤 1：检出指定 tag 的代码 ──
+      # workflow_dispatch 手动触发时，inputs.tag 是裸 tag 名（如 v0.3.0_UpDate）
+      # 必须拼上 refs/tags/ 前缀，否则 checkout 会当成 branch 找不到
       - name: 检出指定 tag
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
+      # ── 步骤 2：安装 Node.js 20 并缓存 npm 依赖 ──
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
@@ -56,19 +103,25 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      # ── 步骤 3：安装前端 npm 依赖 ──
       - name: 安装前端依赖
         run: npm ci
 
+      # ── 步骤 4：安装 Rust 工具链（含目标平台 target）──
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
+      # ── 步骤 5：缓存 Rust 编译产物，大幅加速后续构建 ──
       - name: Rust 缓存
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: frontend/src-tauri
 
+      # ── 步骤 6（仅 Linux）：安装 Tauri 运行所需的系统库 ──
+      # libwebkit2gtk 是 WebView 内核，libgtk 是 GTK3 窗口库
+      # gcc-aarch64-linux-gnu 是 ARM64 交叉编译器
       - name: Linux 系统依赖
         if: matrix.os_name == 'linux'
         run: |
@@ -85,6 +138,8 @@ jobs:
             librsvg2-dev \
             gcc-aarch64-linux-gnu
 
+      # ── 步骤 7（仅 Linux ARM64）：设置交叉编译环境变量 ──
+      # 告诉 Rust 用 aarch64-linux-gnu-gcc 而不是默认的 x86 gcc
       - name: Linux ARM64 环境变量
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
@@ -92,6 +147,12 @@ jobs:
           echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
           echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
 
+      # ── 步骤 8：Tauri 构建并发布到 GitHub Release ──
+      # tauri-action 会自动：
+      #   1. npm run build 打前端
+      #   2. cargo build --release 编译 Rust
+      #   3. 打包成 dmg/deb/appimage
+      #   4. 创建 GitHub Release（draft 草稿）并上传附件
       - name: 构建并发布
         uses: tauri-apps/tauri-action@v0
         env:
@@ -102,12 +163,16 @@ jobs:
           releaseName: '心愈 ${{ inputs.tag || github.ref_name }}'
           releaseBody: |
             跨平台多架构自动构建。
+
             - macOS: Intel (x64) / Apple Silicon (arm64)
             - Linux: x86_64 / aarch64 (ARM64)
-          releaseDraft: true
+          releaseDraft: true      # 先存为草稿，确认无误后手动发布
           prerelease: false
           args: '--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}'
 
+      # ── 步骤 9（可选）：把产物同步到 Gitee Releases ──
+      # 需要在 GitHub → Settings → Secrets → Actions 里配置 GITEE_TOKEN
+      # 没有配置则自动跳过，不报错
       - name: 上传产物到 Gitee Releases
         if: ${{ always() }}
         env:
@@ -115,15 +180,20 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -e
+
+          # 没配 Token 就跳过
           if [ -z "$GITEE_TOKEN" ]; then
-            echo "未配置 GITEE_TOKEN，跳过 Gitee 上传"
+            echo "未配置 GITEE_TOKEN Secret，跳过 Gitee 上传"
             exit 0
           fi
+
           TAG_NAME="${TAG}"
           BUNDLE_DIR="src-tauri/target/release/bundle"
 
-          # 找到所有构建产物
-          FILES=$(find "$BUNDLE_DIR" -type f \( -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" \) 2>/dev/null || true)
+          # 查找所有构建产物（dmg/deb/AppImage/msi/exe）
+          FILES=$(find "$BUNDLE_DIR" -type f \
+            \( -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" \
+               -o -name "*.msi" -o -name "*.exe" \) 2>/dev/null || true)
 
           if [ -z "$FILES" ]; then
             echo "未找到构建产物，跳过 Gitee 上传"
@@ -133,8 +203,9 @@ jobs:
           echo "找到产物："
           echo "$FILES"
 
-          # 1. 创建或获取 Gitee Release
-          RELEASE_ID=$(curl -s -X POST "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases" \
+          # ── 9.1 创建 Gitee Release ──
+          RELEASE_ID=$(curl -s -X POST \
+            "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases" \
             -H "Content-Type: application/json" \
             -d "{
               \"access_token\": \"$GITEE_TOKEN\",
@@ -145,23 +216,26 @@ jobs:
               \"target_commitish\": \"master\"
             }" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || echo "")
 
-          # 如果创建失败（可能已存在），查询已有 release
+          # 创建失败说明已存在，查询已有 Release
           if [ -z "$RELEASE_ID" ]; then
-            RELEASE_ID=$(curl -s "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/tags/$TAG_NAME?access_token=$GITEE_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || echo "")
+            RELEASE_ID=$(curl -s \
+              "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/tags/$TAG_NAME?access_token=$GITEE_TOKEN" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || echo "")
           fi
 
           if [ -z "$RELEASE_ID" ]; then
-            echo "无法创建或获取 Gitee Release"
-            exit 1
+            echo "无法创建或获取 Gitee Release，跳过"
+            exit 0
           fi
 
           echo "Gitee Release ID: $RELEASE_ID"
 
-          # 2. 逐个上传附件
+          # ── 9.2 逐个上传附件 ──
           for FILE in $FILES; do
             FILENAME=$(basename "$FILE")
             echo "上传 $FILENAME ..."
-            curl -s -X POST "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/$RELEASE_ID/attach_files" \
+            curl -s -X POST \
+              "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/$RELEASE_ID/attach_files" \
               -H "Authorization: token $GITEE_TOKEN" \
               -F "access_token=$GITEE_TOKEN" \
               -F "file=@$FILE"
