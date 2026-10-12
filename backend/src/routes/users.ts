@@ -614,8 +614,9 @@ router.get('/tests', authenticate, asyncHandler(async (req: Request, res: Respon
 // ========== 获取专家列表 ==========
 router.get('/doctors', authenticate, asyncHandler(async (req: any, res: any) => {
     const [rows] = await pool.execute(
-        `SELECT d.id, d.name, d.title, d.specialty, d.user_id 
-         FROM doctors d 
+        `SELECT d.id, d.name, d.title, d.specialty, d.intro, d.user_id, u.avatar
+         FROM doctors d
+         LEFT JOIN users u ON d.user_id = u.id
          WHERE d.status = 1`
     );
     

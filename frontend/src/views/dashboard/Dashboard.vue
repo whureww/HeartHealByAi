@@ -102,17 +102,25 @@
           <h3>在线心理专家问诊预约</h3>
           <div v-if="loading.doctors" class="loading-text">加载中...</div>
           <div class="scroll-content">
-            <div class="doc-list">
-              <div v-for="doc in userStore.doctors" :key="doc.id" class="doc-row">
-                <div class="doc-info">
-                  <h4>{{ doc.name }}｜{{ doc.title }}</h4>
-                  <p>{{ doc.specialty }}</p>
-                </div>
-                <div class="doc-side">
+            <div class="doc-grid">
+              <div v-for="doc in userStore.doctors" :key="doc.id" class="doc-card">
+                <div class="doc-card-head">
+                  <img v-if="doc.avatar" :src="doc.avatar" class="doc-avatar" alt="" />
+                  <span v-else class="doc-avatar doc-avatar-fallback">{{ (doc.name || '?').charAt(0) }}</span>
+                  <div class="doc-head-info">
+                    <h4>{{ doc.name }}</h4>
+                    <span class="doc-title">{{ doc.title }}</span>
+                  </div>
                   <span class="online-badge" :class="{ online: isUserOnline(doc.user_id) }">
                     <span class="status-dot" :class="{ online: isUserOnline(doc.user_id) }"></span>
                     {{ isUserOnline(doc.user_id) ? '在线' : '离线' }}
                   </span>
+                </div>
+                <div class="doc-card-body">
+                  <p class="doc-specialty"><span class="doc-label">擅长方向</span>{{ doc.specialty || '未填写' }}</p>
+                  <p class="doc-intro"><span class="doc-label">专家简介</span>{{ doc.intro || '该专家暂未填写简介' }}</p>
+                </div>
+                <div class="doc-card-foot">
                   <button class="btn-book" @click="bookDoctor(doc)">立即预约问诊</button>
                 </div>
               </div>
@@ -907,7 +915,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.2.0'
+  const cur = updateInfo.value?.current_version || '0.2.1'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -2007,42 +2015,125 @@ const scrollToBottom = () => {
   color: var(--text-muted);
 }
 
-.doc-list {
+/* 专家卡片网格：自适应列数，窄窗口 1 列宽卡 */
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.doc-card {
   display: flex;
   flex-direction: column;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), transform 0.2s var(--ease-out);
 }
 
-.doc-row {
+.doc-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-color));
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.doc-card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 4px;
-  border-bottom: 1px solid var(--border-color);
+  gap: 12px;
 }
 
-.doc-row:last-child {
-  border-bottom: none;
+.doc-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
 }
 
-.doc-info h4 {
-  color: var(--text-primary);
-  font-size: 14px;
+.doc-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 18px;
   font-weight: 600;
-  margin: 0 0 4px;
 }
 
-.doc-info p {
+.doc-head-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.doc-head-info h4 {
+  color: var(--text-primary);
+  font-size: 14.5px;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.doc-card-body {
+  flex: 1;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doc-label {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-right: 8px;
+  flex-shrink: 0;
+  vertical-align: 1px;
+}
+
+.doc-specialty {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.55;
+}
+
+.doc-intro {
   font-size: 12.5px;
   color: var(--text-secondary);
   margin: 0;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.doc-side {
+.doc-card-foot {
+  margin-top: 12px;
   display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+.doc-card-foot .btn-book {
+  width: 100%;
 }
 
 .online-badge {
@@ -2635,10 +2726,8 @@ const scrollToBottom = () => {
     display: none;
   }
 
-  .doc-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
+  .doc-grid {
+    grid-template-columns: 1fr;
   }
 
   .user-data-list {

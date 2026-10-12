@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { isAppointmentParticipant } from '../utils/guards';
-import { checkMessageContent } from '../utils/moderation';
+import { checkMessageContentAI } from '../utils/moderation';
 
 const router = Router();
 
@@ -344,8 +344,8 @@ router.post('/chat', authenticate, asyncHandler(async (req: any, res: any) => {
         throw new BusinessError('预约对方信息缺失', 400);
     }
 
-    // 内容审核：不文明 / 违规内容直接拦截
-    const moderation = checkMessageContent(content);
+    // 内容审核：词库秒拦 + AI 复核隐晦变体
+    const moderation = await checkMessageContentAI(content);
     if (!moderation.ok) {
         throw new BusinessError('消息包含不文明或违规内容，已被拦截', 400);
     }

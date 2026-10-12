@@ -90,3 +90,78 @@ export function checkMessageContent(content: string): ModerationResult {
     }
     return { ok: true };
 }
+
+// ===== AI 复审层：词库通过后由大模型复核隐晦侮辱/淫秽变体 =====
+// 策略：词库秒拦（免费快速）→ AI 复核（能理解语境、谐音、拆字等绕过手段）
+//       → 同内容哈希缓存（相同文本不重复调用）→ AI 故障时放行（不阻塞正常聊天）
+
+import { callAIJson } from './aiClient';
+import { createHash } from 'crypto';
+
+// 审核结论缓存：内容 SHA256 → 结论（上限 500 条，满了清最早的）
+const AI_VERDICT_CACHE = new Map<string, ModerationResult>();
+const AI_CACHE_MAX = 500;
+
+// 进行中的审核去重：同一内容并发发送只发起一次 AI 调用
+const AI_PENDING = new Map<string, Promise<ModerationResult>>();
+
+function aiCacheKey(content: string): string {
+    return createHash('sha256').update(String(content)).digest('hex');
+}
+
+/**
+ * AI 复核消息内容：判断是否包含侮辱、谩骂、淫秽色情或其他不宜在心理咨询平台出现的内容。
+ * 返回 { ok, hit }；AI 调用失败时放行（fail-open，词库层已兜底）。
+ */
+async function aiReview(content: string): Promise<ModerationResult> {
+    const key = aiCacheKey(content);
+    const cached = AI_VERDICT_CACHE.get(key);
+    if (cached) return cached;
+
+    const existing = AI_PENDING.get(key);
+    if (existing) return existing;
+
+    const task = (async (): Promise<ModerationResult> => {
+        try {
+            const verdict = await callAIJson(
+                '你是内容安全审核员。判断用户消息是否包含以下任一类内容：' +
+                '侮辱谩骂（含谐音、拆字、拼音缩写、形近字等变体）、淫秽色情、人身攻击、恶意骚扰。' +
+                '注意：正常表达负面情绪、倾诉痛苦、心理咨询相关内容不算违规。' +
+                '只输出 JSON：{"ok": true} 或 {"ok": false, "reason": "简短中文原因"}',
+                String(content).slice(0, 500),
+                { temperature: 0.1, maxTokens: 200, timeout: 12000, retries: 1, label: 'AI 审核' }
+            );
+            // ok 缺失时按放行处理，避免模型输出异常误拦
+            const result: ModerationResult =
+                verdict && typeof verdict === 'object' && verdict.ok === false
+                    ? { ok: false, hit: String(verdict.reason || '内容违规') }
+                    : { ok: true };
+
+            if (AI_VERDICT_CACHE.size >= AI_CACHE_MAX) {
+                const first = AI_VERDICT_CACHE.keys().next().value;
+                if (first) AI_VERDICT_CACHE.delete(first);
+            }
+            AI_VERDICT_CACHE.set(key, result);
+            return result;
+        } catch (e) {
+            // AI 不可用：放行，词库层已拦截明显违规
+            console.error('[AI 审核] 调用失败，放行（词库已兜底）:', (e as Error).message);
+            return { ok: true };
+        } finally {
+            AI_PENDING.delete(key);
+        }
+    })();
+
+    AI_PENDING.set(key, task);
+    return task;
+}
+
+/**
+ * 完整审核链路：词库秒拦 → AI 复核。
+ * Socket 与 HTTP 两条消息发送链路统一调用此函数。
+ */
+export async function checkMessageContentAI(content: string): Promise<ModerationResult> {
+    const keyword = checkMessageContent(content);
+    if (!keyword.ok) return keyword;
+    return aiReview(content);
+}

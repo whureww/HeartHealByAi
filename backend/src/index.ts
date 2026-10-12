@@ -12,7 +12,7 @@ import adminRouter from './routes/admin';
 import expertRouter from './routes/expert';
 import { pool } from './db/mysql';
 import { isAppointmentParticipant } from './utils/guards';
-import { checkMessageContent } from './utils/moderation';
+import { checkMessageContentAI } from './utils/moderation';
 import aiRouter from './routes/ai';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth';
@@ -236,8 +236,8 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            // 内容审核：不文明 / 违规内容直接拦截，不入库不广播
-            const moderation = checkMessageContent(data.content);
+            // 内容审核：词库秒拦 + AI 复核隐晦变体，违规内容不入库不广播
+            const moderation = await checkMessageContentAI(data.content);
             if (!moderation.ok) {
                 socket.emit('message-blocked', {
                     appointmentId: data.appointmentId,
