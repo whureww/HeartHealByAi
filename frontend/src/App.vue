@@ -1,14 +1,14 @@
 <template>
-  <TitleBar />
-  <div class="app-container">
+  <TitleBar v-if="!isTrayPopup" />
+  <div class="app-container" :class="{ 'popup-mode': isTrayPopup }">
     <router-view v-slot="{ Component }">
       <transition name="page" mode="out-in">
         <component :is="Component" />
       </transition>
     </router-view>
   </div>
-  <LoadingOverlay :visible="loadingStore.visible" :text="loadingStore.text" />
-  <LockScreen v-if="isLocked" :timeout-minutes="settingsStore.lockTimeout" @unlock="isLocked = false" />
+  <LoadingOverlay v-if="!isTrayPopup" :visible="loadingStore.visible" :text="loadingStore.text" />
+  <LockScreen v-if="!isTrayPopup && isLocked" :timeout-minutes="settingsStore.lockTimeout" @unlock="isLocked = false" />
   <CustomDialog ref="dialogRef" />
 </template>
 
@@ -23,11 +23,18 @@ import { useSettingsStore } from './stores/settings'
 import { useUserStore } from './stores/user'
 import { setDialogInstance } from './utils/dialog'
 import { initTaskbarNotifier } from './utils/taskbar'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
 const loadingStore = useLoadingStore()
 const settingsStore = useSettingsStore()
 const userStore = useUserStore()
 const dialogRef = ref()
+
+// 托盘悬浮卡片窗口复用同一 SPA：该窗口下隐藏标题栏/锁屏/全局浮层并去掉容器边距，
+// 也不注册任务栏提醒监听（提醒逻辑只属于主窗口）
+const route = useRoute()
+const isTrayPopup = computed(() => route.path === '/tray-popup')
 
 // ===== 离开自动锁定：闲置超时后显示锁屏（pointerdown/keydown 任意活动即重置） =====
 const isLocked = ref(false)
@@ -62,7 +69,7 @@ watch(() => [settingsStore.lockOnLeave, settingsStore.lockTimeout], resetIdle)
 
 onMounted(() => {
   setDialogInstance(dialogRef.value)
-  initTaskbarNotifier()
+  if (!isTrayPopup.value) initTaskbarNotifier()
   document.documentElement.style.overflow = 'hidden'
   document.body.style.overflow = 'hidden'
   document.documentElement.style.height = '100vh'
@@ -239,6 +246,12 @@ html {
   position: relative;
 }
 
+/* 托盘悬浮卡片窗口：无标题栏，容器占满整屏 */
+.app-container.popup-mode {
+  margin-top: 0;
+  height: 100vh;
+}
+
 /* ===== 台灯光晕（氛围层，全应用唯一的背景签名）===== */
 .app-container::before {
   content: '';
@@ -247,6 +260,11 @@ html {
   background: var(--lamp-layer), var(--lamp-floor), var(--lamp-vignette);
   pointer-events: none;
   z-index: 0;
+}
+
+/* 托盘悬浮卡片窗口保持全透明背景，不渲染氛围层 */
+.app-container.popup-mode::before {
+  display: none;
 }
 
 .app-container > * {

@@ -357,7 +357,10 @@ router.post('/chat', authenticate, asyncHandler(async (req: any, res: any) => {
         }));
     const moderation = await checkMessageContentAI(content, chatContext);
     if (!moderation.ok) {
-        throw new BusinessError('消息包含不文明或违规内容，已被拦截', 400);
+        throw new BusinessError(
+            moderation.hit ? `消息包含违规内容（${moderation.hit}），已被拦截` : '消息包含不文明或违规内容，已被拦截',
+            400
+        );
     }
 
     await pool.execute(

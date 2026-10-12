@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
     phone VARCHAR(20) DEFAULT NULL,
     password_hash VARCHAR(100) NOT NULL,
     role TINYINT NOT NULL DEFAULT 1 COMMENT '1=普通用户 2=专家 3=管理员',
+    status TINYINT NOT NULL DEFAULT 0 COMMENT '账号状态：0=正常 1=禁言 2=封禁（到期自动解除）',
+    restricted_until DATETIME DEFAULT NULL COMMENT '限制截止时间，NULL=永久',
     avatar LONGTEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -149,6 +151,24 @@ CREATE TABLE IF NOT EXISTS sensitive_words (
     is_short TINYINT NOT NULL DEFAULT 0 COMMENT '1=短词（独立词边界匹配）0=主词（包含匹配）',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_sensitive_word (word)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========== 聊天举报表 ==========
+CREATE TABLE IF NOT EXISTS chat_reports (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    reporter_id INT UNSIGNED NOT NULL COMMENT '举报人',
+    reported_id INT UNSIGNED NOT NULL COMMENT '被举报人',
+    appointment_id INT UNSIGNED NOT NULL COMMENT '所属预约',
+    message_ids TEXT NOT NULL COMMENT '被举报消息 id（JSON 数组）',
+    reason VARCHAR(50) NOT NULL COMMENT '举报理由（辱骂/骚扰/广告/色情/其他）',
+    detail VARCHAR(500) DEFAULT '' COMMENT '补充说明',
+    status TINYINT NOT NULL DEFAULT 0 COMMENT '0=待处理 1=已处置 2=已驳回',
+    handler_id INT UNSIGNED DEFAULT NULL COMMENT '处理管理员',
+    handle_note VARCHAR(255) DEFAULT '' COMMENT '处理备注',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    handled_at DATETIME DEFAULT NULL,
+    KEY idx_reports_status (status),
+    KEY idx_reports_reported (reported_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

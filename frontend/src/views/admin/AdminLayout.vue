@@ -44,6 +44,7 @@ const menuItems = [
   { path: '/admin/tests', name: '问卷管理', icon: 'clipboard' },
   { path: '/admin/appointments', name: '预约管理', icon: 'calendar' },
   { path: '/admin/doctor-cards', name: '名片审核', icon: 'stethoscope' },
+  { path: '/admin/reports', name: '举报管理', icon: 'warning' },
   { path: '/admin/sensitive-words', name: '敏感词库', icon: 'shield' }
 ]
 

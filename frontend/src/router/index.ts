@@ -14,6 +14,12 @@ const routes = [
   { path: '/login', component: Login, meta: { auth: false } },
   { path: '/register', component: Register, meta: { auth: false } },
   { path: '/forget-password', component: ForgetPassword, meta: { auth: false } },
+  // 托盘悬浮消息卡片（QQ 式预览小窗）：独立透明置顶窗口，无需登录态
+  {
+    path: '/tray-popup',
+    component: () => import('../views/TrayPopup.vue'),
+    meta: { auth: false }
+  },
   {
     path: '/dashboard',
     component: () => import('../views/dashboard/Dashboard.vue'),
@@ -86,6 +92,10 @@ const routes = [
       {
         path: 'doctor-cards',
         component: () => import('../views/admin/DoctorCardReview.vue')
+      },
+      {
+        path: 'reports',
+        component: () => import('../views/admin/ReportManage.vue')
       },
       {
         path: 'sensitive-words',

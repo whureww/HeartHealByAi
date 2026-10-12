@@ -3,6 +3,7 @@
 // + 任务栏缩略图由 Rust 侧渲染成消息卡片（DWM 图标位图，悬浮即见发送者/内容/未读数）；
 // 回到前台自动停止闪烁、还原标题，并直接跳转到未读消息对应的聊天界面（QQ 式点击直达）。
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isTauri } from '@/utils/secureStore'
 
@@ -35,7 +36,7 @@ function isDuplicateNotify(sender: string, content: string): boolean {
 }
 
 /** 新消息到达：窗口失焦/隐藏时闪烁任务栏 + 标题预览 + 缩略图消息卡片 */
-export async function flashForMessage(sender: string, content: string) {
+export async function flashForMessage(sender: string, content: string, appointmentId?: number, avatar?: string | null) {
   if (!isTauri()) return
   try {
     const win = getCurrentWindow()
@@ -47,11 +48,14 @@ export async function flashForMessage(sender: string, content: string) {
     const text = `${sender}：${String(content || '').replace(/\s+/g, ' ').trim()}`.slice(0, 26)
     await win.setTitle(`【新消息${unreadCount > 1 ? ' ×' + unreadCount : ''}】${text}`)
 
-    // 托盘 QQ 式提醒：红色数字角标 + 图标频闪 + tooltip 消息预览
+    // 托盘 QQ 式提醒：红色数字角标 + 整图标消失/重现频闪 + tooltip 消息预览
+    // （携带预约 id 与发送者头像：托盘悬浮卡片点击直达对应聊天并展示头像）
     invoke('update_tray_unread', {
       sender,
       content: String(content || '').slice(0, 40),
-      unread: unreadCount
+      unread: unreadCount,
+      appointmentId: appointmentId ?? null,
+      avatar: avatar ?? null
     }).catch(() => {})
 
     // DWM 图标位图：任务栏悬浮缩略图渲染成消息卡片（发送者 + 内容 + 未读数）
@@ -92,7 +96,7 @@ export async function clearUnreadFlash() {
   }
 }
 
-/** 应用启动时初始化：窗口获得焦点即清除提醒状态（幂等注册） */
+/** 应用启动时初始化：窗口获得焦点即清除提醒状态；托盘卡片点击直达聊天（幂等注册） */
 export function initTaskbarNotifier() {
   if (!isTauri()) return
   getCurrentWindow()
@@ -100,6 +104,17 @@ export function initTaskbarNotifier() {
       if (focused) void clearUnreadFlash()
     })
     .catch((e) => console.error('注册焦点监听失败:', e))
+
+  // 托盘悬浮卡片被点击：Rust 侧已唤起主窗口，这里按携带的预约 id 跳转对应聊天
+  listen<number | null>('tray-popup-click', ({ payload }) => {
+    if (payload && chatOpener) {
+      try {
+        chatOpener(Number(payload))
+      } catch (e) {
+        console.error('托盘卡片跳转聊天失败:', e)
+      }
+    }
+  }).catch((e) => console.error('注册托盘卡片点击监听失败:', e))
 }
 
 /**
@@ -108,7 +123,7 @@ export function initTaskbarNotifier() {
  * 窗口在前台时不打扰（聊天页内的来信提示由页面自身处理）。
  * @param appointmentId 未读消息所属预约 id，回前台时据此跳转聊天
  */
-export async function notifyIfBackground(sender: string, content: string, appointmentId?: number) {
+export async function notifyIfBackground(sender: string, content: string, appointmentId?: number, avatar?: string | null) {
   if (!isTauri()) return
   if (isDuplicateNotify(sender, content)) return
   try {
@@ -119,7 +134,7 @@ export async function notifyIfBackground(sender: string, content: string, appoin
     if (appointmentId) lastUnreadChatId = Number(appointmentId)
     const { showToast } = await import('./notify')
     showToast(`${sender} 发来新消息`, String(content || '').slice(0, 80), true)
-    await flashForMessage(sender, content)
+    await flashForMessage(sender, content, appointmentId, avatar)
   } catch (e) {
     console.error('后台消息提醒失败:', e)
   }
@@ -133,11 +148,12 @@ export function bindChatNotification(sock: { on: (event: string, cb: (data: any)
   const s = sock as any
   if (s.__chatNotifyBound__) return
   s.__chatNotifyBound__ = true
-  s.on('chat-notification', (data: { senderName?: string; content?: string; appointmentId?: number }) => {
+  s.on('chat-notification', (data: { senderName?: string; senderAvatar?: string | null; content?: string; appointmentId?: number }) => {
     void notifyIfBackground(
       String(data?.senderName || '新消息'),
       String(data?.content || ''),
-      data?.appointmentId
+      data?.appointmentId,
+      data?.senderAvatar
     )
   })
 }

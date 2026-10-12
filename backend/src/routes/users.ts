@@ -10,6 +10,7 @@ import redis from '../db/redis';
 import nodemailer from 'nodemailer';
 import jwt from "jsonwebtoken";
 import { TokenManager } from '../utils/tokenManager';
+import { getActiveRestriction } from '../utils/restrict';
 
 const router = Router();
 
@@ -208,6 +209,12 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
 
     if (!isValid) {
         throw new BusinessError('邮箱或密码错误', 401);
+    }
+
+    // 封禁检查：封禁中的账号禁止登录（到期自动解除）；禁言不影响登录仅禁言发言
+    const restriction = await getActiveRestriction(user.id);
+    if (restriction?.type === 'banned') {
+        throw new BusinessError(restriction.message, 403);
     }
 
     const onlyId = TokenManager.generateOnlyId();
@@ -812,6 +819,64 @@ router.get('/profile', authenticate, asyncHandler(async (req: any, res: any) => 
     }
     
     res.json({ success: true, data: user });
+}));
+
+// ========== 举报聊天消息 ==========
+// 举报人必须为该预约的参与方；被举报消息须属于该预约且发送者为「对方」（不能举报自己）
+router.post('/reports', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const reporterId = req.user!.id;
+    const { appointment_id, message_ids, reason, detail } = req.body || {};
+
+    const ids: number[] = Array.isArray(message_ids)
+        ? message_ids.map((n: any) => Number(n)).filter((n: number) => Number.isInteger(n) && n > 0)
+        : [];
+    if (!appointment_id || ids.length === 0) {
+        throw new BusinessError('请先选择要举报的聊天消息', 400);
+    }
+    const reasonText = String(reason || '').trim();
+    if (!reasonText) {
+        throw new BusinessError('请选择举报理由', 400);
+    }
+    const detailText = String(detail || '').trim().slice(0, 500);
+
+    // 归属校验：举报人必须是预约参与方
+    const [partRows] = await pool.execute(
+        `SELECT ar.user_id, d.user_id AS doctor_user_id
+         FROM appointment_records ar JOIN doctors d ON ar.doctor_id = d.id
+         WHERE ar.id = ?`,
+        [appointment_id]
+    );
+    const part = (partRows as any[])[0];
+    if (!part || (Number(part.user_id) !== reporterId && Number(part.doctor_user_id) !== reporterId)) {
+        throw new BusinessError('无权举报该预约下的消息', 403);
+    }
+
+    // 被举报人 = 预约对方；消息必须属于该预约且由对方发送
+    const reportedId = Number(part.user_id) === reporterId
+        ? Number(part.doctor_user_id)
+        : Number(part.user_id);
+    const placeholders = ids.map(() => '?').join(',');
+    const [msgRows] = await pool.execute(
+        `SELECT id FROM expert_chat
+         WHERE id IN (${placeholders}) AND appointment_id = ? AND sender_id = ?`,
+        [...ids, appointment_id, reportedId]
+    );
+    const validIds = (msgRows as any[]).map((r: any) => Number(r.id));
+    if (validIds.length === 0) {
+        throw new BusinessError('所选消息不存在或不可举报', 400);
+    }
+
+    const [result] = await pool.execute(
+        `INSERT INTO chat_reports (reporter_id, reported_id, appointment_id, message_ids, reason, detail, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, NOW())`,
+        [reporterId, reportedId, appointment_id, JSON.stringify(validIds), reasonText, detailText]
+    );
+
+    res.json({
+        success: true,
+        message: '举报已提交，管理员会尽快核实处理',
+        data: { id: (result as any).insertId, count: validIds.length }
+    });
 }));
 
 

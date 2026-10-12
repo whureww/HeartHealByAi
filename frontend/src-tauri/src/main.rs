@@ -406,9 +406,9 @@ fn clear_taskbar_preview(window: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-// ===== 托盘 QQ 化：未读角标 + 图标频闪 + 动态 tooltip =====
-// 后台收到消息时托盘图标叠加红色数字角标并与置灰帧交替闪烁，
-// 悬浮提示变为「发送者：摘要（未读数）」；回前台/已读恢复常态。
+// ===== 托盘 QQ 化：未读角标 + 整图标消失/重现频闪 + 动态 tooltip + 悬浮消息卡片 =====
+// 后台收到消息时托盘图标叠加红色数字角标，并与「图标整体从托盘移除」交替（QQ 式
+// 消失/重现闪烁，而非明暗变化）；鼠标悬浮托盘图标弹出消息卡片小窗，点击直达聊天。
 
 const TRAY_ID: &str = "xinyu-tray";
 const TRAY_TOOLTIP_DEFAULT: &str = "心愈 · 心理健康系统";
@@ -417,12 +417,27 @@ static TRAY_FLASH: AtomicBool = AtomicBool::new(false);
 /// 当前角标档位：1..=8 显示数字，9 表示 9+
 static TRAY_BADGE: AtomicUsize = AtomicUsize::new(1);
 
-/// 内置托盘图标资源：cache[0..7]=badge_1..8，cache[8]=badge_9p，cache[9]=gray
-fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 10] {
-    static CACHE: std::sync::OnceLock<[Option<tauri::image::Image<'static>>; 10]> =
+/// 托盘悬浮卡片展示的未读消息（最新一条 + 未读总数 + 所属预约 id + 发送者头像）
+#[derive(Clone, serde::Serialize)]
+struct TrayMsg {
+    sender: String,
+    content: String,
+    unread: u32,
+    appointment_id: Option<u64>,
+    avatar: Option<String>,
+}
+static TRAY_MSG: std::sync::Mutex<Option<TrayMsg>> = std::sync::Mutex::new(None);
+/// 鼠标是否悬浮在托盘卡片上（悬浮期间不隐藏）
+static POPUP_HOVER: AtomicBool = AtomicBool::new(false);
+/// 卡片隐藏任务代际：每次重新触发隐藏时递增，旧任务发现代际不符自行作废
+static POPUP_HIDE_GEN: AtomicUsize = AtomicUsize::new(0);
+
+/// 内置托盘图标资源：cache[0..7]=badge_1..8，cache[8]=badge_9p
+fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 9] {
+    static CACHE: std::sync::OnceLock<[Option<tauri::image::Image<'static>>; 9]> =
         std::sync::OnceLock::new();
     CACHE.get_or_init(|| {
-        const ENTRIES: [(&[u8], usize); 10] = [
+        const ENTRIES: [(&[u8], usize); 9] = [
             (include_bytes!("../icons/tray/badge_1.png"), 0),
             (include_bytes!("../icons/tray/badge_2.png"), 1),
             (include_bytes!("../icons/tray/badge_3.png"), 2),
@@ -432,9 +447,8 @@ fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 10] {
             (include_bytes!("../icons/tray/badge_7.png"), 6),
             (include_bytes!("../icons/tray/badge_8.png"), 7),
             (include_bytes!("../icons/tray/badge_9p.png"), 8),
-            (include_bytes!("../icons/tray/gray.png"), 9),
         ];
-        let mut arr: [Option<tauri::image::Image<'static>>; 10] = std::array::from_fn(|_| None);
+        let mut arr: [Option<tauri::image::Image<'static>>; 9] = std::array::from_fn(|_| None);
         for (bytes, slot) in ENTRIES {
             arr[slot] = tauri::image::Image::from_bytes(bytes).ok();
         }
@@ -447,46 +461,49 @@ fn badge_image(n: usize) -> Option<tauri::image::Image<'static>> {
     tray_icon_cache()[idx].clone()
 }
 
-fn gray_image() -> Option<tauri::image::Image<'static>> {
-    tray_icon_cache()[9].clone()
-}
-
-/// 频闪线程：未读时 600ms 交替「角标帧 ↔ 置灰帧」，停止后恢复常态图标（仅恢复一次）
+/// 频闪线程：未读时 600ms 交替「隐藏托盘图标 ↔ 显示角标帧」（QQ 式整体消失/重现）。
+/// 不能用全透明图标当「灭」帧：Windows 托盘会把全透明图标渲染成黑色色块；
+/// 只有把图标整个从托盘移除（set_visible(false)）才是真正的消失效果。
+/// 停止后恢复常态图标（仅恢复一次）
 fn spawn_tray_flasher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        let mut gray_shown = false;
+        let mut hidden = false;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(600));
             let Some(tray) = app.tray_by_id(TRAY_ID) else { continue };
             if !TRAY_FLASH.load(Ordering::SeqCst) {
-                if gray_shown {
-                    gray_shown = false;
+                if hidden {
+                    hidden = false;
+                    let _ = tray.set_visible(true);
                     if let Some(icon) = app.default_window_icon().cloned() {
                         let _ = tray.set_icon(Some(icon));
                     }
                 }
                 continue;
             }
-            let next = if gray_shown {
-                badge_image(TRAY_BADGE.load(Ordering::SeqCst))
+            if hidden {
+                let _ = tray.set_visible(true);
+                if let Some(img) = badge_image(TRAY_BADGE.load(Ordering::SeqCst)) {
+                    let _ = tray.set_icon(Some(img));
+                }
             } else {
-                gray_image()
-            };
-            if let Some(img) = next {
-                let _ = tray.set_icon(Some(img));
+                let _ = tray.set_visible(false);
             }
-            gray_shown = !gray_shown;
+            hidden = !hidden;
         }
     });
 }
 
-/// 托盘未读提醒：叠加数字角标、开始频闪、tooltip 变为消息预览
+/// 托盘未读提醒：叠加数字角标、开始频闪、tooltip 变为消息预览，
+/// 同时记录卡片数据（弹窗已显示时同步刷新内容）
 #[tauri::command]
 fn update_tray_unread(
     app: tauri::AppHandle,
     sender: String,
     content: String,
     unread: u32,
+    appointment_id: Option<u64>,
+    avatar: Option<String>,
 ) -> Result<(), String> {
     let idx = if unread >= 9 { 9 } else { (unread as usize).clamp(1, 8) };
     TRAY_BADGE.store(idx, Ordering::SeqCst);
@@ -504,19 +521,116 @@ fn update_tray_unread(
             let _ = tray.set_icon(Some(img));
         }
     }
+
+    let msg = TrayMsg {
+        sender: sender.clone(),
+        content: content.clone(),
+        unread,
+        appointment_id,
+        avatar,
+    };
+    if let Ok(mut slot) = TRAY_MSG.lock() {
+        *slot = Some(msg.clone());
+    }
+    if let Some(popup) = app.get_webview_window("tray-popup") {
+        if popup.is_visible().unwrap_or(false) {
+            let _ = app.emit_to("tray-popup", "tray-msg", msg);
+        }
+    }
     Ok(())
 }
 
-/// 托盘恢复常态：停止频闪、还原图标与 tooltip（回前台/已读时调用）
+/// 托盘恢复常态：停止频闪、还原图标与 tooltip、清空卡片数据并隐藏悬浮卡片
 #[tauri::command]
 fn clear_tray_unread(app: tauri::AppHandle) {
     TRAY_FLASH.store(false, Ordering::SeqCst);
+    if let Ok(mut slot) = TRAY_MSG.lock() {
+        *slot = None;
+    }
+    if let Some(popup) = app.get_webview_window("tray-popup") {
+        let _ = popup.hide();
+    }
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_visible(true); // 频闪可能正处于「消失」半周期，强制恢复显示
         let _ = tray.set_tooltip(Some(TRAY_TOOLTIP_DEFAULT));
         if let Some(icon) = app.default_window_icon().cloned() {
             let _ = tray.set_icon(Some(icon));
         }
     }
+}
+
+/// 按托盘图标位置定位并显示悬浮卡片（默认在图标上方，放不下则改到下方）
+fn show_tray_popup(app: &tauri::AppHandle, rect: &tauri::Rect) {
+    let Some(popup) = app.get_webview_window("tray-popup") else { return };
+    let scale = popup.scale_factor().unwrap_or(1.0);
+    let pos: tauri::PhysicalPosition<f64> = rect.position.to_physical(scale);
+    let icon_size: tauri::PhysicalSize<f64> = rect.size.to_physical(scale);
+    let wsize = popup.outer_size().unwrap_or(tauri::PhysicalSize::new(340, 156));
+    let mut x = pos.x as i32 + icon_size.width as i32 / 2 - wsize.width as i32 / 2;
+    let mut y = pos.y as i32 - wsize.height as i32 - 8;
+    if y < 0 {
+        // 任务栏位于屏幕顶部：卡片改为托盘图标下方
+        y = pos.y as i32 + icon_size.height as i32 + 8;
+    }
+    if let Ok(Some(mon)) = app.primary_monitor() {
+        let mw = mon.size().width as i32;
+        if x + wsize.width as i32 > mw {
+            x = mw - wsize.width as i32;
+        }
+    }
+    if x < 0 {
+        x = 0;
+    }
+    let _ = popup.set_position(tauri::PhysicalPosition::new(x, y));
+    let _ = popup.show();
+}
+
+/// 延迟隐藏悬浮卡片：鼠标可能正从托盘图标移向卡片，给 250ms 过渡期
+fn schedule_tray_popup_hide(app: tauri::AppHandle) {
+    let gen = POPUP_HIDE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        if POPUP_HIDE_GEN.load(Ordering::SeqCst) != gen {
+            return; // 已被新的 Enter/hover 事件接管
+        }
+        if POPUP_HOVER.load(Ordering::SeqCst) {
+            return; // 鼠标已进入卡片，保持显示
+        }
+        if let Some(w) = app.get_webview_window("tray-popup") {
+            let _ = w.hide();
+        }
+    });
+}
+
+/// 卡片鼠标悬浮状态上报（前端 mouseenter/mouseleave 调用）
+#[tauri::command]
+fn tray_popup_hover(app: tauri::AppHandle, hover: bool) {
+    POPUP_HOVER.store(hover, Ordering::SeqCst);
+    if hover {
+        // 进入卡片：作废所有挂起的隐藏任务
+        POPUP_HIDE_GEN.fetch_add(1, Ordering::SeqCst);
+    } else {
+        schedule_tray_popup_hide(app);
+    }
+}
+
+/// 点击卡片：隐藏卡片、唤起主窗口并跳转到对应聊天（QQ 式点击直达）
+#[tauri::command]
+fn tray_popup_open_chat(app: tauri::AppHandle) {
+    let appt = TRAY_MSG
+        .lock()
+        .ok()
+        .and_then(|slot| slot.as_ref().and_then(|m| m.appointment_id));
+    if let Some(w) = app.get_webview_window("tray-popup") {
+        let _ = w.hide();
+    }
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+        let _ = app.emit_to("main", "tray-popup-click", appt);
+    }
+    clear_tray_unread(app);
 }
 
 // ===== 检查更新（Gitee + GitHub 双源容灾） =====
@@ -526,7 +640,7 @@ fn clear_tray_unread(app: tauri::AppHandle) {
 const GITEE_RELEASES_LATEST: &str =
     "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/latest";
 const GITHUB_RELEASES_LATEST: &str =
-    "https://api.github.com/repos/yxpil/aisprithill/releases/latest";
+    "https://api.github.com/repos/whureww/HeartHealByAi/releases/latest";
 const SETUP_SUFFIX: &str = "_x64-setup.exe";
 
 /// 语义化版本比较：返回 Some(true) 表示 remote 更新，None 表示解析失败
@@ -856,6 +970,8 @@ fn main() {
             clear_taskbar_preview,
             update_tray_unread,
             clear_tray_unread,
+            tray_popup_hover,
+            tray_popup_open_chat,
             check_update,
             download_update,
             cancel_download,
@@ -870,6 +986,49 @@ fn main() {
             }
         })
         .setup(|app| {
+            // 托盘悬浮消息卡片窗口（QQ 式）：无边框透明置顶小窗，默认隐藏、
+            // 不进任务栏、不可聚焦（不抢主窗口焦点），仅在有未读时随托盘悬浮弹出
+            let popup_window = tauri::WebviewWindowBuilder::new(
+                app,
+                "tray-popup",
+                tauri::WebviewUrl::App("/tray-popup".into()),
+            )
+            .title("xinyu-tray-popup")
+            .visible(false)
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .focusable(false)
+            .resizable(false)
+            .inner_size(340.0, 156.0)
+            .build();
+
+            // 去掉 Windows 11 给窗口加的圆角与非客户区边框光晕（透明窗口上
+            // 会呈现为一圈半透明毛玻璃描边，用户反馈碍眼）；仅卡片本体自绘圆角
+            if let Ok(popup) = popup_window {
+                if let Ok(hwnd) = popup.hwnd() {
+                    let hwnd = hwnd.0 as isize;
+                    unsafe {
+                        let ncrp: i32 = 2; // DWMNCRP_DISABLED：禁用非客户区边框渲染
+                        windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute(
+                            hwnd,
+                            2, // DWMWA_NCRENDERING_POLICY
+                            &ncrp as *const i32 as *const core::ffi::c_void,
+                            4,
+                        );
+                        let pref: i32 = 1; // DWMWCP_DONOTROUND：禁用系统圆角
+                        windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute(
+                            hwnd,
+                            33, // DWMWA_WINDOW_CORNER_PREFERENCE
+                            &pref as *const i32 as *const core::ffi::c_void,
+                            4,
+                        );
+                    }
+                }
+            }
+
             // 系统托盘：左键单击唤起窗口，菜单提供“显示心愈 / 退出心愈”
             let show = MenuItem::with_id(app, "show", "显示心愈", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出心愈", true, None::<&str>)?;
@@ -889,14 +1048,17 @@ fn main() {
                     "quit" => app.exit(0),
                     _ => {}
                 })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
+                .on_tray_icon_event(|tray, event| match event {
+                    TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
                         ..
-                    } = event
-                    {
+                    } => {
                         let app = tray.app_handle();
+                        // 左键点击托盘时收起悬浮卡片
+                        if let Some(p) = app.get_webview_window("tray-popup") {
+                            let _ = p.hide();
+                        }
                         if let Some(w) = app.get_webview_window("main") {
                             // QQ 式开关：已在前台点击托盘=隐藏到托盘，否则唤起
                             let visible = w.is_visible().unwrap_or(false);
@@ -910,6 +1072,25 @@ fn main() {
                             }
                         }
                     }
+                    // 悬浮托盘图标：有未读消息时弹出消息卡片（QQ 式悬浮预览）
+                    TrayIconEvent::Enter { rect, .. } => {
+                        let app = tray.app_handle();
+                        let has_msg = TRAY_MSG.lock().map(|slot| slot.is_some()).unwrap_or(false);
+                        if !has_msg {
+                            return;
+                        }
+                        POPUP_HOVER.store(false, Ordering::SeqCst);
+                        POPUP_HIDE_GEN.fetch_add(1, Ordering::SeqCst);
+                        show_tray_popup(app, &rect);
+                        if let Some(msg) = TRAY_MSG.lock().ok().and_then(|slot| slot.clone()) {
+                            let _ = app.emit_to("tray-popup", "tray-msg", msg);
+                        }
+                    }
+                    // 离开托盘图标：延迟隐藏（若鼠标移入卡片则由 hover 状态保活）
+                    TrayIconEvent::Leave { .. } => {
+                        schedule_tray_popup_hide(tray.app_handle().clone());
+                    }
+                    _ => {}
                 });
 
             if let Some(icon) = app.default_window_icon().cloned() {

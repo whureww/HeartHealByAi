@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { invalidateWords } from '../utils/moderation';
+import { notifyUserRestricted, notifyRestrictionLifted, disconnectUser, Restriction } from '../utils/restrict';
 
 const router = Router();
 
@@ -39,7 +40,7 @@ router.get('/users', authenticate, requireAdmin, asyncHandler(async (req: Reques
     const total = (countRows as any[])[0].total;
 
     // 查询列表 - LIMIT 与 OFFSET 转换为数字传入
-    const sql = `SELECT id, username, email, phone, role, avatar, created_at FROM users${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    const sql = `SELECT id, username, email, phone, role, avatar, status, restricted_until, created_at FROM users${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
     const queryParams = [...params, Number(pageSize), Number(offset)];
     
     const [rows] = await pool.query(sql, queryParams);
@@ -379,6 +380,126 @@ router.delete('/sensitive-words/:id', authenticate, requireAdmin, asyncHandler(a
     }
     invalidateWords();
     res.json({ success: true, message: '敏感词已删除并即时生效' });
+}));
+
+// ========== 举报管理 ==========
+
+// 举报列表（附被举报消息内容与被举报账号当前状态）
+router.get('/reports', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const status = req.query.status as string;
+    let where = '';
+    const params: any[] = [];
+    if (status !== undefined && status !== '' && ['0', '1', '2'].includes(status)) {
+        where = ' WHERE cr.status = ?';
+        params.push(Number(status));
+    }
+
+    const [rows] = await pool.query(
+        `SELECT cr.*,
+                ru.username AS reporter_name,
+                ru2.username AS reported_name,
+                ru2.status AS reported_status,
+                ru2.restricted_until AS reported_restricted_until
+         FROM chat_reports cr
+         JOIN users ru ON cr.reporter_id = ru.id
+         JOIN users ru2 ON cr.reported_id = ru2.id
+         ${where}
+         ORDER BY cr.created_at DESC
+         LIMIT 200`,
+        params
+    );
+
+    const reports = rows as any[];
+    for (const r of reports) {
+        let msgIds: number[] = [];
+        try { msgIds = JSON.parse(r.message_ids || '[]'); } catch { msgIds = []; }
+        r.message_ids = msgIds;
+        r.messages = [];
+        if (msgIds.length > 0) {
+            const ph = msgIds.map(() => '?').join(',');
+            const [mrows] = await pool.query(
+                `SELECT id, content, created_at FROM expert_chat WHERE id IN (${ph}) ORDER BY id`,
+                msgIds
+            );
+            r.messages = mrows;
+        }
+    }
+
+    res.json({ success: true, data: reports });
+}));
+
+// 处置举报：禁言 / 封禁 / 驳回（禁言封禁实时生效：即时通知目标用户，封禁强制踢线）
+router.post('/reports/:id/handle', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const reportId = parseInt(req.params.id);
+    const { action, duration, note } = req.body || {};
+
+    const [rows] = await pool.execute('SELECT * FROM chat_reports WHERE id = ?', [reportId]);
+    const report = (rows as any[])[0];
+    if (!report) {
+        throw new BusinessError('举报不存在', 404);
+    }
+    if (Number(report.status) !== 0) {
+        throw new BusinessError('该举报已处理，请勿重复操作', 400);
+    }
+
+    if (!['mute', 'ban', 'dismiss'].includes(action)) {
+        throw new BusinessError('无效的处置方式', 400);
+    }
+    const noteText = String(note || '').trim().slice(0, 255);
+
+    if (action === 'dismiss') {
+        await pool.execute(
+            'UPDATE chat_reports SET status = 2, handler_id = ?, handle_note = ?, handled_at = NOW() WHERE id = ?',
+            [req.user!.id, noteText || '经核实未发现违规', reportId]
+        );
+        return res.json({ success: true, message: '已驳回该举报' });
+    }
+
+    // 处置时长：24h / 72h / 7d，未传或 permanent = 永久
+    const hoursMap: Record<string, number> = { '24h': 24, '72h': 72, '7d': 168 };
+    const until: Date | null = duration && hoursMap[duration]
+        ? new Date(Date.now() + hoursMap[duration] * 3600 * 1000)
+        : null;
+    const statusVal = action === 'ban' ? 2 : 1;
+    await pool.execute(
+        'UPDATE users SET status = ?, restricted_until = ? WHERE id = ?',
+        [statusVal, until, report.reported_id]
+    );
+
+    const label = action === 'ban' ? '封禁' : '禁言';
+    const untilText = until
+        ? `${until.toLocaleString('zh-CN', { hour12: false })} 自动解除`
+        : '永久生效';
+    await pool.execute(
+        'UPDATE chat_reports SET status = 1, handler_id = ?, handle_note = ?, handled_at = NOW() WHERE id = ?',
+        [req.user!.id, noteText || `管理员${label}（${untilText}）`, reportId]
+    );
+
+    const payload: Restriction = {
+        type: action === 'ban' ? 'banned' : 'muted',
+        until: until ? until.toISOString() : null,
+        message: `您的账号已被管理员${label}（${untilText}），期间无法${action === 'ban' ? '登录和使用' : '发送消息'}`
+    };
+    notifyUserRestricted(report.reported_id, payload);
+    if (action === 'ban') {
+        disconnectUser(report.reported_id);
+    }
+
+    res.json({ success: true, message: `已${label}该账号（${untilText}）` });
+}));
+
+// 解除账号限制（禁言/封禁立即恢复，目标在线时实时通知）
+router.post('/users/:id/unrestrict', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.id);
+    const [rows] = await pool.execute('SELECT status FROM users WHERE id = ?', [userId]);
+    if ((rows as any[]).length === 0) {
+        throw new BusinessError('用户不存在', 404);
+    }
+
+    await pool.execute('UPDATE users SET status = 0, restricted_until = NULL WHERE id = ?', [userId]);
+    notifyRestrictionLifted(userId);
+
+    res.json({ success: true, message: '已解除该账号的限制' });
 }));
 
 export default router;
