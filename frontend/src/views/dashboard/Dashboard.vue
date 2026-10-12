@@ -153,7 +153,9 @@
               <p class="report-empty-title">报告会在台灯下等你</p>
               <p class="report-empty-sub">选择时间段后生成，AI 将综合你的倾诉与测评，写下一份只有你能看见的分析</p>
             </div>
-            <div v-else class="report-result selectable-text" style="white-space: pre-wrap;">{{ reportContent }}</div>
+            <div v-else class="report-result selectable-text">
+              <div class="report-doc" v-html="reportHtml"></div>
+            </div>
           </div>
           <!-- 导出报告按钮 -->
           <div v-if="reportContent && reportContent !== '报告内容将在此处展示...' && !reportLoading" class="report-actions">
@@ -577,6 +579,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import { showToast } from '@/utils/notify'
 import { checkUpdate, downloadUpdate, cancelDownload, installUpdate, onUpdateProgress, hasRemindedUpdate, markUpdateReminded, type UpdateInfo, type UpdatePhase, type DownloadProgress } from '@/utils/updater'
 import { isTauri } from '@/utils/secureStore'
+import { renderReportHtml, reportToPlainText } from '@/utils/reportRender'
 
 const streamingContent = ref('')
 const isStreaming = ref(false)    
@@ -647,6 +650,13 @@ const loadAdminStats = async () => {
 // AI 加载状态
 const aiLoading = ref(false)
 const reportLoading = ref(false)
+
+// 报告 Markdown → 结构化 HTML（占位文案/加载中的提示文本不参与渲染）
+const reportHtml = computed(() => {
+  const t = reportContent.value
+  if (!t || t === '报告内容将在此处展示...' || t.startsWith('AI正在分析') || t === '报告生成失败，请稍后重试。') return ''
+  return renderReportHtml(t)
+})
 
 // ===== Socket.IO 全局连接 =====
 const socket = shallowRef<Socket | null>(null)
@@ -742,13 +752,6 @@ const disconnectSocket = () => {
   }
 }
 
-// 纯文本提取函数
-const stripHtml = (html: string): string => {
-  const tmp = document.createElement('div')
-  tmp.innerHTML = html
-  return tmp.textContent || tmp.innerText || ''
-}
-
 // 发送一条真实系统通知，验证通知中心效果
 const sendTestNotification = () => {
   showToast('心愈提醒', '这是一条测试系统通知——窗口最小化时你也能在通知中心看到它', true)
@@ -773,15 +776,13 @@ const onProfileSaved = () => {
 // 复制纯文本报告
 const exportReport = async () => {
   try {
-    const plainText = stripHtml(reportContent.value)
-      .replace(/\n\s*\n/g, '\n')
-      .trim()
+    const plainText = reportToPlainText(reportContent.value)
 
     await navigator.clipboard.writeText(plainText)
     await success('报告内容已复制到剪贴板', '复制成功')
   } catch (e) {
     const textarea = document.createElement('textarea')
-    textarea.value = stripHtml(reportContent.value)
+    textarea.value = reportToPlainText(reportContent.value)
     document.body.appendChild(textarea)
     textarea.select()
     document.execCommand('copy')
@@ -797,7 +798,8 @@ const downloadReport = () => {
     return
   }
 
-  const plainText = stripHtml(reportContent.value)
+  // 与界面同源渲染：Markdown → 结构化 HTML（reportRender 内部已做实体转义）
+  const bodyHtml = renderReportHtml(reportContent.value)
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -805,31 +807,34 @@ const downloadReport = () => {
   <meta charset="UTF-8">
   <title>心理状态分析报告</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.8; color: #333; }
-    h2 { color: #332e27; border-bottom: 2px solid #a96a2c; padding-bottom: 10px; }
-    .meta { color: #666; margin-bottom: 30px; font-size: 14px; }
-    .section { margin-bottom: 24px; }
-    .section h3 { color: #a96a2c; margin-bottom: 12px; }
-    .section p, .section li { margin-bottom: 8px; }
-    ul { padding-left: 20px; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; padding: 48px 24px; max-width: 820px; margin: 0 auto; line-height: 1.9; color: #332e27; background: #faf7f2; }
+    .doc { background: #fff; border: 1px solid #eadfce; border-radius: 12px; padding: 40px 48px; box-shadow: 0 2px 16px rgba(90, 70, 40, 0.06); }
+    .doc-header { border-bottom: 1px solid #eadfce; padding-bottom: 18px; margin-bottom: 26px; }
+    .doc-title { font-size: 22px; font-weight: 700; color: #332e27; margin: 0 0 10px; letter-spacing: 1px; }
+    .doc-meta { font-size: 13px; color: #8a8378; }
+    .doc-meta span { margin-right: 18px; }
+    h2 { font-size: 17px; color: #a96a2c; margin: 30px 0 12px; padding-left: 10px; border-left: 3px solid #a96a2c; }
+    h3 { font-size: 15px; color: #7a5a2e; margin: 20px 0 8px; }
+    p { margin: 8px 0; font-size: 14px; }
+    strong { color: #5a4632; }
+    ul, ol { margin: 8px 0; padding-left: 22px; }
+    li { margin: 6px 0; font-size: 14px; }
+    hr { border: none; border-top: 1px dashed #eadfce; margin: 22px 0; }
+    code { background: #f4efe6; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+    @media print { body { background: #fff; padding: 0; } .doc { border: none; box-shadow: none; } }
   </style>
 </head>
 <body>
-  <h2>心理状态综合分析报告</h2>
-  <div class="meta">
-    <p>分析时间段：${startDate.value} 至 ${endDate.value}</p>
-    <p>生成时间：${new Date().toLocaleString('zh-CN')}</p>
-  </div>
-  <div class="content">
-    ${plainText.split('\n').map(line => {
-      if (line.startsWith('一、') || line.startsWith('二、') || line.startsWith('三、')) {
-        return `<h3>${line}</h3>`
-      }
-      if (line.match(/^\d+\./)) {
-        return `<p>${line}</p>`
-      }
-      return `<p>${line}</p>`
-    }).join('')}
+  <div class="doc">
+    <div class="doc-header">
+      <p class="doc-title">心理状态综合分析报告</p>
+      <div class="doc-meta">
+        <span>分析时间段：${startDate.value} 至 ${endDate.value}</span>
+        <span>生成时间：${new Date().toLocaleString('zh-CN')}</span>
+      </div>
+    </div>
+    ${bodyHtml}
   </div>
 </body>
 </html>`
@@ -915,7 +920,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.2.1'
+  const cur = updateInfo.value?.current_version || '0.2.2'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -2263,13 +2268,74 @@ const scrollToBottom = () => {
 }
 
 .report-result {
-  padding: 16px;
+  padding: 22px 26px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-ctl);
-  line-height: 1.7;
+}
+
+/* ===== 报告排版：结构化文档观感 ===== */
+.report-doc {
   font-size: 13.5px;
+  line-height: 1.85;
   color: var(--text-primary);
+}
+
+.report-doc :deep(h2) {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 26px 0 10px;
+  padding-left: 10px;
+  border-left: 3px solid var(--accent);
+  line-height: 1.4;
+}
+
+.report-doc :deep(h2:first-child) {
+  margin-top: 0;
+}
+
+.report-doc :deep(h3) {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 18px 0 8px;
+}
+
+.report-doc :deep(p) {
+  margin: 8px 0;
+}
+
+.report-doc :deep(strong) {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.report-doc :deep(ul),
+.report-doc :deep(ol) {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.report-doc :deep(li) {
+  margin: 6px 0;
+}
+
+.report-doc :deep(li::marker) {
+  color: var(--accent);
+}
+
+.report-doc :deep(hr) {
+  border: none;
+  border-top: 1px dashed var(--border-color);
+  margin: 20px 0;
+}
+
+.report-doc :deep(code) {
+  background: var(--bg-tertiary, rgba(127, 127, 127, 0.12));
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12.5px;
 }
 
 /* ===== 个人中心/设置页：分组卡片布局 ===== */

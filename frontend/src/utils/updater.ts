@@ -1,7 +1,8 @@
 /**
- * 检查更新（Gitee Releases）
+ * 检查更新（Gitee + GitHub 双源容灾）
  * Rust 侧提供四个命令：check_update / download_update / cancel_download / install_update
- * 流程：比对版本 → 发现新版交由用户决定 → 下载（进度条+可取消）→ 退出程序并唤起安装器
+ * 流程：双源并发查询 → 任一源不可达自动回退另一源 → 取可达源中最高版本比对
+ *      → 发现新版交由用户决定 → 下载（进度条+可取消）→ 退出程序并唤起安装器
  */
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'

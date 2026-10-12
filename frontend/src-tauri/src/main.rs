@@ -132,10 +132,14 @@ fn flash_taskbar(window: tauri::WebviewWindow, stop: bool) -> Result<(), String>
     Ok(())
 }
 
-// ===== 检查更新（Gitee Releases） =====
+// ===== 检查更新（Gitee + GitHub 双源容灾） =====
+// 任一源不可达时自动使用另一源；两源均可达时取版本号最高的 release，
+// 其版本高于当前程序版本即标记为新版本可下载更新。
 
 const GITEE_RELEASES_LATEST: &str =
     "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/latest";
+const GITHUB_RELEASES_LATEST: &str =
+    "https://api.github.com/repos/whureww/HeartHealByAi/releases/latest";
 const SETUP_SUFFIX: &str = "_x64-setup.exe";
 
 /// 语义化版本比较：返回 Some(true) 表示 remote 更新，None 表示解析失败
@@ -184,55 +188,105 @@ fn find_setup_asset(rel: &serde_json::Value) -> Option<String> {
     None
 }
 
-/// 检查更新：对比 Gitee 最新 release 与当前程序版本
+/// 拉取单个更新源的 latest release；网络失败/响应异常/无 tag 均返回 None（由另一源兜底）
+fn fetch_release(client: &reqwest::blocking::Client, url: &str, label: &str) -> Option<serde_json::Value> {
+    let resp = match client
+        .get(url)
+        // GitHub API 强制要求 User-Agent，缺失会 403
+        .header(reqwest::header::USER_AGENT, "xinyu-updater")
+        .send()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[检查更新] {label} 不可达: {e}");
+            return None;
+        }
+    };
+    if !resp.status().is_success() {
+        eprintln!("[检查更新] {label} 响应异常: {}", resp.status());
+        return None;
+    }
+    let json: serde_json::Value = match resp.json() {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("[检查更新] {label} 解析失败: {e}");
+            return None;
+        }
+    };
+    if json.get("tag_name").is_none() {
+        eprintln!("[检查更新] {label} 尚未发布任何 Release");
+        return None;
+    }
+    Some(json)
+}
+
+/// 从 tag 提取版本号：形如 v0.2.1_UpDate → 0.2.1
+fn tag_version(rel: &serde_json::Value) -> String {
+    let tag = rel.get("tag_name").and_then(|v| v.as_str()).unwrap_or("");
+    tag.split(['_', '-'])
+        .find(|seg| seg.starts_with('v') && seg.contains('.'))
+        .unwrap_or(tag)
+        .trim_start_matches('v')
+        .to_string()
+}
+
+/// 检查更新：Gitee 与 GitHub 双源并发查询，取可达源中版本号最高的 release
 #[tauri::command]
 fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
     let current = app.package_info().version.to_string();
 
-    let resp = reqwest::blocking::Client::builder()
+    let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .map_err(|e| format!("网络客户端初始化失败: {e}"))?
-        .get(GITEE_RELEASES_LATEST)
-        .send()
-        .map_err(|e| format!("无法连接更新服务器: {e}"))?;
+        .map_err(|e| format!("网络客户端初始化失败: {e}"))?;
 
-    if !resp.status().is_success() {
-        return Err(format!("更新服务器响应异常: {}", resp.status()));
+    // 两源并发查询（总耗时≈单源超时上限，而非两源串行累加）
+    let (gitee, github) = std::thread::scope(|s| {
+        let g = s.spawn(|| fetch_release(&client, GITEE_RELEASES_LATEST, "Gitee"));
+        let h = s.spawn(|| fetch_release(&client, GITHUB_RELEASES_LATEST, "GitHub"));
+        (g.join().ok().flatten(), h.join().ok().flatten())
+    });
+
+    let mut candidates: Vec<(serde_json::Value, String)> = [gitee, github]
+        .into_iter()
+        .flatten()
+        .map(|rel| {
+            let ver = tag_version(&rel);
+            (rel, ver)
+        })
+        .filter(|(_, ver)| !ver.is_empty())
+        .collect();
+
+    if candidates.is_empty() {
+        return Err("无法连接任何更新源（Gitee 与 GitHub 均不可达）".into());
     }
 
-    let latest: serde_json::Value =
-        resp.json().map_err(|e| format!("解析更新信息失败: {e}"))?;
+    // 按版本号降序：高版本源在前
+    candidates.sort_by(|(_, va), (_, vb)| match version_is_newer(va, vb) {
+        Some(true) => std::cmp::Ordering::Less, // va 更新 → 排前
+        Some(false) => std::cmp::Ordering::Greater,
+        None => std::cmp::Ordering::Equal,
+    });
 
-    if latest.get("tag_name").is_none() {
-        return Err("仓库尚未发布任何 Release".into());
-    }
+    // 优先取有安装包附件的最高版本源；都没有附件时回退最高版本源（前端会提示地址缺失）
+    let (best_rel, latest_ver) = candidates
+        .iter()
+        .find(|(rel, _)| find_setup_asset(rel).is_some())
+        .unwrap_or(&candidates[0])
+        .clone();
 
-    let tag = latest
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let body = latest
-        .get("body")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let download_url = find_setup_asset(&latest).unwrap_or_default();
-
-    // tag 形如 v0.0.6_UpDate，先粗提数字段再做精确比较
-    let remote_ver = tag
-        .split(['_', '-'])
-        .find(|seg| seg.starts_with('v') && seg.contains('.'))
-        .unwrap_or(tag);
-
-    let has_update = version_is_newer(remote_ver, &current).unwrap_or(false);
+    let has_update = version_is_newer(&latest_ver, &current).unwrap_or(false);
 
     Ok(UpdateInfo {
         has_update,
-        latest_version: remote_ver.trim_start_matches('v').to_string(),
+        latest_version: latest_ver,
         current_version: current,
-        download_url,
-        release_notes: body,
+        download_url: find_setup_asset(&best_rel).unwrap_or_default(),
+        release_notes: best_rel
+            .get("body")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
     })
 }
 
