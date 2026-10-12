@@ -69,22 +69,24 @@ router.put('/users/:id/role', authenticate, requireAdmin, asyncHandler(async (re
 
     res.json({ success: true, message: '角色修改成功' });
 }));
-// admin.ts - 修复后的 stats 路由
+// admin.ts - 平台统计（口径与后台各管理页一致）
 router.get('/stats', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     try {
+        // 注册用户 = 全部账号（与「用户管理」页总数一致，含专家与管理员）
         const [userRows] = await pool.execute(
-            'SELECT COUNT(*) as count FROM users WHERE role = 1'
+            'SELECT COUNT(*) as count FROM users'
         );
-        
+
+        // 入驻专家 = 上架中的专家名片（与「名片审核」页有效专家一致；0 下架 / 1 上架 / 2 待审核）
         const [expertRows] = await pool.execute(
-            'SELECT COUNT(*) as count FROM users WHERE role = 2'
+            'SELECT COUNT(*) as count FROM doctors WHERE status = 1'
         );
-        
-        // 修复：appointments → appointment_records
+
+        // 总预约数 = 全部预约记录（与「预约管理」页列表一致）
         const [appointmentRows] = await pool.execute(
             'SELECT COUNT(*) as count FROM appointment_records'
         );
-        
+
         const [testRows] = await pool.execute(
             'SELECT COUNT(*) as count FROM test_results'
         );

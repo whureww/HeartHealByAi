@@ -100,7 +100,8 @@
       <div v-if="currentPage === 'doctor'" class="page show">
         <div class="card">
           <h3>在线心理专家问诊预约</h3>
-          <div v-if="loading.doctors" class="loading-text">加载中...</div>
+          <!-- 仅首次（无缓存数据）显示加载条：重取时静默刷新，避免加载条把已有内容向下压 -->
+          <div v-if="loading.doctors && !userStore.doctors.length" class="loading-text">加载中...</div>
           <div class="scroll-content doc-scroll">
             <div class="doc-grid">
               <div v-for="doc in userStore.doctors" :key="doc.id" class="doc-card">
@@ -929,7 +930,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.2.7'
+  const cur = updateInfo.value?.current_version || '0.2.8'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
