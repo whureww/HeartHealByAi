@@ -107,3 +107,60 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: '--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}'
+
+      - name: 上传产物到 Gitee Releases
+        if: ${{ secrets.GITEE_TOKEN != '' }}
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -e
+          TAG_NAME="${TAG}"
+          BUNDLE_DIR="src-tauri/target/release/bundle"
+
+          # 找到所有构建产物
+          FILES=$(find "$BUNDLE_DIR" -type f \( -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" \) 2>/dev/null || true)
+
+          if [ -z "$FILES" ]; then
+            echo "未找到构建产物，跳过 Gitee 上传"
+            exit 0
+          fi
+
+          echo "找到产物："
+          echo "$FILES"
+
+          # 1. 创建或获取 Gitee Release
+          RELEASE_ID=$(curl -s -X POST "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"access_token\": \"$GITEE_TOKEN\",
+              \"tag_name\": \"$TAG_NAME\",
+              \"name\": \"心愈 $TAG_NAME\",
+              \"body\": \"跨平台多架构自动构建（${{ matrix.target }}）\",
+              \"prerelease\": false,
+              \"target_commitish\": \"master\"
+            }" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || echo "")
+
+          # 如果创建失败（可能已存在），查询已有 release
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(curl -s "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/tags/$TAG_NAME?access_token=$GITEE_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$RELEASE_ID" ]; then
+            echo "无法创建或获取 Gitee Release"
+            exit 1
+          fi
+
+          echo "Gitee Release ID: $RELEASE_ID"
+
+          # 2. 逐个上传附件
+          for FILE in $FILES; do
+            FILENAME=$(basename "$FILE")
+            echo "上传 $FILENAME ..."
+            curl -s -X POST "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/$RELEASE_ID/attach_files" \
+              -H "Authorization: token $GITEE_TOKEN" \
+              -F "access_token=$GITEE_TOKEN" \
+              -F "file=@$FILE"
+            echo ""
+            echo "完成: $FILENAME"
+          done
