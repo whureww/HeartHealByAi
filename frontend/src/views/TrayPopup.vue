@@ -99,7 +99,7 @@ html, body, #app {
   width: 340px;
   height: 148px;
   box-sizing: border-box;
-  margin: 4px;
+  margin: 10px;
   display: flex;
   gap: 14px;
   align-items: stretch;
@@ -107,7 +107,7 @@ html, body, #app {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: 14px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22), 0 1px 3px rgba(0, 0, 0, 0.12);
   cursor: pointer;
   font-family: var(--font-ui);
   animation: tp-in 0.22s var(--ease-out, ease-out);
