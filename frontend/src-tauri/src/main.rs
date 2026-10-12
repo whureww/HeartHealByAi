@@ -108,6 +108,37 @@ fn exit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// 注册 Windows 通知中心的 AUMID（AppUserModelId）：
+/// tauri-plugin-notification 以应用 identifier 作为 AUMID 发通知，
+/// 但不会写注册表——缺 DisplayName/IconUri 时通知中心显示黑色默认图标。
+/// 此处在 HKCU\Software\Classes\AppUserModelId\{identifier} 写入显示名与 exe 图标路径，
+/// 通知即可展示心愈的应用图标（幂等，每次启动覆盖写入）。
+#[cfg(target_os = "windows")]
+fn register_notification_app_id(app: &tauri::AppHandle) {
+    use std::process::Command;
+
+    let app_id = app.config().identifier.clone();
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let key = format!(r"HKCU\Software\Classes\AppUserModelId\{app_id}");
+
+    let _ = Command::new("reg")
+        .args(["add", &key, "/v", "DisplayName", "/t", "REG_SZ", "/d", "心愈", "/f"])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW，避免闪黑框
+        .spawn();
+    let _ = Command::new("reg")
+        .args([
+            "add", &key, "/v", "IconUri", "/t", "REG_SZ", "/d", &exe.to_string_lossy(), "/f",
+        ])
+        .creation_flags(0x0800_0000)
+        .spawn();
+}
+
+#[cfg(not(target_os = "windows"))]
+fn register_notification_app_id(_app: &tauri::AppHandle) {}
+
 /// 任务栏闪烁提醒（QQ 式新消息）：窗口失焦时橙色频闪任务栏图标直至回到前台。
 /// stop=true 立即停止闪烁（获得焦点/已读时由前端调用）。
 #[tauri::command]
@@ -510,6 +541,8 @@ fn main() {
                 tray = tray.icon(icon);
             }
             tray.build(app)?;
+
+            register_notification_app_id(app);
 
             Ok(())
         })

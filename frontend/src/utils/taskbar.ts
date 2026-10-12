@@ -50,6 +50,21 @@ export function initTaskbarNotifier() {
     .catch((e) => console.error('注册焦点监听失败:', e))
 }
 
+// 通知去重：多页面各自持有 socket 连接（独立实例），同一条消息会经多个连接到达；
+// 按「发送者+内容」做 3 秒窗口去重，保证一条消息只提醒一次
+const recentNotifies = new Map<string, number>()
+
+function isDuplicateNotify(sender: string, content: string): boolean {
+  const key = `${sender}|${content}`
+  const now = Date.now()
+  for (const [k, t] of recentNotifies) {
+    if (now - t > 3000) recentNotifies.delete(k)
+  }
+  if (recentNotifies.has(key)) return true
+  recentNotifies.set(key, now)
+  return false
+}
+
 /**
  * 后台消息提醒：仅在窗口不在前台（最小化/隐藏/失焦）时触发——
  * 系统通知（Windows 通知中心，隐藏到托盘也可见）+ 任务栏频闪 + 标题预览。
@@ -57,6 +72,7 @@ export function initTaskbarNotifier() {
  */
 export async function notifyIfBackground(sender: string, content: string) {
   if (!isTauri()) return
+  if (isDuplicateNotify(sender, content)) return
   try {
     const win = getCurrentWindow()
     const [focused, visible] = await Promise.all([win.isFocused(), win.isVisible()])
