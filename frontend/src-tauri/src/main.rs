@@ -406,9 +406,9 @@ fn clear_taskbar_preview(window: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-// ===== 托盘 QQ 化：未读角标 + 整图标消失/重现频闪 + 动态 tooltip + 悬浮消息卡片 =====
-// 后台收到消息时托盘图标叠加红色数字角标，并与「图标整体从托盘移除」交替（QQ 式
-// 消失/重现闪烁，而非明暗变化）；鼠标悬浮托盘图标弹出消息卡片小窗，点击直达聊天。
+// ===== 托盘 QQ 化：未读角标 + 整图标不透明/透明交替频闪 + 动态 tooltip + 悬浮消息卡片 =====
+// 后台收到消息时托盘图标叠加红色数字角标，并与「透明帧」交替（QQ 式闪烁，
+// 托盘槽位保留不移除）；鼠标悬浮托盘图标弹出消息卡片小窗，点击直达聊天。
 
 const TRAY_ID: &str = "xinyu-tray";
 const TRAY_TOOLTIP_DEFAULT: &str = "心愈 · 心理健康系统";
@@ -461,35 +461,79 @@ fn badge_image(n: usize) -> Option<tauri::image::Image<'static>> {
     tray_icon_cache()[idx].clone()
 }
 
-/// 频闪线程：未读时 600ms 交替「隐藏托盘图标 ↔ 显示角标帧」（QQ 式整体消失/重现）。
-/// 不能用全透明图标当「灭」帧：Windows 托盘会把全透明图标渲染成黑色色块；
-/// 只有把图标整个从托盘移除（set_visible(false)）才是真正的消失效果。
-/// 停止后恢复常态图标（仅恢复一次）
+/// 系统任务栏是否为浅色主题（读 SystemUsesLightTheme，失败默认浅色）
+fn taskbar_is_light() -> bool {
+    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
+    unsafe {
+        let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+            .encode_utf16()
+            .collect();
+        let value: Vec<u16> = "SystemUsesLightTheme\0".encode_utf16().collect();
+        let mut data: u32 = 1;
+        let mut size: u32 = 4;
+        let ok = RegGetValueW(
+            HKEY_CURRENT_USER,
+            subkey.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            &mut data as *mut u32 as *mut core::ffi::c_void,
+            &mut size,
+        ) == 0;
+        if ok { data == 1 } else { true }
+    }
+}
+
+static TASKBAR_LIGHT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// 频闪「灭」帧：近乎全透明图标（alpha=1/255），像素底色取任务栏背景色。
+/// tray-icon 0.24 建 HICON 的 AND 掩码有缺陷（alpha=0 回绕成 1 且掩码行宽未对齐），
+/// 纯透明图会被 GDI 掩码路径渲染成黑色色块；改为「低 alpha + 任务栏同色底」双保险：
+/// 若走 alpha 路径则 99.6% 透明不可见，若走掩码路径则渲染为任务栏同色同样不可见——
+/// 两种管线下都表现为「图标消失但托盘槽位保留」，即 QQ 式不透明/透明交替闪烁
+fn blank_image() -> tauri::image::Image<'static> {
+    let light = TASKBAR_LIGHT.get_or_init(taskbar_is_light);
+    let (r, g, b) = if *light {
+        (0xF3u8, 0xF3u8, 0xF3u8) // Win11 浅色任务栏
+    } else {
+        (0x20u8, 0x20u8, 0x20u8) // Win11 深色任务栏
+    };
+    let mut rgba = vec![0u8; 32 * 32 * 4];
+    for px in rgba.chunks_exact_mut(4) {
+        px[0] = r;
+        px[1] = g;
+        px[2] = b;
+        px[3] = 1; // 近乎全透明
+    }
+    tauri::image::Image::new_owned(rgba, 32, 32)
+}
+
+/// 频闪线程：未读时 600ms 交替「角标帧 ↔ 透明帧」（QQ 式不透明/透明交替，
+/// 托盘槽位保留不移除）；停止后恢复常态图标（仅恢复一次）
 fn spawn_tray_flasher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        let mut hidden = false;
+        let mut blank_shown = false;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(600));
             let Some(tray) = app.tray_by_id(TRAY_ID) else { continue };
             if !TRAY_FLASH.load(Ordering::SeqCst) {
-                if hidden {
-                    hidden = false;
-                    let _ = tray.set_visible(true);
+                if blank_shown {
+                    blank_shown = false;
                     if let Some(icon) = app.default_window_icon().cloned() {
                         let _ = tray.set_icon(Some(icon));
                     }
                 }
                 continue;
             }
-            if hidden {
-                let _ = tray.set_visible(true);
-                if let Some(img) = badge_image(TRAY_BADGE.load(Ordering::SeqCst)) {
-                    let _ = tray.set_icon(Some(img));
-                }
+            let next = if blank_shown {
+                badge_image(TRAY_BADGE.load(Ordering::SeqCst))
             } else {
-                let _ = tray.set_visible(false);
+                Some(blank_image())
+            };
+            if let Some(img) = next {
+                let _ = tray.set_icon(Some(img));
             }
-            hidden = !hidden;
+            blank_shown = !blank_shown;
         }
     });
 }
@@ -551,7 +595,6 @@ fn clear_tray_unread(app: tauri::AppHandle) {
         let _ = popup.hide();
     }
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_visible(true); // 频闪可能正处于「消失」半周期，强制恢复显示
         let _ = tray.set_tooltip(Some(TRAY_TOOLTIP_DEFAULT));
         if let Some(icon) = app.default_window_icon().cloned() {
             let _ = tray.set_icon(Some(icon));
