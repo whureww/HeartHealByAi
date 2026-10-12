@@ -109,12 +109,16 @@ jobs:
           args: '--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}'
 
       - name: 上传产物到 Gitee Releases
-        if: ${{ secrets.GITEE_TOKEN != '' }}
+        if: ${{ always() }}
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -e
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "未配置 GITEE_TOKEN，跳过 Gitee 上传"
+            exit 0
+          fi
           TAG_NAME="${TAG}"
           BUNDLE_DIR="src-tauri/target/release/bundle"
 
