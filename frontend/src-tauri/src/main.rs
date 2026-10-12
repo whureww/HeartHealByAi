@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// 下载取消标志（update 流程）
 static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
@@ -406,6 +406,119 @@ fn clear_taskbar_preview(window: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+// ===== 托盘 QQ 化：未读角标 + 图标频闪 + 动态 tooltip =====
+// 后台收到消息时托盘图标叠加红色数字角标并与置灰帧交替闪烁，
+// 悬浮提示变为「发送者：摘要（未读数）」；回前台/已读恢复常态。
+
+const TRAY_ID: &str = "xinyu-tray";
+const TRAY_TOOLTIP_DEFAULT: &str = "心愈 · 心理健康系统";
+
+static TRAY_FLASH: AtomicBool = AtomicBool::new(false);
+/// 当前角标档位：1..=8 显示数字，9 表示 9+
+static TRAY_BADGE: AtomicUsize = AtomicUsize::new(1);
+
+/// 内置托盘图标资源：cache[0..7]=badge_1..8，cache[8]=badge_9p，cache[9]=gray
+fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 10] {
+    static CACHE: std::sync::OnceLock<[Option<tauri::image::Image<'static>>; 10]> =
+        std::sync::OnceLock::new();
+    CACHE.get_or_init(|| {
+        const ENTRIES: [(&[u8], usize); 10] = [
+            (include_bytes!("../icons/tray/badge_1.png"), 0),
+            (include_bytes!("../icons/tray/badge_2.png"), 1),
+            (include_bytes!("../icons/tray/badge_3.png"), 2),
+            (include_bytes!("../icons/tray/badge_4.png"), 3),
+            (include_bytes!("../icons/tray/badge_5.png"), 4),
+            (include_bytes!("../icons/tray/badge_6.png"), 5),
+            (include_bytes!("../icons/tray/badge_7.png"), 6),
+            (include_bytes!("../icons/tray/badge_8.png"), 7),
+            (include_bytes!("../icons/tray/badge_9p.png"), 8),
+            (include_bytes!("../icons/tray/gray.png"), 9),
+        ];
+        let mut arr: [Option<tauri::image::Image<'static>>; 10] = std::array::from_fn(|_| None);
+        for (bytes, slot) in ENTRIES {
+            arr[slot] = tauri::image::Image::from_bytes(bytes).ok();
+        }
+        arr
+    })
+}
+
+fn badge_image(n: usize) -> Option<tauri::image::Image<'static>> {
+    let idx = if n >= 9 { 8 } else { n.checked_sub(1)? };
+    tray_icon_cache()[idx].clone()
+}
+
+fn gray_image() -> Option<tauri::image::Image<'static>> {
+    tray_icon_cache()[9].clone()
+}
+
+/// 频闪线程：未读时 600ms 交替「角标帧 ↔ 置灰帧」，停止后恢复常态图标（仅恢复一次）
+fn spawn_tray_flasher(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let mut gray_shown = false;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            let Some(tray) = app.tray_by_id(TRAY_ID) else { continue };
+            if !TRAY_FLASH.load(Ordering::SeqCst) {
+                if gray_shown {
+                    gray_shown = false;
+                    if let Some(icon) = app.default_window_icon().cloned() {
+                        let _ = tray.set_icon(Some(icon));
+                    }
+                }
+                continue;
+            }
+            let next = if gray_shown {
+                badge_image(TRAY_BADGE.load(Ordering::SeqCst))
+            } else {
+                gray_image()
+            };
+            if let Some(img) = next {
+                let _ = tray.set_icon(Some(img));
+            }
+            gray_shown = !gray_shown;
+        }
+    });
+}
+
+/// 托盘未读提醒：叠加数字角标、开始频闪、tooltip 变为消息预览
+#[tauri::command]
+fn update_tray_unread(
+    app: tauri::AppHandle,
+    sender: String,
+    content: String,
+    unread: u32,
+) -> Result<(), String> {
+    let idx = if unread >= 9 { 9 } else { (unread as usize).clamp(1, 8) };
+    TRAY_BADGE.store(idx, Ordering::SeqCst);
+    TRAY_FLASH.store(true, Ordering::SeqCst);
+
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let brief: String = content.chars().take(24).collect();
+        let tip = if unread > 1 {
+            format!("心愈 · 【{unread}条未读】{sender}：{brief}")
+        } else {
+            format!("心愈 · {sender}：{brief}")
+        };
+        let _ = tray.set_tooltip(Some(&tip));
+        if let Some(img) = badge_image(idx) {
+            let _ = tray.set_icon(Some(img));
+        }
+    }
+    Ok(())
+}
+
+/// 托盘恢复常态：停止频闪、还原图标与 tooltip（回前台/已读时调用）
+#[tauri::command]
+fn clear_tray_unread(app: tauri::AppHandle) {
+    TRAY_FLASH.store(false, Ordering::SeqCst);
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(TRAY_TOOLTIP_DEFAULT));
+        if let Some(icon) = app.default_window_icon().cloned() {
+            let _ = tray.set_icon(Some(icon));
+        }
+    }
+}
+
 // ===== 检查更新（Gitee + GitHub 双源容灾） =====
 // 任一源不可达时自动使用另一源；两源均可达时取版本号最高的 release，
 // 其版本高于当前程序版本即标记为新版本可下载更新。
@@ -734,6 +847,8 @@ fn main() {
             flash_taskbar,
             set_taskbar_preview,
             clear_taskbar_preview,
+            update_tray_unread,
+            clear_tray_unread,
             check_update,
             download_update,
             cancel_download,
@@ -776,8 +891,16 @@ fn main() {
                     {
                         let app = tray.app_handle();
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                            // QQ 式开关：已在前台点击托盘=隐藏到托盘，否则唤起
+                            let visible = w.is_visible().unwrap_or(false);
+                            let minimized = w.is_minimized().unwrap_or(false);
+                            if visible && !minimized {
+                                let _ = w.hide();
+                            } else {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
                         }
                     }
                 });
@@ -786,6 +909,9 @@ fn main() {
                 tray = tray.icon(icon);
             }
             tray.build(app)?;
+
+            // 托盘角标频闪线程（常驻，未读时交替闪烁）
+            spawn_tray_flasher(app.handle().clone());
 
             register_notification_app_id(app.handle());
 

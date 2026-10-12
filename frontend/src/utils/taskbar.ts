@@ -47,6 +47,13 @@ export async function flashForMessage(sender: string, content: string) {
     const text = `${sender}：${String(content || '').replace(/\s+/g, ' ').trim()}`.slice(0, 26)
     await win.setTitle(`【新消息${unreadCount > 1 ? ' ×' + unreadCount : ''}】${text}`)
 
+    // 托盘 QQ 式提醒：红色数字角标 + 图标频闪 + tooltip 消息预览
+    invoke('update_tray_unread', {
+      sender,
+      content: String(content || '').slice(0, 40),
+      unread: unreadCount
+    }).catch(() => {})
+
     // DWM 图标位图：任务栏悬浮缩略图渲染成消息卡片（发送者 + 内容 + 未读数）
     invoke('set_taskbar_preview', {
       sender,
@@ -68,6 +75,8 @@ export async function clearUnreadFlash() {
   if (!isTauri() || !flashing) return
   unreadCount = 0
   flashing = false
+  // 托盘恢复常态（角标清零、停止频闪、还原 tooltip）
+  invoke('clear_tray_unread').catch(() => {})
   invoke('clear_taskbar_preview').catch(() => {})
   await getCurrentWindow().setTitle(APP_TITLE).catch(() => {})
 

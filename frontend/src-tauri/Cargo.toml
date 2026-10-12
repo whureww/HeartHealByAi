@@ -1,6 +1,6 @@
 [package]
 name = "xinyu-app"
-version = "0.2.5"
+version = "0.2.6"
 description = "心愈 · 心理健康服务平台桌面端"
 authors = ["you"]
 edition = "2021"
@@ -9,7 +9,7 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
