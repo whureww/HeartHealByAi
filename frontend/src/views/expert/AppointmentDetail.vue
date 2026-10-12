@@ -625,7 +625,7 @@ const setupSocketListeners = (sock: Socket) => {
     // 已在本聊天页，不传 appointmentId 避免回前台重复跳转）
     const senderId = msg.sender_id ?? msg.senderId
     if (senderId !== userStore.userInfo?.id) {
-      void notifyIfBackground(String(msg.sender_name || '新消息'), String(msg.content || ''))
+      void notifyIfBackground(String(msg.sender_name || '新消息'), String(msg.content || ''), undefined, msg.sender_avatar)
     }
   })
 

@@ -1,19 +1,26 @@
 <template>
   <div class="tray-popup-card" @mouseenter="onEnter" @mouseleave="onLeave" @click="openChat">
-    <div class="tp-avatar">{{ avatarChar }}</div>
+    <div class="tp-avatar">
+      <img v-if="avatarSrc" :src="avatarSrc" alt="" @error="avatarFailed = true" />
+      <span v-else>{{ avatarChar }}</span>
+      <i class="tp-avatar-ring"></i>
+    </div>
     <div class="tp-main">
       <div class="tp-row">
         <span class="tp-sender">{{ msg?.sender || '新消息' }}</span>
-        <span v-if="msg && msg.unread > 1" class="tp-badge">共 {{ msg.unread }} 条未读</span>
+        <span v-if="msg && msg.unread > 1" class="tp-badge">{{ msg.unread }} 条未读</span>
       </div>
       <div class="tp-content">{{ msg?.content || '点击查看新消息' }}</div>
-      <div class="tp-hint">点击查看消息</div>
+      <div class="tp-foot">
+        <span class="tp-hint">点击查看消息</span>
+        <span class="tp-brand">心愈</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 
@@ -22,21 +29,52 @@ interface TrayMsg {
   content: string
   unread: number
   appointment_id?: number | null
+  avatar?: string | null
 }
 
 const msg = ref<TrayMsg | null>(null)
+const avatarFailed = ref(false)
+
+const avatarSrc = computed(() => {
+  const a = msg.value?.avatar
+  return a && !avatarFailed.value ? a : ''
+})
 const avatarChar = computed(() => (msg.value?.sender || '消').trim().charAt(0) || '消')
 
+// 主题跟随：本窗口启动时已由 main.ts 按 localStorage 应用明暗主题；
+// 主窗口运行中切换主题后，经 storage 事件同步到本窗口
+function syncTheme() {
+  const t = localStorage.getItem('theme') || 'system'
+  const isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  document.documentElement.classList.toggle('dark', isDark)
+}
+
+let offTheme = () => {}
+const onStorage = (e: StorageEvent) => {
+  if (e.key === 'theme' || e.key === null) syncTheme()
+}
+
 onMounted(async () => {
+  syncTheme()
+  window.addEventListener('storage', onStorage)
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme)
+  offTheme = () => {
+    window.removeEventListener('storage', onStorage)
+    window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', syncTheme)
+  }
+
   // Rust 侧在托盘悬浮时 emit 最新未读消息；弹窗期间来新消息也会推送刷新
   try {
     await listen<TrayMsg>('tray-msg', ({ payload }) => {
       msg.value = payload
+      avatarFailed.value = false
     })
   } catch (e) {
     console.error('托盘卡片事件监听失败:', e)
   }
 })
+
+onUnmounted(() => offTheme())
 
 function onEnter() {
   invoke('tray_popup_hover', { hover: true }).catch(() => {})
@@ -58,38 +96,74 @@ html, body, #app {
 
 <style scoped>
 .tray-popup-card {
-  width: 336px;
-  height: 144px;
+  width: 340px;
+  height: 148px;
   box-sizing: border-box;
   margin: 4px;
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: stretch;
-  padding: 14px 16px;
-  background: rgba(24, 30, 42, 0.97);
-  border: 1px solid rgba(122, 156, 245, 0.35);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  padding: 16px 18px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.12);
   cursor: pointer;
   font-family: var(--font-ui);
+  animation: tp-in 0.22s var(--ease-out, ease-out);
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 .tray-popup-card:hover {
-  border-color: rgba(122, 156, 245, 0.65);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+@keyframes tp-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .tp-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #7a9cf5, #5a7ce0);
-  color: #fff;
-  font-size: 20px;
-  font-weight: 600;
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  flex: none;
+  margin-top: 2px;
+  overflow: visible;
+}
+
+.tp-avatar img,
+.tp-avatar span {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: none;
-  margin-top: 2px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 600;
+  border: 2px solid var(--card-bg);
+}
+
+.tp-avatar-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0.85;
+  pointer-events: none;
 }
 
 .tp-main {
@@ -97,7 +171,7 @@ html, body, #app {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .tp-row {
@@ -108,8 +182,8 @@ html, body, #app {
 }
 
 .tp-sender {
-  color: #fff;
-  font-size: 14px;
+  color: var(--text-primary);
+  font-size: 14.5px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -119,28 +193,42 @@ html, body, #app {
 .tp-badge {
   flex: none;
   font-size: 11px;
-  line-height: 1.4;
-  color: #ffe1e1;
-  background: rgba(214, 69, 56, 0.92);
+  line-height: 1.5;
+  color: #fff;
+  background: var(--danger);
   border-radius: 9px;
   padding: 1px 8px;
+  font-weight: 600;
 }
 
 .tp-content {
-  color: #c6cde0;
+  color: var(--text-secondary);
   font-size: 12.5px;
-  line-height: 1.5;
+  line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-all;
-  min-height: 38px;
+  min-height: 39px;
+}
+
+.tp-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .tp-hint {
-  color: #7f88a3;
-  font-size: 11px;
-  margin-top: auto;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.tp-brand {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  letter-spacing: 1px;
 }
 </style>

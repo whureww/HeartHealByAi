@@ -136,19 +136,22 @@ export function checkMessageContent(content: string): ModerationResult {
 
 // ===== AI 复审层：词库通过后由大模型复核隐晦侮辱/淫秽变体 =====
 // 策略：词库秒拦（免费快速）→ AI 复核（分级：pass / suspect / block，结合上下文识别骚扰）
-//       → 同内容哈希缓存 → AI 故障 fail-closed（重试后仍失败按拦截处理，宁可错拦不可放过）
+//       → pass 结论缓存（block/suspect 不缓存，防止误判长期毒化缓存把正常内容拦死）
+//       → AI 故障 fail-open（词库仍生效，AI 层缺失不阻断正常聊天；熔断 60 秒内跳过 AI 复核，
+//         避免每条消息都等待超时。此前 fail-closed 会在 AI 抖动时把「你好」这类正常消息
+//         连续拦截 60 秒，体验不可接受）
 
 import { callAIJson } from './aiClient';
 import { createHash } from 'crypto';
 
-// 审核结论缓存：内容 SHA256 → 结论（上限 500 条，满了清最早的）
+// 审核结论缓存：内容 SHA256 → pass 结论（上限 500 条，满了清最早的）
 const AI_VERDICT_CACHE = new Map<string, ModerationResult>();
 const AI_CACHE_MAX = 500;
 
 // 进行中的审核去重：同一内容并发发送只发起一次 AI 调用
 const AI_PENDING = new Map<string, Promise<ModerationResult>>();
 
-// 熔断器：AI 连续不可用时 60 秒内直接按拦截处理，不再逐条等待超时
+// 熔断器：AI 连续不可用时 60 秒内跳过 AI 复核（词库仍在生效）
 let AI_DOWN_UNTIL = 0;
 
 function aiCacheKey(content: string): string {
@@ -157,9 +160,9 @@ function aiCacheKey(content: string): string {
 
 /** AI 复核（分级结论），供 checkMessageContentAI 调用 */
 async function aiReview(content: string, context?: ModerationContextItem[]): Promise<ModerationResult> {
-    // 熔断期内直接拦截，避免每条消息都等 2 轮超时
+    // 熔断期内跳过 AI 复核直接放行（词库已通过），避免每条消息都等待超时
     if (Date.now() < AI_DOWN_UNTIL) {
-        return { ok: false, hit: '审核服务暂不可用，请稍后重试' };
+        return { ok: true };
     }
 
     const key = aiCacheKey(content);
@@ -178,12 +181,12 @@ async function aiReview(content: string, context?: ModerationContextItem[]): Pro
             const verdict = await callAIJson(
                 '你是内容安全审核员。判断【待审消息】在心理咨询平台场景下是否包含：' +
                 '侮辱谩骂（含谐音、拆字、拼音缩写、形近字等变体）、淫秽色情、人身攻击、恶意骚扰。' +
-                '注意：正常表达负面情绪、倾诉痛苦、心理咨询相关内容不算违规；' +
+                '注意：正常表达负面情绪、倾诉痛苦、心理咨询相关内容、日常问候语都不算违规；' +
                 '结合【最近聊天上下文】判断，孤立看模糊但结合上下文构成骚扰或攻击的应判 block。' +
                 '分级标准：block=明确违规；suspect=疑似隐晦变体但把握不足；pass=正常内容。' +
                 '只输出 JSON：{"level":"pass"} 或 {"level":"suspect","reason":"简短中文原因"} 或 {"level":"block","reason":"简短中文原因"}',
                 `【待审消息】${String(content).slice(0, 500)}${ctxText}`,
-                { temperature: 0.1, maxTokens: 200, timeout: 15000, retries: 2, label: 'AI 审核' }
+                { temperature: 0.1, maxTokens: 200, timeout: 12000, retries: 1, label: 'AI 审核' }
             );
 
             // 解析分级结论；兼容旧格式 {"ok": false}
@@ -200,18 +203,22 @@ async function aiReview(content: string, context?: ModerationContextItem[]): Pro
                 result = { ok: true };
             }
 
-            if (AI_VERDICT_CACHE.size >= AI_CACHE_MAX) {
+            // 仅缓存 pass 结论：block/suspect 每次重新评审，防止模型偶发误判
+            // 把正常内容（如「你好」）永久写进缓存导致后续发送全部被拦
+            if (result.ok && AI_VERDICT_CACHE.size >= AI_CACHE_MAX) {
                 const first = AI_VERDICT_CACHE.keys().next().value;
                 if (first) AI_VERDICT_CACHE.delete(first);
             }
-            AI_VERDICT_CACHE.set(key, result);
+            if (result.ok) {
+                AI_VERDICT_CACHE.set(key, result);
+            }
             return result;
         } catch (e) {
-            // fail-closed：AI 不可用时按拦截处理（含未配置 AI_API_KEY 的情况），
-            // 并触发 60 秒熔断，避免刷消息时每条都等待重试超时
+            // fail-open：AI 不可用时放行（词库已通过，基础防线仍在），
+            // 并触发 60 秒熔断跳过 AI 复核，避免刷消息时每条都等待重试超时
             AI_DOWN_UNTIL = Date.now() + 60_000;
-            console.error('[AI 审核] 服务不可用，按拦截处理（熔断 60s）:', (e as Error).message);
-            return { ok: false, hit: '审核服务暂不可用，请稍后重试' };
+            console.error('[AI 审核] 服务不可用，本次放行并熔断 60s（词库防线仍生效）:', (e as Error).message);
+            return { ok: true };
         } finally {
             AI_PENDING.delete(key);
         }

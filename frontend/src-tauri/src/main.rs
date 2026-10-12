@@ -407,8 +407,8 @@ fn clear_taskbar_preview(window: tauri::WebviewWindow) -> Result<(), String> {
 }
 
 // ===== 托盘 QQ 化：未读角标 + 整图标频闪 + 动态 tooltip + 悬浮消息卡片 =====
-// 后台收到消息时托盘图标叠加红色数字角标，并与「整图标压暗帧」交替闪烁（QQ 式
-// 整体闪烁，而非仅角标变化）；鼠标悬浮托盘图标弹出消息卡片小窗，点击直达聊天。
+// 后台收到消息时托盘图标叠加红色数字角标，并与「全透明帧」交替（QQ 式整体
+// 消失/重现闪烁，而非明暗变化）；鼠标悬浮托盘图标弹出消息卡片小窗，点击直达聊天。
 
 const TRAY_ID: &str = "xinyu-tray";
 const TRAY_TOOLTIP_DEFAULT: &str = "心愈 · 心理健康系统";
@@ -417,13 +417,14 @@ static TRAY_FLASH: AtomicBool = AtomicBool::new(false);
 /// 当前角标档位：1..=8 显示数字，9 表示 9+
 static TRAY_BADGE: AtomicUsize = AtomicUsize::new(1);
 
-/// 托盘悬浮卡片展示的未读消息（最新一条 + 未读总数 + 所属预约 id）
+/// 托盘悬浮卡片展示的未读消息（最新一条 + 未读总数 + 所属预约 id + 发送者头像）
 #[derive(Clone, serde::Serialize)]
 struct TrayMsg {
     sender: String,
     content: String,
     unread: u32,
     appointment_id: Option<u64>,
+    avatar: Option<String>,
 }
 static TRAY_MSG: std::sync::Mutex<Option<TrayMsg>> = std::sync::Mutex::new(None);
 /// 鼠标是否悬浮在托盘卡片上（悬浮期间不隐藏）
@@ -431,13 +432,12 @@ static POPUP_HOVER: AtomicBool = AtomicBool::new(false);
 /// 卡片隐藏任务代际：每次重新触发隐藏时递增，旧任务发现代际不符自行作废
 static POPUP_HIDE_GEN: AtomicUsize = AtomicUsize::new(0);
 
-/// 内置托盘图标资源：cache[0..7]=badge_1..8，cache[8]=badge_9p，
-/// cache[9..16]=badge_1..8 的整图标暗帧，cache[17]=badge_9p 暗帧
-fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 18] {
-    static CACHE: std::sync::OnceLock<[Option<tauri::image::Image<'static>>; 18]> =
+/// 内置托盘图标资源：cache[0..7]=badge_1..8，cache[8]=badge_9p，cache[9]=全透明帧（频闪「灭」帧）
+fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 10] {
+    static CACHE: std::sync::OnceLock<[Option<tauri::image::Image<'static>>; 10]> =
         std::sync::OnceLock::new();
     CACHE.get_or_init(|| {
-        const ENTRIES: [(&[u8], usize); 18] = [
+        const ENTRIES: [(&[u8], usize); 10] = [
             (include_bytes!("../icons/tray/badge_1.png"), 0),
             (include_bytes!("../icons/tray/badge_2.png"), 1),
             (include_bytes!("../icons/tray/badge_3.png"), 2),
@@ -447,17 +447,9 @@ fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 18] {
             (include_bytes!("../icons/tray/badge_7.png"), 6),
             (include_bytes!("../icons/tray/badge_8.png"), 7),
             (include_bytes!("../icons/tray/badge_9p.png"), 8),
-            (include_bytes!("../icons/tray/badge_1_dim.png"), 9),
-            (include_bytes!("../icons/tray/badge_2_dim.png"), 10),
-            (include_bytes!("../icons/tray/badge_3_dim.png"), 11),
-            (include_bytes!("../icons/tray/badge_4_dim.png"), 12),
-            (include_bytes!("../icons/tray/badge_5_dim.png"), 13),
-            (include_bytes!("../icons/tray/badge_6_dim.png"), 14),
-            (include_bytes!("../icons/tray/badge_7_dim.png"), 15),
-            (include_bytes!("../icons/tray/badge_8_dim.png"), 16),
-            (include_bytes!("../icons/tray/badge_9p_dim.png"), 17),
+            (include_bytes!("../icons/tray/blank.png"), 9),
         ];
-        let mut arr: [Option<tauri::image::Image<'static>>; 18] = std::array::from_fn(|_| None);
+        let mut arr: [Option<tauri::image::Image<'static>>; 10] = std::array::from_fn(|_| None);
         for (bytes, slot) in ENTRIES {
             arr[slot] = tauri::image::Image::from_bytes(bytes).ok();
         }
@@ -470,38 +462,37 @@ fn badge_image(n: usize) -> Option<tauri::image::Image<'static>> {
     tray_icon_cache()[idx].clone()
 }
 
-/// 与角标帧对应的整图标暗帧（灰度压暗，频闪的「灭」帧）
-fn badge_dim_image(n: usize) -> Option<tauri::image::Image<'static>> {
-    let idx = if n >= 9 { 17 } else { 8 + n.max(1) };
-    tray_icon_cache()[idx].clone()
+/// 频闪「灭」帧：全透明图标（托盘图标短暂消失，QQ 式消失/重现闪烁）
+fn blank_image() -> Option<tauri::image::Image<'static>> {
+    tray_icon_cache()[9].clone()
 }
 
-/// 频闪线程：未读时 600ms 交替「角标帧 ↔ 整图标暗帧」（QQ 式整体明暗闪烁），
+/// 频闪线程：未读时 600ms 交替「角标帧 ↔ 全透明帧」（QQ 式整体消失/重现），
 /// 停止后恢复常态图标（仅恢复一次）
 fn spawn_tray_flasher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        let mut dim_shown = false;
+        let mut blank_shown = false;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(600));
             let Some(tray) = app.tray_by_id(TRAY_ID) else { continue };
             if !TRAY_FLASH.load(Ordering::SeqCst) {
-                if dim_shown {
-                    dim_shown = false;
+                if blank_shown {
+                    blank_shown = false;
                     if let Some(icon) = app.default_window_icon().cloned() {
                         let _ = tray.set_icon(Some(icon));
                     }
                 }
                 continue;
             }
-            let next = if dim_shown {
+            let next = if blank_shown {
                 badge_image(TRAY_BADGE.load(Ordering::SeqCst))
             } else {
-                badge_dim_image(TRAY_BADGE.load(Ordering::SeqCst))
+                blank_image()
             };
             if let Some(img) = next {
                 let _ = tray.set_icon(Some(img));
             }
-            dim_shown = !dim_shown;
+            blank_shown = !blank_shown;
         }
     });
 }
@@ -515,6 +506,7 @@ fn update_tray_unread(
     content: String,
     unread: u32,
     appointment_id: Option<u64>,
+    avatar: Option<String>,
 ) -> Result<(), String> {
     let idx = if unread >= 9 { 9 } else { (unread as usize).clamp(1, 8) };
     TRAY_BADGE.store(idx, Ordering::SeqCst);
@@ -538,6 +530,7 @@ fn update_tray_unread(
         content: content.clone(),
         unread,
         appointment_id,
+        avatar,
     };
     if let Ok(mut slot) = TRAY_MSG.lock() {
         *slot = Some(msg.clone());

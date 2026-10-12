@@ -275,7 +275,9 @@ io.on('connection', (socket) => {
                 socket.emit('message-blocked', {
                     appointmentId: data.appointmentId,
                     content: data.content,
-                    reason: '消息包含不文明或违规内容，已被拦截'
+                    reason: moderation.hit
+                        ? `消息包含违规内容（${moderation.hit}），已被拦截`
+                        : '消息包含不文明或违规内容，已被拦截'
                 });
                 return;
             }
@@ -287,10 +289,11 @@ io.on('connection', (socket) => {
             );
 
             const [senderRows] = await pool.execute(
-                'SELECT username FROM users WHERE id = ?',
+                'SELECT username, avatar FROM users WHERE id = ?',
                 [senderId]
             );
             const senderName = (senderRows as any[])[0]?.username || '未知用户';
+            const senderAvatar = (senderRows as any[])[0]?.avatar || null;
 
             const messageData = {
                 id: Date.now(),
@@ -299,6 +302,7 @@ io.on('connection', (socket) => {
                 content: data.content,
                 appointment_id: data.appointmentId,
                 sender_name: senderName,
+                sender_avatar: senderAvatar,
                 created_at: new Date().toISOString()
             };
 
@@ -309,6 +313,7 @@ io.on('connection', (socket) => {
                 receiverSocket.emit('chat-notification', {
                     appointmentId: data.appointmentId,
                     senderName,
+                    senderAvatar,
                     content: data.content
                 });
             }
