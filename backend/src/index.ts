@@ -158,6 +158,14 @@ io.on('connection', (socket) => {
         (socket as any).userId = userId;
 
         broadcastUserStatus(userId, true);
+
+        // 下发当前在线用户快照：前端据此初始化专家在线状态，
+        // 否则只能靠之后发生的上下线事件增量获知，列表页会误显「离线」
+        const onlineIds = Array.from(userOnlineStatus.entries())
+            .filter(([, online]) => online)
+            .map(([id]) => id);
+        socket.emit('online-users', { userIds: onlineIds });
+
         console.log(`用户 ${userId} 已认证，当前连接数: ${socketSet.size}`);
     });
 

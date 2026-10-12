@@ -101,7 +101,7 @@
         <div class="card">
           <h3>在线心理专家问诊预约</h3>
           <div v-if="loading.doctors" class="loading-text">加载中...</div>
-          <div class="scroll-content">
+          <div class="scroll-content doc-scroll">
             <div class="doc-grid">
               <div v-for="doc in userStore.doctors" :key="doc.id" class="doc-card">
                 <div class="doc-card-head">
@@ -728,6 +728,11 @@ const setupDashboardListeners = (sock: Socket) => {
     console.log(`用户 ${data.userId} 状态: ${data.isOnline ? '在线' : '离线'}`)
   })
 
+  // 认证后收到的在线名单快照：整体替换，修正打开页面时已在线专家的误显离线
+  sock.on('online-users', (data: { userIds: number[] }) => {
+    onlineUserIds.value = new Set(data.userIds || [])
+  })
+
   // 被强制登出（服务器要求）
   sock.on('force-logout', (data: { message: string }) => {
     alert(data.message || '您的账号已登出')
@@ -924,7 +929,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.2.6'
+  const cur = updateInfo.value?.current_version || '0.2.7'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -2035,6 +2040,11 @@ const scrollToBottom = () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 14px;
+}
+
+/* 悬浮上浮 translateY(-2px) 会把首行卡片顶出滚动区被裁切，预留顶部空间 */
+.doc-scroll {
+  padding-top: 6px;
 }
 
 .doc-card {
