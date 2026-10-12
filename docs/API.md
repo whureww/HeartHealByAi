@@ -86,6 +86,8 @@ const res = await request.post('/users/login', { email: "test@example.com", pass
 - [八、专家端（/api/expert）](#八专家端apiexpert)
 - [九、Socket.IO 实时事件](#九socketio-实时事件)
 - [十、Tauri 本地命令](#十tauri-本地命令)
+- [附录 A、数据库与数据表设计](#附录-a数据库与数据表设计)
+- [附录 B、接口—数据表映射总表](#附录-b接口数据表映射总表)
 
 ---
 
@@ -1517,3 +1519,367 @@ data: [DONE]
 | 409 | 冲突（重复预约、邮箱已注册） |
 | 429 | 请求过于频繁 |
 | 500 / 502 / 503 | 服务器 / AI 服务异常 |
+
+---
+
+# 附录 A、数据库与数据表设计
+
+## A.0 存储总览
+
+| 存储 | 库 / 实例 | 用途 |
+|------|-----------|------|
+| **MySQL 8.x** | 库名 **`xinyu`**（字符集 `utf8mb4`，排序 `utf8mb4_unicode_ci`，引擎 InnoDB） | 全部业务持久化数据，共 **12 张表** |
+| **Redis** | 默认 db0 | 验证码、登录会话 / 单点登录、token 黑名单、接口限流、敏感词内存缓存 |
+
+建表脚本：`backend/db/schema.sql`（`mysql -u root -p < schema.sql`）。
+
+**表关系概览：**
+```
+users（用户，role 区分 1用户/2专家/3管理员）
+ ├─< user_oauth          第三方账号绑定（微信/QQ）
+ ├─< doctors             专家名片（role=2 用户 1:1，user_id 关联）
+ ├─< appointment_records 预约（user_id → users，doctor_id → doctors）
+ │     └─< expert_chat   预约内即时聊天（sender_id/receiver_id → users）
+ ├─< chat_records        与 AI 的聊天记录
+ ├─< analysis_reports    AI 心理分析报告
+ ├─< ai_test_papers      AI 实时生成的问卷
+ └─< test_results        测评结果（test_id → psychological_tests）
+                                   └─< test_questions 量表题目
+psychological_tests（量表主表）
+sensitive_words（敏感词库，全局共享，不属于某个用户）
+```
+
+---
+
+## A.1 `users` 用户表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 用户 ID |
+| `username` | VARCHAR(50) | 非空, 唯一 | 昵称 |
+| `email` | VARCHAR(100) | 非空, 唯一 | 邮箱（登录账号） |
+| `phone` | VARCHAR(20) | 可空, 唯一 | 手机号 |
+| `password_hash` | VARCHAR(100) | 非空 | bcrypt 哈希（rounds=12） |
+| `role` | TINYINT | 默认 1 | 1=普通用户 2=专家 3=管理员 |
+| `avatar` | LONGTEXT | 可空 | 头像（base64 data URI） |
+| `created_at` | DATETIME | 默认当前时间 | 注册时间 |
+| `updated_at` | DATETIME | 自动更新 | 更新时间 |
+
+唯一键：`uk_users_email(email)`、`uk_users_username(username)`、`uk_users_phone(phone)`
+
+---
+
+## A.2 `doctors` 专家（名片）表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 专家 ID（业务上的 doctor_id） |
+| `name` | VARCHAR(50) | 非空 | 姓名 |
+| `title` | VARCHAR(50) | 默认 '' | 职称，如「国家二级心理咨询师」 |
+| `specialty` | VARCHAR(200) | 默认 '' | 擅长领域 |
+| `intro` | TEXT | — | 名片简介 |
+| `user_id` | INT UNSIGNED | 可空 | 关联 `users.id`（role=2 的账号） |
+| `status` | TINYINT | 默认 1 | **0=下架 / 1=上架 / 2=待审核** |
+| `created_at` | DATETIME | 默认当前时间 | 创建时间 |
+
+---
+
+## A.3 `appointment_records` 预约记录表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 预约 ID |
+| `user_id` | INT UNSIGNED | 非空, 索引 | 预约用户 → `users.id` |
+| `doctor_id` | INT UNSIGNED | 非空, 索引 | 被预约专家 → `doctors.id` |
+| `status` | VARCHAR(20) | 默认 `pending` | pending/confirmed/rejected/completed/cancelled |
+| `created_at` | DATETIME | 默认当前时间 | 创建时间 |
+
+> 注意：schema 注释里只列了 4 种状态，代码实际还使用 `rejected`（专家拒绝）。
+
+---
+
+## A.4 `psychological_tests` 心理测评量表表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 量表 ID |
+| `code` | VARCHAR(30) | 非空 | 量表编码，如 `PHQ9`；AI 测评固定为 `AI-GEN` |
+| `name` | VARCHAR(100) | 非空 | 量表名称 |
+| `description` | TEXT | — | 描述 |
+| `category` | VARCHAR(50) | 默认 '' | 分类（抑郁/焦虑/情绪/智能…） |
+| `total_questions` | INT | 默认 0 | 题目总数 |
+| `estimated_minutes` | INT | 默认 5 | 预计用时（分钟） |
+| `scoring_method` | VARCHAR(30) | 默认 `sum` | 计分方式，如 `sum`、`ai` |
+| `result_levels` | TEXT | — | JSON 分级规则 `[{min,max,level,desc}]` |
+| `status` | TINYINT | 默认 0 | **0=未上架(待审核) / 1=已上架 / 2=已下架** |
+| `created_at` | DATETIME | 默认当前时间 | 创建时间 |
+
+`result_levels` JSON 示例：
+```json
+[
+  { "min": 0, "max": 4, "level": "正常", "desc": "状态良好" },
+  { "min": 5, "max": 9, "level": "轻度", "desc": "轻度困扰" }
+]
+```
+
+---
+
+## A.5 `test_questions` 测评题目表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 题目 ID |
+| `test_id` | INT UNSIGNED | 非空, 索引 | 所属量表 → `psychological_tests.id` |
+| `question_number` | INT | 非空 | 题号（从 1 开始） |
+| `content` | TEXT | 非空 | 题干 |
+| `dimension` | VARCHAR(50) | 可空 | 测评维度 |
+| `reverse_scoring` | TINYINT | 默认 0 | 是否反向计分（1=是） |
+| `options` | TEXT | — | JSON 选项数组 `[{score,text}]` |
+
+`options` JSON 示例：
+```json
+[
+  { "score": 0, "text": "完全不会" },
+  { "score": 1, "text": "几天" },
+  { "score": 2, "text": "一半以上天数" },
+  { "score": 3, "text": "几乎每天" }
+]
+```
+
+---
+
+## A.6 `test_results` 测评结果表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 结果 ID |
+| `user_id` | INT UNSIGNED | 非空, 索引 | 作答用户 → `users.id` |
+| `test_id` | INT UNSIGNED | 非空 | 量表 → `psychological_tests.id` |
+| `test_code` | VARCHAR(30) | 默认 '' | 冗余量表编码 |
+| `answers` | TEXT | — | JSON 作答明细 |
+| `total_score` | INT | 默认 0 | 总分 |
+| `result_level` | VARCHAR(30) | 默认 '' | 分级（正常/轻度/中度/重度） |
+| `result_desc` | TEXT | — | 结果描述（AI 测评含分析正文） |
+| `completed_at` | DATETIME | 默认当前时间 | 完成时间 |
+
+---
+
+## A.7 `ai_test_papers` AI 生成问卷表
+
+每次调用 AI 智能测评时，把当次完整题目与选项落库，提交评分时凭 `paper_id` 取回，保证评分依据与用户所见一致。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 问卷 ID（即接口返回的 `paper_id`） |
+| `user_id` | INT UNSIGNED | 非空, 索引 | 生成用户 → `users.id` |
+| `questions` | TEXT | 非空 | JSON `[{number,content,options:[{label,text,score}]}]` |
+| `created_at` | DATETIME | 默认当前时间 | 生成时间 |
+
+---
+
+## A.8 `chat_records` AI 聊天记录表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 记录 ID |
+| `user_id` | INT UNSIGNED | 非空, 索引 | 用户 → `users.id` |
+| `content` | TEXT | 非空 | 消息内容 |
+| `type` | VARCHAR(20) | 默认 `user` | `user`=用户发送 / `ai`=AI 回复 |
+| `created_at` | DATETIME | 默认当前时间 | 时间 |
+
+---
+
+## A.9 `analysis_reports` AI 分析报告表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 报告 ID |
+| `user_id` | INT UNSIGNED | 非空, 索引 | 用户 → `users.id` |
+| `start_date` | DATE | 非空 | 分析区间起 |
+| `end_date` | DATE | 非空 | 分析区间止 |
+| `content` | LONGTEXT | — | 报告正文（Markdown） |
+| `created_at` | DATETIME | 默认当前时间 | 生成时间 |
+
+---
+
+## A.10 `expert_chat` 专家咨询聊天表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 消息 ID |
+| `sender_id` | INT UNSIGNED | 非空 | 发送方 → `users.id` |
+| `receiver_id` | INT UNSIGNED | 非空 | 接收方 → `users.id`（服务端按预约关系推导） |
+| `content` | TEXT | 非空 | 消息内容（经过敏感词+AI 审核） |
+| `appointment_id` | INT UNSIGNED | 非空, 索引 | 所属预约 → `appointment_records.id` |
+| `is_read` | TINYINT | 默认 0 | 是否已读（1=已读） |
+| `created_at` | DATETIME | 默认当前时间 | 发送时间 |
+
+---
+
+## A.11 `user_oauth` 第三方 OAuth 绑定表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 绑定 ID |
+| `user_id` | INT UNSIGNED | 非空 | 关联用户 → `users.id` |
+| `provider` | VARCHAR(20) | 非空 | `wechat` / `qq` |
+| `openid` | VARCHAR(100) | 非空 | 第三方 openid |
+| `unionid` | VARCHAR(100) | 可空 | 微信 unionid |
+| `access_token` | VARCHAR(255) | 默认 '' | 访问令牌（占位） |
+| `created_at` | DATETIME | 默认当前时间 | 绑定时间 |
+
+唯一键：`uk_oauth(provider, openid)`
+
+---
+
+## A.12 `sensitive_words` 敏感词库表
+
+服务启动时加载进内存；表为空自动播种内置默认词库；管理员增删后实时重载。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INT UNSIGNED | PK, 自增 | 词 ID |
+| `word` | VARCHAR(64) | 非空, 唯一 | 敏感词 |
+| `category` | VARCHAR(20) | 默认 `其他` | 侮辱/色情/违禁/自伤/缩写/其他 |
+| `is_short` | TINYINT | 默认 0 | 1=缩写短词（独立词边界匹配）/ 0=主词（包含匹配） |
+| `created_at` | DATETIME | 默认当前时间 | 添加时间 |
+
+---
+
+## A.13 Redis 键（Key）说明
+
+| Key 模式 | 类型 | TTL | 用途 |
+|----------|------|-----|------|
+| `captcha:{时间戳}:{随机}` | string | 300s | 图形验证码（值为 4 位数字），ID 通过响应头 `X-Captcha-Id` 返回 |
+| `sms:{手机号}` | string | 300s | 短信验证码 |
+| `register:{邮箱}` | string | 600s | 注册邮箱验证码 |
+| `forget:{邮箱}` | string | 600s | 找回密码验证码 |
+| `rate_limit:sms:{手机号}` | string | 60s | 短信发送限流 |
+| `rate_limit:register_code:{邮箱}` | string | 60s | 注册验证码限流 |
+| `rate_limit:send_code:{邮箱}` | string | 60s | 找回密码验证码限流 |
+| `user_onlyid:{userId}` | string | 7 天 | 用户当前会话 onlyId（单点登录，新登录覆盖旧值） |
+| `onlyid_token:{onlyId}` | string | 7 天 | onlyId → JWT |
+| `token_onlyid:{token}` | string | 7 天 | JWT → onlyId（登出时反查清理） |
+| `token_blacklist:{token}` | string | token 剩余有效期 | 已注销 / 被刷新的 JWT 黑名单 |
+| `password_changed:{userId}` | string | — | 标记密码已修改 |
+| 敏感词缓存 | 内存/Redis | — | 启动加载 `sensitive_words`，增删后调用 `invalidateWords()` 实时失效 |
+
+---
+
+# 附录 B、接口—数据表映射总表
+
+> 标注每个接口实际读写的 MySQL 表（`读`=SELECT，`写`=INSERT/UPDATE/DELETE）与 Redis 操作。
+
+## B.1 用户认证 `/api/users`
+
+| 接口 | 方法 | 操作的数据表 | Redis |
+|------|------|-------------|-------|
+| `/users/register/send-code` | POST | 读 `users`（邮箱查重） | 写 `register:{email}`、限流键 |
+| `/users/register` | POST | 读 `users`（查重）；写 `users` | 读验证码；写 `user_onlyid`/`onlyid_token`/`token_onlyid` |
+| `/users/login` | POST | 读 `users` | 写会话三键（单点登录踢旧会话） |
+| `/users/master-login` | POST | 读 `users`（管理员+目标账号） | 写会话三键 |
+| `/users/logout` | POST | — | 写 `token_blacklist`；删会话键 |
+| `/users/refresh-token` | POST | 读 `users` | 旧 token 入黑名单；写新会话三键 |
+| `/users/forget-password/send-code` | POST | 读 `users`（判断是否注册） | 写 `forget:{email}`、限流键 |
+| `/users/forget-password/reset` | POST | 读 `users`；写 `users.password_hash` | 读/删验证码；删旧会话键 |
+| `/users/me`、`/users/info`、`/users/profile`(GET) | GET | 读 `users` | — |
+| `/users/profile`(PUT) | PUT | 读 `users`（昵称查重）；写 `users` | — |
+| `/users/avatar`(PUT) | PUT | 写 `users.avatar` | — |
+| `/users/stats` | GET | 读 `chat_records`、`test_results`、`appointment_records`、`analysis_reports`（各 COUNT） | — |
+| `/users/clear-all` | POST | 删 `chat_records`、`test_results`、`analysis_reports`、`appointment_records` | — |
+
+## B.2 第三方认证 `/api/auth`
+
+| 接口 | 方法 | 操作的数据表 | Redis |
+|------|------|-------------|-------|
+| `/auth/captcha` | GET | — | 写图形验证码键 |
+| `/auth/sms-code` | POST | — | 读图形验证码；写 `sms:{phone}`、限流键 |
+| `/auth/sms-login` | POST | 读 `users`；新用户写 `users` | 读短信验证码；写会话三键 |
+| `/auth/oauth/:provider` | GET | — | —（返回第三方授权 URL） |
+| `/auth/oauth/callback/:provider` | GET | 读 `user_oauth`；新用户写 `users`+`user_oauth` | 写会话三键 |
+
+## B.3 AI `/api/ai`
+
+| 接口 | 方法 | 操作的数据表 | 说明 |
+|------|------|-------------|------|
+| `/ai/chat` | POST | 不读写数据库 | 直接转发大模型 API（不落库） |
+| `/ai/chat-stream` | POST | 不读写数据库 | SSE 流式转发大模型 |
+| `/ai/summarize-report` | POST | 不读写数据库 | 入参由前端从各表组装，仅调大模型 |
+
+> AI 聊天内容的持久化由前端另行调用 `POST /users/chat` 写入 `chat_records`；报告持久化调用 `POST /users/analysis-report` 写入 `analysis_reports`。
+
+## B.4 测评 `/api/tests` 与 `/users/tests`
+
+| 接口 | 方法 | 操作的数据表 | Redis |
+|------|------|-------------|-------|
+| `/users/tests`、`/tests/list` | GET | 读 `psychological_tests`（status=1 且 code≠AI-GEN） | — |
+| `/tests/questions/{testId}` | GET | 读 `psychological_tests`、`test_questions` | — |
+| `/tests/submit` | POST | 读 `psychological_tests`（取分级规则）；写 `test_results` | — |
+| `/tests/history` | GET | 读 `test_results` JOIN `psychological_tests` | — |
+| `/tests/result/{resultId}` | GET | 读 `test_results` JOIN `psychological_tests` | — |
+| `/tests/ai/questions` | POST | 写 `ai_test_papers` | —（调大模型生成） |
+| `/tests/ai/submit` | POST | 读 `ai_test_papers`；upsert `psychological_tests`(AI-GEN)；写 `test_results` | —（调大模型评分） |
+
+## B.5 专家与预约（普通用户侧）`/api/users`
+
+| 接口 | 方法 | 操作的数据表 |
+|------|------|-------------|
+| `/users/doctors` | GET | 读 `doctors` LEFT JOIN `users`（取头像），仅 status=1 |
+| `/users/appointments`(POST) | POST | 读 `doctors`、`appointment_records`（去重）；写 `appointment_records` |
+| `/users/appointments`(GET) | GET | 读 `appointment_records` JOIN `doctors` |
+| `/users/appointments/{id}/cancel`(PUT) | PUT | 读/写 `appointment_records`（Socket 广播） |
+| `/users/chat-history` | GET | 读 `chat_records` |
+| `/users/chat` | POST | 写 `chat_records` |
+| `/users/analysis-report`(POST) | POST | 写 `analysis_reports` |
+| `/users/analysis-reports`(GET) | GET | 读 `analysis_reports` |
+
+## B.6 内容审核 `/api/moderation`
+
+| 接口 | 方法 | 操作的数据表 / 缓存 |
+|------|------|---------------------|
+| `/moderation/precheck` | POST | 读内存敏感词（源自 `sensitive_words` 表，启动加载），不查库 |
+
+## B.7 管理后台 `/api/admin`（均需 role=3）
+
+| 接口 | 方法 | 操作的数据表 |
+|------|------|-------------|
+| `/admin/users`(GET) | GET | 读 `users`（分页 + keyword 模糊搜索 + COUNT） |
+| `/admin/users`(POST) | POST | 读 `users`（邮箱查重）；写 `users`；role=2 时写 `doctors` |
+| `/admin/users/{id}/role`(PUT) | PUT | 写 `users.role` |
+| `/admin/users/{id}`(DELETE) | DELETE | 删 `appointment_records`、`test_results`、`chat_records`、`analysis_reports`、`expert_chat`、`user_oauth`、`doctors`、`users` |
+| `/admin/stats` | GET | 读 `users`、`doctors`、`appointment_records`、`test_results`（各 COUNT） |
+| `/admin/tests`(GET) | GET | 读 `psychological_tests` |
+| `/admin/tests`(POST) | POST | 写 `psychological_tests` + 批量写 `test_questions` |
+| `/admin/tests/{id}/status`(PUT) | PUT | 写 `psychological_tests.status` |
+| `/admin/tests/{id}`(DELETE) | DELETE | 删 `test_questions` + `psychological_tests` |
+| `/admin/appointments`(GET) | GET | 读 `appointment_records` JOIN `users` JOIN `doctors` |
+| `/admin/appointments`(POST) | POST | 读 `users`、`doctors`；写 `appointment_records` |
+| `/admin/appointments/{id}`(DELETE) | DELETE | 删 `appointment_records` |
+| `/admin/doctor-cards`(GET) | GET | 读 `doctors` LEFT JOIN `users`（取邮箱） |
+| `/admin/doctor-cards/{id}/review`(PUT) | PUT | 写 `doctors.status`（approve→1 / reject→0，Socket 广播） |
+| `/admin/sensitive-words`(GET) | GET | 读 `sensitive_words` |
+| `/admin/sensitive-words`(POST) | POST | 写 `sensitive_words`；调 `invalidateWords()` 刷新内存缓存 |
+| `/admin/sensitive-words/{id}`(DELETE) | DELETE | 删 `sensitive_words`；刷新内存缓存 |
+
+## B.8 专家端 `/api/expert`（多需 role=2）
+
+| 接口 | 方法 | 操作的数据表 |
+|------|------|-------------|
+| `/expert/my-card`(GET) | GET | 读 `doctors`（按 user_id） |
+| `/expert/my-card`(PUT) | PUT | 读/写 `doctors`（保存后 status 置 2 待审核） |
+| `/expert/appointments`(GET) | GET | 读 `doctors`（取 doctor_id）；读 `appointment_records` JOIN `users` |
+| `/expert/appointments/{id}`(GET) | GET | 读 `appointment_records` JOIN `users`、`doctors`；读 `test_results` JOIN `psychological_tests` + `test_questions`（最近 5 次） |
+| `/expert/appointments/{id}/status`(PUT) | PUT | 读 `doctors`；写 `appointment_records.status`（Socket 广播） |
+| `/expert/stats` | GET | 读 `doctors`、`appointment_records`（多条件 COUNT + COUNT DISTINCT） |
+| `/expert/chat/{appointmentId}`(GET) | GET | 读 `expert_chat` JOIN `users`（双方姓名），需预约参与方 |
+| `/expert/chat`(POST) | POST | 读 `expert_chat`（取近 6 条作 AI 审核上下文）；写 `expert_chat`；读 `sensitive_words` 词库审核 |
+
+## B.9 Socket.IO 事件对应的数据操作
+
+| 事件 | 数据表操作 |
+|------|-----------|
+| `authenticate` | 校验 JWT（Redis 会话/黑名单），维护内存在线表 `userSockets` |
+| `send-message` | 读 `expert_chat`（审核上下文）；写 `expert_chat`；读 `users`（发送者昵称）；违规不写库 |
+| `mark-read` | 写 `expert_chat.is_read=1` |
+| `join-room` / 状态广播 | 不查库，仅内存房间 + Redis 会话校验 |
+
