@@ -333,10 +333,16 @@ router.post('/submit', authenticate, asyncHandler(async (req: Request, res: Resp
 router.get('/history', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
 
+    // LEFT JOIN + 名称兜底：量表被管理员删除后历史作答仍可见（按存库编码显示），AI 量表恢复固定名
     const [rows] = await pool.execute(
-        `SELECT r.id, t.code, t.name, r.total_score, r.result_level, r.result_desc, r.completed_at
+        `SELECT r.id,
+                COALESCE(t.code, r.test_code) AS code,
+                COALESCE(t.name,
+                         IF(r.test_code = 'AI-GEN', 'AI 智能测评', NULLIF(r.test_code, '')),
+                         '已删除的量表') AS name,
+                r.total_score, r.result_level, r.result_desc, r.completed_at
          FROM test_results r
-                  JOIN psychological_tests t ON r.test_id = t.id
+                  LEFT JOIN psychological_tests t ON r.test_id = t.id
          WHERE r.user_id = ?
          ORDER BY r.completed_at DESC`,
         [userId]
@@ -357,10 +363,15 @@ router.get('/result/:resultId', authenticate, asyncHandler(async (req: Request, 
         throw new BusinessError('无效的结果ID', 400);
     }
 
+    // LEFT JOIN + 名称兜底：量表删除后详情仍可打开（与历史列表的显示规则一致）
     const [rows] = await pool.execute(
-        `SELECT r.id, r.test_code, t.name, r.answers, r.total_score, r.result_level, r.result_desc, r.completed_at
+        `SELECT r.id, r.test_code,
+                COALESCE(t.name,
+                         IF(r.test_code = 'AI-GEN', 'AI 智能测评', NULLIF(r.test_code, '')),
+                         '已删除的量表') AS name,
+                r.answers, r.total_score, r.result_level, r.result_desc, r.completed_at
          FROM test_results r
-                  JOIN psychological_tests t ON r.test_id = t.id
+                  LEFT JOIN psychological_tests t ON r.test_id = t.id
          WHERE r.id = ? AND r.user_id = ?`,
         [resultId, userId]
     );

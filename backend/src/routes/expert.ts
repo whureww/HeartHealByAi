@@ -202,10 +202,14 @@ router.get('/appointments/:id', authenticate, asyncHandler(async (req: any, res:
     }
     appointment.doctor_user_id = doctorUserId;
 
+    // LEFT JOIN + 名称兜底：量表被删除后专家端仍能看到该用户的测评结果
     const [testRows] = await pool.execute(
-        `SELECT tr.*, pt.name as test_name
+        `SELECT tr.*,
+                COALESCE(pt.name,
+                         IF(tr.test_code = 'AI-GEN', 'AI 智能测评', NULLIF(tr.test_code, '')),
+                         '已删除的量表') AS test_name
          FROM test_results tr
-         JOIN psychological_tests pt ON tr.test_id = pt.id
+         LEFT JOIN psychological_tests pt ON tr.test_id = pt.id
          WHERE tr.user_id = ?
          ORDER BY tr.completed_at DESC
          LIMIT 5`,
