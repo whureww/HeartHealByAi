@@ -580,7 +580,8 @@ router.get('/chat-history', authenticate, asyncHandler(async (req: Request, res:
     const userId = req.user!.id;
 
     const [rows] = await pool.execute(
-        'SELECT id, content, type, created_at FROM chat_records WHERE user_id = ? ORDER BY created_at ASC',
+        // id 次级排序：created_at 为秒级精度，同秒入库（如用户消息与 AI 回复）需按自增 id 稳定排序
+        'SELECT id, content, type, created_at FROM chat_records WHERE user_id = ? ORDER BY created_at ASC, id ASC',
         [userId]
     );
 

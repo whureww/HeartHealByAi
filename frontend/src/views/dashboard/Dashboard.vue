@@ -1243,6 +1243,14 @@ const sendChat = async () => {
   chatInput.value = ''
   scrollToBottom()
 
+  // 用户消息立即落库：流中断/中途关闭应用/AI 返回空时不再连带丢失；
+  // await 保证用户消息先于 AI 回复入库，配合后端 id 次级排序时序才稳定
+  try {
+    await saveChat({ content: val, type: 'user' })
+  } catch (e) {
+    console.error('保存用户消息失败:', e)
+  }
+
   // 2. 构建消息历史
   const messageHistory = chatMessages.value.map(msg => ({
     role: msg.type === 'user' ? 'user' : 'assistant',
@@ -1279,9 +1287,8 @@ const sendChat = async () => {
           chatMessages.value.push({ type: 'ai', content: finalContent })
           streamingContent.value = ''
           
-          // 保存到本地
-          saveChat({ content: val, type: 'user' })
-          saveChat({ content: finalContent, type: 'ai' })
+          // AI 回复落库（用户消息已在发送时保存）
+          void saveChat({ content: finalContent, type: 'ai' }).catch(() => {})
         }
         
         scrollToBottom()
