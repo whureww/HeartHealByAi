@@ -4,7 +4,6 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { isAppointmentParticipant } from '../utils/guards';
-import { checkMessageContentAI } from '../utils/moderation';
 
 const router = Router();
 
@@ -322,58 +321,11 @@ router.get('/chat/:appointmentId', authenticate, asyncHandler(async (req: any, r
          JOIN users sender ON ec.sender_id = sender.id
          JOIN users receiver ON ec.receiver_id = receiver.id
          WHERE ec.appointment_id = ?
-         ORDER BY ec.created_at ASC`,
+         ORDER BY ec.created_at ASC, ec.id ASC`,
         [appointmentId]
     );
 
     res.json({ success: true, data: rows });
-}));
-
-// 发送消息
-router.post('/chat', authenticate, asyncHandler(async (req: any, res: any) => {
-    const { appointmentId, content } = req.body;
-    const senderId = req.user.id;
-
-    if (!appointmentId || !content || !String(content).trim()) {
-        throw new BusinessError('参数不完整', 400);
-    }
-
-    // 安全修复：归属校验，且接收方由服务端按预约关系推导（忽略客户端传值）
-    const part = await isAppointmentParticipant(Number(appointmentId), senderId);
-    if (!part.ok) {
-        throw new BusinessError('预约不存在或无权发送', 404);
-    }
-    const receiverId = senderId === part.userId ? part.doctorUserId : part.userId;
-    if (!receiverId) {
-        throw new BusinessError('预约对方信息缺失', 400);
-    }
-
-    // 内容审核：词库秒拦 + AI 复核隐晦变体（结合上下文）
-    const [ctxRows] = await pool.execute(
-        'SELECT sender_id, content FROM expert_chat WHERE appointment_id = ? ORDER BY id DESC LIMIT 6',
-        [Number(appointmentId)]
-    );
-    const chatContext = (ctxRows as any[])
-        .reverse()
-        .map(r => ({
-            role: Number(r.sender_id) === senderId ? ('user' as const) : ('expert' as const),
-            content: String(r.content || '').slice(0, 200)
-        }));
-    const moderation = await checkMessageContentAI(content, chatContext);
-    if (!moderation.ok) {
-        throw new BusinessError(
-            moderation.hit ? `消息包含违规内容（${moderation.hit}），已被拦截` : '消息包含不文明或违规内容，已被拦截',
-            400
-        );
-    }
-
-    await pool.execute(
-        `INSERT INTO expert_chat (sender_id, receiver_id, content, appointment_id)
-         VALUES (?, ?, ?, ?)`,
-        [senderId, receiverId, content, appointmentId]
-    );
-
-    res.json({ success: true, message: '发送成功' });
 }));
 
 export default router;

@@ -1387,20 +1387,7 @@ data: [DONE]
 }
 ```
 
-#### 发送消息（HTTP）
-
-`POST /expert/chat`
-```json
-{
-  "appointmentId": 56,
-  "content": "你好，有什么可以帮你？"
-}
-```
-```json
-{ "success": true, "message": "发送成功" }
-```
-> `receiverId` 由服务端按预约关系自动推导，无需传。消息会经过敏感词 + AI 双重审核，违规返回：
-> `{ "success": false, "message": "消息包含不文明或违规内容，已被拦截" }`（400）
+> 聊天消息收发统一走 Socket.IO `send-message` 事件（含敏感词 + AI 双重审核、禁言/封禁拦截与实时广播），HTTP 端不再提供发送接口。
 
 ---
 
@@ -1872,7 +1859,6 @@ sensitive_words（敏感词库，全局共享，不属于某个用户）
 | `/expert/appointments/{id}/status`(PUT) | PUT | 读 `doctors`；写 `appointment_records.status`（Socket 广播） |
 | `/expert/stats` | GET | 读 `doctors`、`appointment_records`（多条件 COUNT + COUNT DISTINCT） |
 | `/expert/chat/{appointmentId}`(GET) | GET | 读 `expert_chat` JOIN `users`（双方姓名），需预约参与方 |
-| `/expert/chat`(POST) | POST | 读 `expert_chat`（取近 6 条作 AI 审核上下文）；写 `expert_chat`；读 `sensitive_words` 词库审核 |
 
 ## B.9 Socket.IO 事件对应的数据操作
 

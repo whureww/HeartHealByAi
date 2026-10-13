@@ -11,12 +11,9 @@ export const updateAppointmentStatus = (id: number, status: string) =>
   request.put(`/expert/appointments/${id}/status`, { status })
 
 // 获取聊天记录
-export const getChatMessages = (appointmentId: number) => 
+export const getChatMessages = (appointmentId: number) =>
   request.get(`/expert/chat/${appointmentId}`)
 
-// 发送消息
-export const sendChatMessage = (data: { appointmentId: number, receiverId: number, content: string }) => 
-  request.post('/expert/chat', data)
 // 获取专家统计数据
 export const getExpertStats = () => request.get('/expert/stats')
 
