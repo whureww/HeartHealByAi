@@ -576,12 +576,48 @@ router.get('/stats', authenticate, asyncHandler(async (req: Request, res: Respon
 }));
 
 // ========== 获取聊天记录 ==========
+// 不带 session_id：返回全部会话消息（导出 / AI 报告分析用，向后兼容）
+// 带 session_id：返回指定会话的消息
 router.get('/chat-history', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const sessionId = String(req.query.session_id || '').trim();
+
+    // id 次级排序：created_at 为秒级精度，同秒入库（如用户消息与 AI 回复）需按自增 id 稳定排序
+    let rows: any[];
+    if (sessionId && /^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+        [rows] = (await pool.execute(
+            'SELECT id, content, type, created_at FROM chat_records WHERE user_id = ? AND session_id = ? ORDER BY created_at ASC, id ASC',
+            [userId, sessionId]
+        )) as any[];
+    } else {
+        [rows] = (await pool.execute(
+            'SELECT id, content, type, session_id, created_at FROM chat_records WHERE user_id = ? ORDER BY created_at ASC, id ASC',
+            [userId]
+        )) as any[];
+    }
+
+    res.json({
+        success: true,
+        data: rows
+    });
+}));
+
+// ========== 获取会话列表 ==========
+// 按会话分组：标题取该会话第一条用户消息，附消息数与最近活跃时间，按最近活跃倒序
+router.get('/chat-sessions', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
 
     const [rows] = await pool.execute(
-        // id 次级排序：created_at 为秒级精度，同秒入库（如用户消息与 AI 回复）需按自增 id 稳定排序
-        'SELECT id, content, type, created_at FROM chat_records WHERE user_id = ? ORDER BY created_at ASC, id ASC',
+        `SELECT c.session_id,
+            (SELECT m.content FROM chat_records m
+             WHERE m.user_id = c.user_id AND m.session_id = c.session_id AND m.type = 'user'
+             ORDER BY m.created_at ASC, m.id ASC LIMIT 1) AS title,
+            COUNT(*) AS message_count,
+            MAX(c.created_at) AS last_time
+         FROM chat_records c
+         WHERE c.user_id = ?
+         GROUP BY c.session_id
+         ORDER BY last_time DESC, MAX(c.id) DESC`,
         [userId]
     );
 
@@ -592,18 +628,47 @@ router.get('/chat-history', authenticate, asyncHandler(async (req: Request, res:
 }));
 
 // ========== 保存聊天记录 ==========
+// session_id 可选：前端为每个对话生成唯一 id，不传时归入 default（旧数据兼容）
 router.post('/chat', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { content, type } = req.body;
+    const sessionId = String(req.body.session_id || 'default').trim() || 'default';
+
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+        res.status(400).json({ success: false, message: '会话标识不合法' });
+        return;
+    }
 
     const [result] = await pool.execute(
-        'INSERT INTO chat_records (user_id, content, type) VALUES (?, ?, ?)',
-        [userId, content, type]
+        'INSERT INTO chat_records (user_id, content, type, session_id) VALUES (?, ?, ?, ?)',
+        [userId, content, type, sessionId]
     );
 
     res.json({
         success: true,
         data: { id: (result as any).insertId }
+    });
+}));
+
+// ========== 删除会话 ==========
+router.delete('/chat-sessions/:sessionId', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const sessionId = String(req.params.sessionId || '').trim();
+
+    if (!sessionId || !/^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+        res.status(400).json({ success: false, message: '会话标识不合法' });
+        return;
+    }
+
+    const [result]: any = await pool.execute(
+        'DELETE FROM chat_records WHERE user_id = ? AND session_id = ?',
+        [userId, sessionId]
+    );
+
+    res.json({
+        success: true,
+        message: '会话已删除',
+        data: { deleted: result.affectedRows || 0 }
     });
 }));
 

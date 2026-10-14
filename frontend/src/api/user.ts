@@ -54,12 +54,22 @@ export const getUserStats = () => {
 }
 
 // ========== 聊天记录 ==========
-export const getChatHistory = () => {
-  return request.get('/users/chat-history')
+// 不带 sessionId 返回全部会话消息（导出 / 报告分析），带则返回指定会话
+export const getChatHistory = (sessionId?: string) => {
+  return request.get('/users/chat-history', sessionId ? { params: { session_id: sessionId } } : undefined)
 }
 
-export const saveChat = (data: { content: string; type: string }) => {
+export const saveChat = (data: { content: string; type: string; session_id?: string }) => {
   return request.post('/users/chat', data)
+}
+
+// ========== AI 对话会话 ==========
+export const getChatSessions = () => {
+  return request.get('/users/chat-sessions')
+}
+
+export const deleteChatSession = (sessionId: string) => {
+  return request.delete(`/users/chat-sessions/${sessionId}`)
 }
 
 // ========== 测评 ==========

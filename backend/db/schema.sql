@@ -102,8 +102,10 @@ CREATE TABLE IF NOT EXISTS chat_records (
     user_id INT UNSIGNED NOT NULL,
     content TEXT NOT NULL,
     type VARCHAR(20) NOT NULL DEFAULT 'user' COMMENT 'user/ai',
+    session_id VARCHAR(40) NOT NULL DEFAULT 'default' COMMENT '会话分组 id',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_chat_user (user_id)
+    KEY idx_chat_user (user_id),
+    KEY idx_chat_session (user_id, session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ========== AI 分析报告表 ==========
