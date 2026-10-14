@@ -71,15 +71,28 @@
                 v-for="s in chatSessions"
                 :key="s.session_id"
                 :class="['session-item', { active: s.session_id === activeSessionId }]"
+                :title="`创建于 ${formatSessionFull(s.created_at)}${Number(s.locked) === 1 ? ' · 已锁定（置顶且不可删除）' : ''}`"
                 @click="openSession(s.session_id)"
               >
                 <AppIcon name="chat" :size="14" class="si-icon" />
                 <div class="si-body">
                   <span class="si-title">{{ s.title || '未命名对话' }}</span>
-                  <span class="si-meta">{{ s.message_count }} 条 · {{ formatSessionTime(s.last_time) }}</span>
+                  <span class="si-meta">
+                    <AppIcon name="clock" :size="11" />
+                    创建于 {{ formatSessionTime(s.created_at) }} · {{ s.message_count }} 条
+                  </span>
                 </div>
                 <button
-                  class="si-del"
+                  class="si-act"
+                  :class="{ 'is-locked': Number(s.locked) === 1 }"
+                  :title="Number(s.locked) === 1 ? '已锁定（置顶且不可删除），点击解除锁定' : '锁定对话（置顶且防误删）'"
+                  @click.stop="toggleLock(s)"
+                >
+                  <AppIcon name="lock" :size="13" />
+                </button>
+                <button
+                  v-if="Number(s.locked) !== 1"
+                  class="si-act si-del"
                   title="删除对话"
                   @click.stop="removeSession(s)"
                 >
@@ -610,7 +623,7 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useSettingsStore } from '@/stores/settings'
-import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, deleteChatSession, getUserAppointments, getAnalysisReports } from '@/api/user'
+import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, createChatSession, lockChatSession, refreshSessionSummary, deleteChatSession, getUserAppointments, getAnalysisReports } from '@/api/user'
 import { useLoadingStore } from '@/stores/loading'
 import { chatWithAIStream, generateReport } from '@/api/ai'
 import { getTestHistory } from '@/api/tests'
@@ -665,6 +678,14 @@ const formatSessionTime = (t: string) => {
     : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
 }
 
+// 完整时间（悬浮提示用）：含日期与时分秒
+const formatSessionFull = (t: string) => {
+  if (!t) return ''
+  const d = new Date(t)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
 // 拉取会话列表；返回最新的会话 id（供首次进入自动打开）
 const loadChatSessions = async (): Promise<string> => {
   try {
@@ -697,16 +718,66 @@ const openSession = async (sessionId: string) => {
   scrollToBottom()
 }
 
-// 新建对话：清空当前消息区，会话 id 首条消息发出时才落库并列出
-const startNewSession = () => {
+// 新建对话：立即创建会话记录（服务端返回会话 id），空对话也会出现在侧栏列表；
+// 若当前已是空的新对话则复用，避免连点产生一堆空会话
+const startNewSession = async () => {
   if (aiLoading.value || isStreaming.value) return
-  activeSessionId.value = genSessionId()
+  if (
+    chatMessages.value.length === 0 &&
+    activeSessionId.value &&
+    chatSessions.value.some((s) => s.session_id === activeSessionId.value)
+  ) return
+  try {
+    const res = await createChatSession() as any
+    if (res?.data?.session_id) {
+      activeSessionId.value = res.data.session_id
+      await loadChatSessions()
+    } else {
+      activeSessionId.value = genSessionId()
+    }
+  } catch (e) {
+    console.error('创建会话失败:', e)
+    // 离线兜底：本地生成 id，首条消息落库时服务端会自动补建会话行
+    activeSessionId.value = genSessionId()
+  }
   chatMessages.value = []
   chatInput.value = ''
 }
 
-// 删除会话
+// 锁定 / 解锁：锁定后对话置顶且不可删除
+const toggleLock = async (s: any) => {
+  try {
+    await lockChatSession(s.session_id, !Number(s.locked))
+    success(Number(s.locked) ? '已解除锁定' : '已锁定，置顶并防止误删')
+    await loadChatSessions()
+  } catch (e: any) {
+    error(e?.response?.data?.message || '操作失败，请稍后重试')
+  }
+}
+
+// 让 AI 总结对话标题：首轮回复后必刷，之后每 6 条消息刷新一次
+const maybeSummarize = (sessionId: string) => {
+  const s = chatSessions.value.find((x) => x.session_id === sessionId)
+  const count = chatMessages.value.length
+  const need = !s || s.title === '新对话' || (count > 0 && count % 6 === 0)
+  if (!need) return
+  refreshSessionSummary(sessionId)
+    .then((res: any) => {
+      const t = res?.data?.title
+      if (t) {
+        const cur = chatSessions.value.find((x) => x.session_id === sessionId)
+        if (cur) cur.title = t
+      }
+    })
+    .catch(() => {})
+}
+
+// 删除会话（锁定中的对话不可删除，与后端校验一致）
 const removeSession = async (s: any) => {
+  if (Number(s.locked)) {
+    error('对话已锁定，请先解除锁定再删除')
+    return
+  }
   const ok = await confirm(`确定删除对话「${(s.title || '未命名对话').slice(0, 20)}」吗？其中的全部聊天记录将一并删除，不可恢复。`, '删除对话')
   if (!ok) return
   try {
@@ -1065,7 +1136,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.3.9'
+  const cur = updateInfo.value?.current_version || '0.4.0'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -1432,6 +1503,8 @@ const sendChat = async () => {
           
           // AI 回复落库（用户消息已在发送时保存）
           void saveChat({ content: finalContent, type: 'ai', session_id: sessionId }).catch(() => {})
+          // 首轮回复后 / 每 6 条消息：让 AI 总结更新对话标题
+          maybeSummarize(sessionId)
         }
         
         scrollToBottom()
@@ -2202,12 +2275,15 @@ const scrollToBottom = () => {
 }
 
 .si-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 11px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.si-del {
+.si-act {
   flex: none;
   width: 22px;
   height: 22px;
@@ -2223,8 +2299,19 @@ const scrollToBottom = () => {
   transition: all 0.15s var(--ease-out);
 }
 
-.session-item:hover .si-del {
+.session-item:hover .si-act {
   opacity: 1;
+}
+
+/* 锁定中的对话：锁图标常显并使用主题色标识 */
+.si-act.is-locked {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.si-act:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
 .si-del:hover {
