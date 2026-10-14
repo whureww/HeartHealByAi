@@ -1065,7 +1065,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.3.8'
+  const cur = updateInfo.value?.current_version || '0.3.9'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -2043,7 +2043,9 @@ const scrollToBottom = () => {
   display: flex;
   align-items: stretch;
   gap: 14px;
-  max-width: 980px;
+  width: 100%;
+  flex: 1;          /* 撑满 .page.show 列容器剩余高度，否则整块塌缩成内容高 */
+  min-height: 0;
 }
 
 .session-sidebar {
@@ -2237,15 +2239,16 @@ const scrollToBottom = () => {
   color: var(--text-muted);
 }
 
-/* 侧栏占位时聊天主区自适应铺满 */
-.chat-main {
-  flex: 1;
-  min-width: 0;
-}
-
 .chat-card {
   padding: 20px 24px;
   max-width: 800px;
+}
+
+/* 聊天页主卡片自适应铺满剩余宽度（须置于 .chat-card 之后覆盖 800px 限宽） */
+.chat-main {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
 }
 
 .chat-box {
