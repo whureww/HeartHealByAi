@@ -46,32 +46,80 @@
 
       <!-- 1. AI倾诉页面 -->
       <div v-if="currentPage === 'chat'" class="page show">
-        <div class="card chat-card">
-          <h3>一对一 AI 私密心理倾诉</h3>
-          <div class="chat-box" ref="chatBox">
-            <div class="msg-item">
-              <div class="msg-ai selectable-text">你好！我是你的专属心理陪伴助手"心愈"，你所有的情绪、压力、困惑都可以安心告诉我，我会耐心倾听并给予疏导。</div>
+        <div class="chat-layout">
+          <!-- 左侧：可折叠会话列表 -->
+          <aside :class="['session-sidebar', { collapsed: sessionCollapsed }]">
+            <div class="session-head">
+              <template v-if="!sessionCollapsed">
+                <span class="session-title">对话记录</span>
+                <button class="ss-icon-btn" title="收起侧栏" @click="sessionCollapsed = true">
+                  <AppIcon name="back" :size="14" />
+                </button>
+              </template>
+              <button v-else class="ss-icon-btn" title="展开侧栏" @click="sessionCollapsed = false">
+                <AppIcon name="chevronRight" :size="14" />
+              </button>
             </div>
-            <div v-for="(msg, index) in chatMessages" :key="index" class="msg-item">
-              <div :class="[msg.type === 'user' ? 'msg-user' : 'msg-ai', 'selectable-text']">{{ msg.content }}</div>
-            </div>
-            <!-- 流式输出中的 AI 消息 -->
-            <div v-if="streamingContent" class="msg-item">
-              <div class="msg-ai selectable-text streaming">{{ streamingContent }}<span class="cursor">|</span></div>
-            </div>
-          </div>
-          <div class="input-row">
-            <input
-              v-model="chatInput"
-              type="text"
-              placeholder="输入你的心情与困惑..."
-              @keyup.enter="sendChat"
-              :disabled="aiLoading">
-            <button class="btn-send-chat" @click="sendChat" :disabled="aiLoading || !chatInput.trim()">
-              <AppIcon v-if="!aiLoading" name="send" :size="15" />
-              <AppIcon v-else name="spark" :size="15" class="spin" />
-              <span>{{ aiLoading ? '思考中...' : '发送' }}</span>
+
+            <button class="new-chat-btn" :class="{ mini: sessionCollapsed }" @click="startNewSession">
+              <AppIcon name="plus" :size="14" />
+              <span v-if="!sessionCollapsed">新建对话</span>
             </button>
+
+            <div v-if="!sessionCollapsed" class="session-list">
+              <div
+                v-for="s in chatSessions"
+                :key="s.session_id"
+                :class="['session-item', { active: s.session_id === activeSessionId }]"
+                @click="openSession(s.session_id)"
+              >
+                <AppIcon name="chat" :size="14" class="si-icon" />
+                <div class="si-body">
+                  <span class="si-title">{{ s.title || '未命名对话' }}</span>
+                  <span class="si-meta">{{ s.message_count }} 条 · {{ formatSessionTime(s.last_time) }}</span>
+                </div>
+                <button
+                  class="si-del"
+                  title="删除对话"
+                  @click.stop="removeSession(s)"
+                >
+                  <AppIcon name="trash" :size="13" />
+                </button>
+              </div>
+              <div v-if="!chatSessions.length" class="session-empty">
+                暂无历史对话
+              </div>
+            </div>
+          </aside>
+
+          <!-- 右侧：聊天主区 -->
+          <div class="card chat-card chat-main">
+            <h3>一对一 AI 私密心理倾诉</h3>
+            <div class="chat-box" ref="chatBox">
+              <div class="msg-item">
+                <div class="msg-ai selectable-text">你好！我是你的专属心理陪伴助手"心愈"，你所有的情绪、压力、困惑都可以安心告诉我，我会耐心倾听并给予疏导。</div>
+              </div>
+              <div v-for="(msg, index) in chatMessages" :key="index" class="msg-item">
+                <div :class="[msg.type === 'user' ? 'msg-user' : 'msg-ai', 'selectable-text']">{{ msg.content }}</div>
+              </div>
+              <!-- 流式输出中的 AI 消息 -->
+              <div v-if="streamingContent" class="msg-item">
+                <div class="msg-ai selectable-text streaming">{{ streamingContent }}<span class="cursor">|</span></div>
+              </div>
+            </div>
+            <div class="input-row">
+              <input
+                v-model="chatInput"
+                type="text"
+                placeholder="输入你的心情与困惑..."
+                @keyup.enter="sendChat"
+                :disabled="aiLoading">
+              <button class="btn-send-chat" @click="sendChat" :disabled="aiLoading || !chatInput.trim()">
+                <AppIcon v-if="!aiLoading" name="send" :size="15" />
+                <AppIcon v-else name="spark" :size="15" class="spin" />
+                <span>{{ aiLoading ? '思考中...' : '发送' }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -562,7 +610,7 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useSettingsStore } from '@/stores/settings'
-import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getUserAppointments, getAnalysisReports } from '@/api/user'
+import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, deleteChatSession, getUserAppointments, getAnalysisReports } from '@/api/user'
 import { useLoadingStore } from '@/stores/loading'
 import { chatWithAIStream, generateReport } from '@/api/ai'
 import { getTestHistory } from '@/api/tests'
@@ -593,6 +641,93 @@ const currentPage = ref('')
 const currentAppointmentId = ref(0)
 const chatInput = ref('')
 const chatMessages = ref<{type: string, content: string}[]>([])
+// AI 对话会话：侧栏列表 + 当前激活会话
+const chatSessions = ref<any[]>([])
+const activeSessionId = ref('')
+const sessionCollapsed = ref(false)
+const sessionLoading = ref(false)
+
+const genSessionId = () => {
+  // 去掉连字符外的特殊字符不必要，uuid 本身满足 [a-zA-Z0-9-]
+  return (crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
+}
+
+const formatSessionTime = (t: string) => {
+  if (!t) return ''
+  const d = new Date(t)
+  const now = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  const sameDay = d.toDateString() === now.toDateString()
+  if (sameDay) return `${p(d.getHours())}:${p(d.getMinutes())}`
+  const sameYear = d.getFullYear() === now.getFullYear()
+  return sameYear
+    ? `${d.getMonth() + 1}/${d.getDate()}`
+    : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+}
+
+// 拉取会话列表；返回最新的会话 id（供首次进入自动打开）
+const loadChatSessions = async (): Promise<string> => {
+  try {
+    const res = await getChatSessions() as any
+    chatSessions.value = res?.data || []
+  } catch (e) {
+    console.error('获取会话列表失败:', e)
+    chatSessions.value = []
+  }
+  return chatSessions.value[0]?.session_id || ''
+}
+
+// 打开指定会话，加载其消息
+const openSession = async (sessionId: string) => {
+  if (!sessionId || sessionId === activeSessionId.value) return
+  activeSessionId.value = sessionId
+  sessionLoading.value = true
+  try {
+    const res = await getChatHistory(sessionId) as any
+    chatMessages.value = (res?.data || []).map((msg: any) => ({
+      type: msg.type,
+      content: msg.content
+    }))
+  } catch (e) {
+    console.error('获取会话消息失败:', e)
+    chatMessages.value = []
+  } finally {
+    sessionLoading.value = false
+  }
+  scrollToBottom()
+}
+
+// 新建对话：清空当前消息区，会话 id 首条消息发出时才落库并列出
+const startNewSession = () => {
+  if (aiLoading.value || isStreaming.value) return
+  activeSessionId.value = genSessionId()
+  chatMessages.value = []
+  chatInput.value = ''
+}
+
+// 删除会话
+const removeSession = async (s: any) => {
+  const ok = await confirm(`确定删除对话「${(s.title || '未命名对话').slice(0, 20)}」吗？其中的全部聊天记录将一并删除，不可恢复。`, '删除对话')
+  if (!ok) return
+  try {
+    await deleteChatSession(s.session_id)
+    const wasActive = s.session_id === activeSessionId.value
+    await loadChatSessions()
+    if (wasActive) {
+      // 删除的是当前会话：自动切到最近一个，没有则进入空白新对话
+      const next = chatSessions.value[0]?.session_id || ''
+      if (next) {
+        activeSessionId.value = ''
+        await openSession(next)
+      } else {
+        startNewSession()
+      }
+    }
+    success('对话已删除')
+  } catch (e: any) {
+    error(e?.response?.data?.message || '删除失败，请稍后重试')
+  }
+}
 const chatBox = ref<HTMLElement | null>(null)
 const startDate = ref('')
 const endDate = ref('')
@@ -930,7 +1065,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.3.7'
+  const cur = updateInfo.value?.current_version || '0.3.8'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -1098,17 +1233,18 @@ onMounted(async () => {
     loading.value.stats = false
   }
 
-  // 加载聊天记录（普通用户和管理员）
+  // 加载聊天记录（普通用户和管理员）：拉会话列表并自动打开最近一个会话
   if (userStore.userInfo?.role === 1 || userStore.userInfo?.role === 3) {
-    try {
-      await userStore.getChatHistory()
-      chatMessages.value = userStore.chatHistory.map((msg: any) => ({
-        type: msg.type,
-        content: msg.content
-      }))
-    } catch (e) {
-      console.error('获取聊天记录失败:', e)
+    const latest = await loadChatSessions()
+    if (latest) {
+      await openSession(latest)
+    } else {
+      // 无任何历史会话：准备一个待发的空白新对话
+      activeSessionId.value = genSessionId()
+      chatMessages.value = []
     }
+    // 全量消息仍入 store，供统计与导出使用
+    userStore.getChatHistory().catch(() => {})
   }
 
   // 设置默认页面
@@ -1238,6 +1374,11 @@ const sendChat = async () => {
   const val = chatInput.value.trim()
   if (!val || aiLoading.value || isStreaming.value) return
 
+  // 当前无激活会话时（首次进入未打开任何会话），先创建一个
+  if (!activeSessionId.value) activeSessionId.value = genSessionId()
+  const sessionId = activeSessionId.value
+  const isNewSession = !chatSessions.value.some(s => s.session_id === sessionId)
+
   // 1. 显示用户消息
   chatMessages.value.push({ type: 'user', content: val })
   chatInput.value = ''
@@ -1246,7 +1387,9 @@ const sendChat = async () => {
   // 用户消息立即落库：流中断/中途关闭应用/AI 返回空时不再连带丢失；
   // await 保证用户消息先于 AI 回复入库，配合后端 id 次级排序时序才稳定
   try {
-    await saveChat({ content: val, type: 'user' })
+    await saveChat({ content: val, type: 'user', session_id: sessionId })
+    // 新对话的首条消息已入库 → 刷新侧栏列表（标题取首条用户消息）
+    if (isNewSession) await loadChatSessions()
   } catch (e) {
     console.error('保存用户消息失败:', e)
   }
@@ -1288,7 +1431,7 @@ const sendChat = async () => {
           streamingContent.value = ''
           
           // AI 回复落库（用户消息已在发送时保存）
-          void saveChat({ content: finalContent, type: 'ai' }).catch(() => {})
+          void saveChat({ content: finalContent, type: 'ai', session_id: sessionId }).catch(() => {})
         }
         
         scrollToBottom()
@@ -1500,12 +1643,16 @@ const importData = async () => {
         await settingsStore.refreshFromLocal()
       }
 
-      // 重新拉取聊天与统计
+      // 重新拉取聊天与统计：按会话打开最近一个，其余入侧栏列表
       await userStore.getChatHistory()
-      chatMessages.value = userStore.chatHistory.map((msg: any) => ({
-        type: msg.type,
-        content: msg.content
-      }))
+      const latest = await loadChatSessions()
+      if (latest) {
+        activeSessionId.value = ''
+        await openSession(latest)
+      } else {
+        activeSessionId.value = genSessionId()
+        chatMessages.value = []
+      }
       await userStore.getStats()
 
       await success(`聊天记录已恢复 ${done} 条${applied ? `，已应用 ${applied} 项本地设置` : ''}`, '导入成功')
@@ -1526,6 +1673,8 @@ const clearData = async () => {
       await clearAllData()
       chatMessages.value = []
       userStore.chatHistory = []
+      chatSessions.value = []
+      activeSessionId.value = genSessionId()
       await userStore.getStats()
       await success('所有记录已清空', '已清空')
     } catch (e: any) {
@@ -1887,6 +2036,211 @@ const scrollToBottom = () => {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+}
+
+/* ===== AI 对话页：会话侧栏布局 ===== */
+.chat-layout {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  max-width: 980px;
+}
+
+.session-sidebar {
+  flex: none;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  transition: width 0.22s var(--ease-out);
+  overflow: hidden;
+}
+
+.session-sidebar.collapsed {
+  width: 52px;
+  padding: 14px 8px;
+  align-items: center;
+}
+
+.session-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  width: 100%;
+}
+
+.session-sidebar.collapsed .session-head {
+  justify-content: center;
+}
+
+.session-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ss-icon-btn {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out);
+}
+
+.ss-icon-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.new-chat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--radius-ctl);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s var(--ease-out);
+}
+
+.new-chat-btn:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-style: solid;
+}
+
+.new-chat-btn.mini {
+  padding: 8px 0;
+  width: 100%;
+}
+
+.session-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out);
+  position: relative;
+}
+
+.session-item:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.session-item.active {
+  background: var(--accent-soft);
+}
+
+.session-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.si-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.session-item.active .si-icon {
+  color: var(--accent);
+}
+
+.si-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.si-title {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.si-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.si-del {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out);
+}
+
+.session-item:hover .si-del {
+  opacity: 1;
+}
+
+.si-del:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.session-empty {
+  padding: 14px 6px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 侧栏占位时聊天主区自适应铺满 */
+.chat-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-card {
