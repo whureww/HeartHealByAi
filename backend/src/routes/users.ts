@@ -11,6 +11,7 @@ import nodemailer from 'nodemailer';
 import jwt from "jsonwebtoken";
 import { TokenManager } from '../utils/tokenManager';
 import { getActiveRestriction } from '../utils/restrict';
+import { callAI } from '../utils/aiClient';
 
 const router = Router();
 
@@ -603,27 +604,189 @@ router.get('/chat-history', authenticate, asyncHandler(async (req: Request, res:
 }));
 
 // ========== 获取会话列表 ==========
-// 按会话分组：标题取该会话第一条用户消息，附消息数与最近活跃时间，按最近活跃倒序
+// 会话元数据存 chat_sessions（含锁定/创建时间/AI 总结标题）；
+// 先把 chat_records 中尚无会话记录的历史数据自动回填（含 default 旧数据），再整体返回
 router.get('/chat-sessions', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
 
-    const [rows] = await pool.execute(
-        `SELECT c.session_id,
-            (SELECT m.content FROM chat_records m
-             WHERE m.user_id = c.user_id AND m.session_id = c.session_id AND m.type = 'user'
-             ORDER BY m.created_at ASC, m.id ASC LIMIT 1) AS title,
-            COUNT(*) AS message_count,
-            MAX(c.created_at) AS last_time
+    await pool.execute(
+        `INSERT IGNORE INTO chat_sessions (user_id, session_id, title, created_at, last_time)
+         SELECT c.user_id, c.session_id,
+             LEFT(COALESCE((SELECT m.content FROM chat_records m
+                WHERE m.user_id = c.user_id AND m.session_id = c.session_id AND m.type = 'user'
+                ORDER BY m.created_at ASC, m.id ASC LIMIT 1), '新对话'), 60),
+             MIN(c.created_at), MAX(c.created_at)
          FROM chat_records c
          WHERE c.user_id = ?
-         GROUP BY c.session_id
-         ORDER BY last_time DESC, MAX(c.id) DESC`,
+         GROUP BY c.user_id, c.session_id`,
+        [userId]
+    );
+
+    const [rows] = await pool.execute(
+        `SELECT s.session_id, s.title, s.locked, s.created_at, s.last_time,
+            (SELECT COUNT(*) FROM chat_records c
+             WHERE c.user_id = s.user_id AND c.session_id = s.session_id) AS message_count
+         FROM chat_sessions s
+         WHERE s.user_id = ?
+         ORDER BY s.locked DESC, s.last_time DESC, s.id DESC`,
         [userId]
     );
 
     res.json({
         success: true,
         data: rows
+    });
+}));
+
+// ========== 新建对话 ==========
+// 立即创建会话记录（标题暂为「新对话」），使其不出消息也能出现在侧栏列表
+router.post('/chat-sessions', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { randomUUID } = require('crypto');
+    const sessionId = String(req.body?.session_id || randomUUID()).trim();
+
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+        res.status(400).json({ success: false, message: '会话标识不合法' });
+        return;
+    }
+
+    await pool.execute(
+        'INSERT IGNORE INTO chat_sessions (user_id, session_id) VALUES (?, ?)',
+        [userId, sessionId]
+    );
+
+    const [rows]: any[] = await pool.execute(
+        'SELECT session_id, title, locked, created_at, last_time FROM chat_sessions WHERE user_id = ? AND session_id = ?',
+        [userId, sessionId]
+    );
+
+    res.json({ success: true, data: rows[0] });
+}));
+
+// ========== 锁定 / 解锁对话 ==========
+// 锁定后置顶显示且不可删除
+router.put('/chat-sessions/:sessionId/lock', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const sessionId = String(req.params.sessionId || '').trim();
+    const locked = Number(req.body?.locked) ? 1 : 0;
+
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+        res.status(400).json({ success: false, message: '会话标识不合法' });
+        return;
+    }
+
+    const [result]: any = await pool.execute(
+        'UPDATE chat_sessions SET locked = ? WHERE user_id = ? AND session_id = ?',
+        [locked, userId, sessionId]
+    );
+
+    if (!result.affectedRows) {
+        res.status(404).json({ success: false, message: '对话不存在' });
+        return;
+    }
+
+    res.json({ success: true, message: locked ? '已锁定对话' : '已解除锁定', data: { locked } });
+}));
+
+// ========== AI 总结对话标题 ==========
+// 取该会话前若干条消息交由 AI 生成简短主题标题，替代「首条消息」式标题
+router.post('/chat-sessions/:sessionId/summary', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const sessionId = String(req.params.sessionId || '').trim();
+
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+        res.status(400).json({ success: false, message: '会话标识不合法' });
+        return;
+    }
+
+    const [msgs]: any[] = await pool.execute(
+        `SELECT type, content FROM chat_records
+         WHERE user_id = ? AND session_id = ?
+         ORDER BY created_at ASC, id ASC LIMIT 12`,
+        [userId, sessionId]
+    );
+
+    if (!msgs.length) {
+        res.json({ success: true, data: { title: '新对话' } });
+        return;
+    }
+
+    const transcript = msgs
+        .map((m: any) => `${m.type === 'user' ? '用户' : 'AI'}：${String(m.content || '').slice(0, 160)}`)
+        .join('\n');
+
+    try {
+        const title = await callAI(
+            [
+                { role: 'system', content: '你是聊天记录标题生成器。根据对话内容生成一个不超过12个字的简短标题，概括对话的主题或情绪。要求：只输出标题文字本身；不要引号、句号或任何修饰；不要使用"对话""聊天"这类空泛词；语气中性客观。' },
+                { role: 'user', content: transcript }
+            ],
+            { temperature: 0.3, maxTokens: 30, timeout: 15000 }
+        );
+
+        // 清洗：去引号/换行/首尾空白，超长截断
+        const clean = String(title || '')
+            .replace(/["'「」『』《》`]/g, '')
+            .split('\n')[0]
+            .trim()
+            .slice(0, 20);
+
+        if (!clean) {
+            res.json({ success: true, data: { title: '新对话' } });
+            return;
+        }
+
+        await pool.execute(
+            'UPDATE chat_sessions SET title = ? WHERE user_id = ? AND session_id = ?',
+            [clean, userId, sessionId]
+        );
+
+        res.json({ success: true, data: { title: clean } });
+    } catch (e: any) {
+        console.error('生成对话标题失败:', e.message);
+        // AI 不可用时静默降级：保留原标题，不打断前端
+        res.json({ success: false, message: '标题生成暂时不可用' });
+    }
+}));
+
+// ========== 删除会话 ==========
+// 锁定中的对话不允许删除，需先解除锁定
+router.delete('/chat-sessions/:sessionId', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const sessionId = String(req.params.sessionId || '').trim();
+
+    if (!sessionId || !/^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+        res.status(400).json({ success: false, message: '会话标识不合法' });
+        return;
+    }
+
+    const [sess]: any[] = await pool.execute(
+        'SELECT locked FROM chat_sessions WHERE user_id = ? AND session_id = ?',
+        [userId, sessionId]
+    );
+
+    if (!sess.length) {
+        res.status(404).json({ success: false, message: '对话不存在' });
+        return;
+    }
+    if (Number(sess[0].locked) === 1) {
+        res.status(403).json({ success: false, message: '对话已锁定，请先解除锁定再删除' });
+        return;
+    }
+
+    const [result]: any = await pool.execute(
+        'DELETE FROM chat_records WHERE user_id = ? AND session_id = ?',
+        [userId, sessionId]
+    );
+    await pool.execute(
+        'DELETE FROM chat_sessions WHERE user_id = ? AND session_id = ?',
+        [userId, sessionId]
+    );
+
+    res.json({
+        success: true,
+        message: '会话已删除',
+        data: { deleted: result.affectedRows || 0 }
     });
 }));
 
@@ -642,6 +805,16 @@ router.post('/chat', authenticate, asyncHandler(async (req: Request, res: Respon
     const [result] = await pool.execute(
         'INSERT INTO chat_records (user_id, content, type, session_id) VALUES (?, ?, ?, ?)',
         [userId, content, type, sessionId]
+    );
+
+    // 消息入库的同时确保会话行存在并刷新活跃时间（兜底：未经 POST /chat-sessions 创建的会话）
+    await pool.execute(
+        'INSERT IGNORE INTO chat_sessions (user_id, session_id) VALUES (?, ?)',
+        [userId, sessionId]
+    );
+    await pool.execute(
+        'UPDATE chat_sessions SET last_time = CURRENT_TIMESTAMP WHERE user_id = ? AND session_id = ?',
+        [userId, sessionId]
     );
 
     res.json({

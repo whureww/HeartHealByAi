@@ -68,6 +68,21 @@ export const getChatSessions = () => {
   return request.get('/users/chat-sessions')
 }
 
+// 新建对话：立即创建会话记录（空对话也出现在侧栏）
+export const createChatSession = () => {
+  return request.post('/users/chat-sessions')
+}
+
+// 锁定 / 解锁对话（锁定后置顶且不可删除）
+export const lockChatSession = (sessionId: string, locked: boolean) => {
+  return request.put(`/users/chat-sessions/${sessionId}/lock`, { locked })
+}
+
+// 让 AI 重新总结对话标题
+export const refreshSessionSummary = (sessionId: string) => {
+  return request.post(`/users/chat-sessions/${sessionId}/summary`)
+}
+
 export const deleteChatSession = (sessionId: string) => {
   return request.delete(`/users/chat-sessions/${sessionId}`)
 }

@@ -108,6 +108,19 @@ CREATE TABLE IF NOT EXISTS chat_records (
     KEY idx_chat_session (user_id, session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ========== AI 对话会话表 ==========
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    session_id VARCHAR(40) NOT NULL,
+    title VARCHAR(120) NOT NULL DEFAULT '新对话' COMMENT 'AI 总结的对话主题标题',
+    locked TINYINT NOT NULL DEFAULT 0 COMMENT '1=锁定（置顶且不可删除）',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '对话创建时间',
+    last_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '最近活跃时间',
+    UNIQUE KEY uk_user_session (user_id, session_id),
+    KEY idx_session_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ========== AI 分析报告表 ==========
 CREATE TABLE IF NOT EXISTS analysis_reports (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
