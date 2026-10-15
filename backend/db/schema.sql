@@ -122,12 +122,14 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ========== 用户对话模型偏好表 ==========
--- 用户在程序内添加/选择的自定义对话模型（路由到副厂网关，OpenAI 兼容格式）；
--- selected=1 的行为当前生效模型，无选中时走默认主厂链路
+-- 用户在程序内添加/选择的自定义对话模型：可自带网关地址与 API Key（key AES-256-GCM
+-- 加密落库），也可只填模型名走服务端统一副厂网关；selected=1 的行为当前生效模型
 CREATE TABLE IF NOT EXISTS user_chat_models (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NOT NULL,
     model VARCHAR(80) NOT NULL,
+    base_url VARCHAR(200) NOT NULL DEFAULT '' COMMENT '用户自带的 OpenAI 兼容网关地址，空=走服务端网关',
+    api_key TEXT NULL COMMENT '用户自带 API Key（v1:iv:tag:data 密文），NULL=走服务端网关',
     selected TINYINT NOT NULL DEFAULT 0 COMMENT '1=当前使用的对话模型',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '添加时间',
     UNIQUE KEY uk_user_model (user_id, model),

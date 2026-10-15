@@ -93,9 +93,9 @@ export const getChatModels = () => {
   return request.get('/users/chat-models')
 }
 
-// 添加自定义模型
-export const addChatModel = (model: string) => {
-  return request.post('/users/chat-models', { model })
+// 添加 / 更新自定义模型（base_url+api_key 自带网关配置；都留空走服务端网关）
+export const addChatModel = (data: { model: string; base_url?: string; api_key?: string }) => {
+  return request.post('/users/chat-models', data)
 }
 
 // 删除自定义模型
