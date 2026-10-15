@@ -4,6 +4,7 @@ import App from './App.vue'
 import router from './router'
 import './styles/tokens.css'
 import { isTauri, secureGet, secureSet } from './utils/secureStore'
+import { i18n, setAppLocale, detectLocale } from './i18n'
 
 const pinia = createPinia()
 
@@ -95,8 +96,12 @@ async function runAutoBackup() {
 async function bootstrap() {
   await restoreLocalData()
 
+  // 恢复本地数据后再同步语言（detectLocale 会读取刚还原到 localStorage 的 locale）
+  setAppLocale(detectLocale())
+
   const app = createApp(App)
   app.use(pinia)
+  app.use(i18n)
   app.use(router)
   app.mount('#app')
 

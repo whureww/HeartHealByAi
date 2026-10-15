@@ -3,8 +3,8 @@
     <div class="card login-card">
       <div class="brand">
         <div class="brand-mark"><AppIcon name="brand" :size="30" /></div>
-        <h2>心愈</h2>
-        <p>私密倾诉 · 测评 · 专家问诊 · 数据分析</p>
+        <h2>{{ $t('common.appName') }}</h2>
+        <p>{{ $t('login.tagline') }}</p>
       </div>
 
       <div class="input-group" :class="{ shake: showError.email }">
@@ -17,7 +17,7 @@
           placeholder=" "
         />
         <span class="text" :class="{ red: showError.email }">
-          {{ showError.email ? '请输入有效邮箱' : '邮箱' }}
+          {{ showError.email ? $t('common.invalidEmail') : $t('common.email') }}
         </span>
       </div>
 
@@ -31,17 +31,17 @@
           placeholder=" "
         />
         <span class="text" :class="{ red: showError.password }">
-          {{ showError.password ? '密码至少6位' : '密码' }}
+          {{ showError.password ? $t('common.passwordMin') : $t('common.password') }}
         </span>
       </div>
 
       <button class="btn login-btn" @click="handleLogin" :disabled="loading">
-        {{ loading ? '正在进入...' : '进入心愈' }}
+        {{ loading ? $t('login.entering') : $t('login.enter') }}
       </button>
 
       <div class="links">
-        <a href="#" @click.prevent="goTo('/register')">注册账号</a>
-        <a href="#" @click.prevent="goTo('/forget-password')">忘记密码</a>
+        <a href="#" @click.prevent="goTo('/register')">{{ $t('login.register') }}</a>
+        <a href="#" @click.prevent="goTo('/forget-password')">{{ $t('login.forgot') }}</a>
       </div>
     </div>
   </div>
@@ -50,11 +50,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { useLoadingStore } from '@/stores/loading'
 import { error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const userStore = useUserStore()
 const loadingStore = useLoadingStore()
@@ -80,7 +82,7 @@ const validatePwd = () => {
 }
 
 const goTo = (path: string) => {
-  loadingStore.show('页面切换中...')
+  loadingStore.show(t('common.pageSwitching'))
   setTimeout(() => {
     router.push(path)
     loadingStore.hide()
@@ -94,7 +96,7 @@ const handleLogin = async () => {
 
   try {
     loading.value = true
-    loadingStore.show('登录中...')
+    loadingStore.show(t('login.loggingIn'))
 
     console.log('开始登录请求:', form.value)
     const res = await userStore.login(form.value)
@@ -114,13 +116,13 @@ const handleLogin = async () => {
       console.log('登录失败:', res)
       loadingStore.hide()
       loading.value = false
-      await error(res?.message || '登录失败', '登录失败')
+      await error(res?.message || t('login.failed'), t('login.failed'))
     }
   } catch (e: any) {
     console.error('登录异常:', e)
     loadingStore.hide()
     loading.value = false
-    await error(e?.message || '登录失败', '登录失败')
+    await error(e?.message || t('login.failed'), t('login.failed'))
   }
 }
 
