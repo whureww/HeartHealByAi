@@ -125,35 +125,57 @@
                   <div class="mp-title">对话模型</div>
                   <div class="mp-list">
                     <div
-                      v-for="m in allModelOptions"
-                      :key="m"
-                      :class="['mp-item', { selected: m === modelInfo.selected }]"
-                      @click="onSelectModel(m)"
+                      v-for="c in allModelOptions"
+                      :key="c.model"
+                      :class="['mp-item', { selected: c.model === modelInfo.selected }]"
+                      :title="c.base_url ? `自带网关：${c.base_url}${c.key_hint ? ' · Key ' + c.key_hint : ''}` : '走服务端模型网关'"
+                      @click="onSelectModel(c.model)"
                     >
-                      <span class="mp-name">{{ m }}</span>
-                      <AppIcon v-if="m === modelInfo.selected" name="check" :size="13" class="mp-check" />
+                      <span class="mp-name">{{ c.model }}</span>
+                      <span v-if="c.base_url" class="mp-tag">自带</span>
+                      <AppIcon v-if="c.model === modelInfo.selected" name="check" :size="13" class="mp-check" />
                       <button
                         class="mp-del"
                         title="删除该模型"
-                        @click.stop="onDeleteModel(m)"
+                        @click.stop="onDeleteModel(c.model)"
                       >
                         <AppIcon name="trash" :size="12" />
                       </button>
                     </div>
                     <div v-if="!allModelOptions.length" class="mp-empty">
-                      {{ modelInfo.gateway_enabled ? '模型列表为空，可手动添加' : '模型服务未配置，使用默认模型' }}
+                      暂无模型，可在下方添加
                     </div>
                   </div>
                   <div class="mp-add">
                     <input
                       v-model="newModelInput"
                       type="text"
-                      placeholder="输入模型名，如 gpt-4o-mini"
+                      placeholder="模型名，如 gpt-4o-mini"
                       @keyup.enter="onAddModel"
                     >
-                    <button :disabled="!newModelInput.trim()" @click="onAddModel">
+                    <button :disabled="!newModelInput.trim() || modelBusy" @click="onAddModel">
                       <AppIcon name="plus" :size="12" />
                     </button>
+                  </div>
+                  <div class="mp-add mp-sub">
+                    <input
+                      v-model="newModelUrl"
+                      type="text"
+                      placeholder="网关地址（可选，如 https://xx.com/v1）"
+                      @keyup.enter="onAddModel"
+                    >
+                  </div>
+                  <div class="mp-add mp-sub">
+                    <input
+                      v-model="newModelKey"
+                      type="password"
+                      placeholder="API Key（可选，与服务端网关二选一）"
+                      autocomplete="off"
+                      @keyup.enter="onAddModel"
+                    >
+                  </div>
+                  <div v-if="!modelInfo.gateway_enabled" class="mp-hint">
+                    服务端网关未配置：地址与 Key 需同时填写
                   </div>
                   <button v-if="modelInfo.selected" class="mp-reset" @click="onSelectModel('')">
                     恢复默认模型
@@ -825,18 +847,21 @@ const maybeSummarize = (sessionId: string) => {
     .catch(() => {})
 }
 
-// ===== 对话模型管理：添加/删除/选择，所选模型走模型网关，失败自动回落默认模型 =====
+// ===== 对话模型管理：添加/删除/选择，可自带网关地址+Key（加密存储），也可走服务端网关 =====
 const modelPanelOpen = ref(false)
-const modelInfo = ref<{ available: string[]; custom: string[]; selected: string | null; gateway_enabled: boolean }>({
+interface CustomModel { model: string; base_url: string; key_hint: string; selected: boolean }
+const modelInfo = ref<{ available: string[]; custom: CustomModel[]; selected: string | null; gateway_enabled: boolean }>({
   available: [], custom: [], selected: null, gateway_enabled: false
 })
 const newModelInput = ref('')
+const newModelUrl = ref('')
+const newModelKey = ref('')
 const modelBusy = ref(false)
 
-const allModelOptions = computed(() => {
-  const list = [...modelInfo.value.available]
-  for (const m of modelInfo.value.custom) {
-    if (!list.includes(m)) list.push(m)
+const allModelOptions = computed<CustomModel[]>(() => {
+  const list: CustomModel[] = modelInfo.value.custom.map(c => ({ ...c }))
+  for (const m of modelInfo.value.available) {
+    if (!list.some(c => c.model === m)) list.push({ model: m, base_url: '', key_hint: '', selected: false })
   }
   return list
 })
@@ -873,12 +898,17 @@ const onSelectModel = async (m: string) => {
 const onAddModel = async () => {
   const m = newModelInput.value.trim()
   if (!m) return
+  modelBusy.value = true
   try {
-    await addChatModel(m)
+    await addChatModel({ model: m, base_url: newModelUrl.value.trim(), api_key: newModelKey.value.trim() })
     newModelInput.value = ''
+    newModelUrl.value = ''
+    newModelKey.value = ''
     await loadChatModels()
   } catch (e: any) {
     error(e?.response?.data?.message || '添加模型失败')
+  } finally {
+    modelBusy.value = false
   }
 }
 const onDeleteModel = async (m: string) => {
@@ -1255,7 +1285,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.2'
+  const cur = updateInfo.value?.current_version || '0.4.3'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -2594,6 +2624,27 @@ const scrollToBottom = () => {
   display: flex;
   gap: 6px;
   margin-top: 8px;
+}
+
+.mp-add.mp-sub {
+  margin-top: 6px;
+}
+
+.mp-tag {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+}
+
+.mp-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 .mp-add input {

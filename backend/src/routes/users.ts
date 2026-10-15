@@ -12,6 +12,7 @@ import jwt from "jsonwebtoken";
 import { TokenManager } from '../utils/tokenManager';
 import { getActiveRestriction } from '../utils/restrict';
 import { callAI, getFallbackConfig } from '../utils/aiClient';
+import { encryptSecret, decryptSecret, maskSecret } from '../utils/secretBox';
 
 const router = Router();
 
@@ -791,9 +792,10 @@ router.delete('/chat-sessions/:sessionId', authenticate, asyncHandler(async (req
 }));
 
 // ========== 对话模型管理 ==========
-// 用户可添加/删除/选择对话模型；所选模型路由到副厂网关（OpenAI 兼容格式），
-// 未选择时走默认主厂链路。网关可用模型列表由服务端代理拉取（key 不下发前端）
+// 用户可添加/删除/选择对话模型：可自带网关地址 + API Key（key AES-256-GCM 加密落库，
+// 接口只返回掩码），也可只填模型名走服务端统一副厂网关；未选择时走默认主厂链路
 const MODEL_RE = /^[a-zA-Z0-9._\-\/]{1,80}$/;
+const BASE_URL_RE = /^https?:\/\/[^\s]{1,190}$/i;
 // 网关模型列表内存缓存（5 分钟），避免每次打开面板都打网关
 let gwModelsCache: { at: number; ids: string[] } | null = null;
 
@@ -825,40 +827,60 @@ router.get('/chat-models', authenticate, asyncHandler(async (req: Request, res: 
         }
     }
 
-    // 用户已添加的自定义模型 + 当前选中
+    // 用户自定义模型（key 只回掩码，绝不回原文）
     const [rows] = await pool.execute(
-        'SELECT model, selected FROM user_chat_models WHERE user_id = ? ORDER BY id ASC',
+        'SELECT model, base_url, api_key, selected FROM user_chat_models WHERE user_id = ? ORDER BY id ASC',
         [userId]
     );
-    const custom = (rows as any[]).map(r => r.model);
-    const selected = ((rows as any[]).find(r => Number(r.selected) === 1) || {}).model || null;
+    const custom = (rows as any[]).map(r => {
+        let keyHint = '';
+        if (r.api_key) {
+            try { keyHint = maskSecret(decryptSecret(r.api_key)); } catch { keyHint = '****'; }
+        }
+        return { model: r.model, base_url: r.base_url || '', key_hint: keyHint, selected: Number(r.selected) === 1 };
+    });
+    const selected = (custom.find(c => c.selected) || {}).model || null;
 
     res.json({ success: true, data: { available, custom, selected, gateway_enabled: !!gw } });
 }));
 
-// 添加自定义模型（网关列表里没有的新模型名）
+// 添加 / 更新自定义模型（同模型名重复提交 = 更新地址与 Key）
+// - 填 base_url + api_key：用户自带网关配置（私密，服务端仅解密用于转发）
+// - 都留空：走服务端统一副厂网关（需网关已配置）
 router.post('/chat-models', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const model = String(req.body?.model || '').trim();
+    const baseUrl = String(req.body?.base_url || '').trim().replace(/\/+$/, '');
+    const apiKey = String(req.body?.api_key || '').trim();
+
     if (!MODEL_RE.test(model)) {
         res.status(400).json({ success: false, message: '模型名不合法（限字母数字._-/，80 字符内）' });
         return;
     }
-    if (!getFallbackConfig()) {
-        res.status(400).json({ success: false, message: '模型服务未配置，暂时无法添加自定义模型' });
+    if (baseUrl && !BASE_URL_RE.test(baseUrl)) {
+        res.status(400).json({ success: false, message: '网关地址不合法（需 http/https 开头）' });
         return;
     }
-    const [exists] = await pool.execute(
-        'SELECT id FROM user_chat_models WHERE user_id = ? AND model = ?',
-        [userId, model]
-    );
-    if ((exists as any[]).length === 0) {
-        await pool.execute(
-            'INSERT INTO user_chat_models (user_id, model) VALUES (?, ?)',
-            [userId, model]
-        );
+    if (apiKey && (apiKey.length < 8 || apiKey.length > 200)) {
+        res.status(400).json({ success: false, message: 'API Key 长度需在 8-200 字符之间' });
+        return;
     }
-    res.json({ success: true, message: '模型已添加' });
+    if (Boolean(baseUrl) !== Boolean(apiKey)) {
+        res.status(400).json({ success: false, message: '网关地址与 API Key 需同时填写（留空则使用服务端模型网关）' });
+        return;
+    }
+    if (!baseUrl && !getFallbackConfig()) {
+        res.status(400).json({ success: false, message: '服务端模型网关未配置，请自带网关地址与 API Key' });
+        return;
+    }
+
+    const encrypted = apiKey ? encryptSecret(apiKey) : null;
+    await pool.execute(
+        `INSERT INTO user_chat_models (user_id, model, base_url, api_key) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE base_url = VALUES(base_url), api_key = VALUES(api_key)`,
+        [userId, model, baseUrl, encrypted]
+    );
+    res.json({ success: true, message: baseUrl ? '模型已保存（自带网关配置）' : '模型已添加（走服务端网关）' });
 }));
 
 // 删除自定义模型（若删除的是当前选中模型，则同时清空选择，回到默认链路）
@@ -895,10 +917,6 @@ router.put('/chat-models/select', authenticate, asyncHandler(async (req: Request
     }
     if (!MODEL_RE.test(model)) {
         res.status(400).json({ success: false, message: '模型名不合法' });
-        return;
-    }
-    if (!getFallbackConfig()) {
-        res.status(400).json({ success: false, message: '模型服务未配置，暂时无法切换模型' });
         return;
     }
     await pool.execute('UPDATE user_chat_models SET selected = 0 WHERE user_id = ?', [userId]);

@@ -5,13 +5,15 @@ import {
     callAI, callAIWithConfig, extractDeltaChunk, getStreamRequestParams,
     getAIConfig, getFallbackConfig, isRetryableAIError, isProviderError
 } from '../utils/aiClient';
+import { decryptSecret } from '../utils/secretBox';
 import { pool } from '../db/mysql';
 
 const router = Router();
 
 /**
  * 解析当前用户的模型路由：
- * - 用户选了自定义模型 → 主路 = 副厂网关 + 所选模型，备路 = 默认主厂（DeepSeek）
+ * - 所选模型自带网关配置（base_url+api_key）→ 主路 = 用户自己的配置（key 解密使用），备路 = 默认主厂
+ * - 所选模型无自带配置且配了副厂网关 → 主路 = 网关 + 所选模型，备路 = 默认主厂
  * - 未选择 → 主路 = 默认主厂，备路 = 副厂网关（默认模型）
  */
 async function resolveUserRouting(userId: number): Promise<{
@@ -19,14 +21,32 @@ async function resolveUserRouting(userId: number): Promise<{
     secondary: { baseURL: string; apiKey: string; model: string } | null;
 }> {
     const [rows] = await pool.execute(
-        'SELECT model FROM user_chat_models WHERE user_id = ? AND selected = 1 LIMIT 1',
+        'SELECT model, base_url, api_key FROM user_chat_models WHERE user_id = ? AND selected = 1 LIMIT 1',
         [userId]
     );
-    const selected = (rows as any[])[0]?.model || null;
+    const row = (rows as any[])[0];
     const main = getAIConfig();
     const gw = getFallbackConfig();
-    if (selected && gw) {
-        return { primary: { ...gw, model: selected }, secondary: main };
+
+    if (row) {
+        // 用户自带网关配置优先（key 加密落库，这里解密用于转发）
+        if (row.base_url && row.api_key) {
+            try {
+                const key = decryptSecret(String(row.api_key));
+                if (key) {
+                    return {
+                        primary: { baseURL: String(row.base_url).replace(/\/+$/, ''), apiKey: key, model: String(row.model) },
+                        secondary: main
+                    };
+                }
+            } catch (e: any) {
+                console.error('[resolveUserRouting] 用户模型密钥解密失败（' + row.model + '），回落默认链路');
+            }
+        }
+        // 只填了模型名 → 走服务端统一副厂网关
+        if (gw) {
+            return { primary: { ...gw, model: String(row.model) }, secondary: main };
+        }
     }
     return { primary: main, secondary: gw };
 }
