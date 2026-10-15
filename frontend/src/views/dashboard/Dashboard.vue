@@ -112,75 +112,13 @@
               <div class="model-picker">
                 <button
                   class="model-chip"
-                  :class="{ open: modelPanelOpen }"
-                  :disabled="modelBusy"
-                  title="选择对话模型（自定义模型走模型网关，失败自动回落默认模型）"
-                  @click.stop="toggleModelPanel"
+                  title="模型配置（添加/编辑/删除/测试连接/切换模型）"
+                  @click="openModelSettings"
                 >
                   <AppIcon name="spark" :size="12" />
                   <span>{{ selectedModelLabel }}</span>
                   <AppIcon name="chevronDown" :size="12" />
                 </button>
-                <div v-if="modelPanelOpen" class="model-panel" @click.stop>
-                  <div class="mp-title">对话模型</div>
-                  <div class="mp-list">
-                    <div
-                      v-for="c in allModelOptions"
-                      :key="c.model"
-                      :class="['mp-item', { selected: c.model === modelInfo.selected }]"
-                      :title="c.base_url ? `自带网关：${c.base_url}${c.key_hint ? ' · Key ' + c.key_hint : ''}` : '走服务端模型网关'"
-                      @click="onSelectModel(c.model)"
-                    >
-                      <span class="mp-name">{{ c.model }}</span>
-                      <span v-if="c.base_url" class="mp-tag">自带</span>
-                      <AppIcon v-if="c.model === modelInfo.selected" name="check" :size="13" class="mp-check" />
-                      <button
-                        class="mp-del"
-                        title="删除该模型"
-                        @click.stop="onDeleteModel(c.model)"
-                      >
-                        <AppIcon name="trash" :size="12" />
-                      </button>
-                    </div>
-                    <div v-if="!allModelOptions.length" class="mp-empty">
-                      暂无模型，可在下方添加
-                    </div>
-                  </div>
-                  <div class="mp-add">
-                    <input
-                      v-model="newModelInput"
-                      type="text"
-                      placeholder="模型名，如 gpt-4o-mini"
-                      @keyup.enter="onAddModel"
-                    >
-                    <button :disabled="!newModelInput.trim() || modelBusy" @click="onAddModel">
-                      <AppIcon name="plus" :size="12" />
-                    </button>
-                  </div>
-                  <div class="mp-add mp-sub">
-                    <input
-                      v-model="newModelUrl"
-                      type="text"
-                      placeholder="网关地址（可选，如 https://xx.com/v1）"
-                      @keyup.enter="onAddModel"
-                    >
-                  </div>
-                  <div class="mp-add mp-sub">
-                    <input
-                      v-model="newModelKey"
-                      type="password"
-                      placeholder="API Key（可选，与服务端网关二选一）"
-                      autocomplete="off"
-                      @keyup.enter="onAddModel"
-                    >
-                  </div>
-                  <div v-if="!modelInfo.gateway_enabled" class="mp-hint">
-                    服务端网关未配置：地址与 Key 需同时填写
-                  </div>
-                  <button v-if="modelInfo.selected" class="mp-reset" @click="onSelectModel('')">
-                    恢复默认模型
-                  </button>
-                </div>
               </div>
             </div>
             <div class="chat-box" ref="chatBox">
@@ -682,6 +620,7 @@
 
     <!-- 修改密码弹窗 -->
     <ChangePasswordDialog ref="changePasswordRef" />
+    <ModelSettingsDialog ref="modelSettingsRef" @changed="onModelsChanged" />
     
     <!-- 编辑资料弹窗 -->
     <EditProfileDialog 
@@ -698,7 +637,7 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useSettingsStore } from '@/stores/settings'
-import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, createChatSession, lockChatSession, refreshSessionSummary, deleteChatSession, getChatModels, addChatModel, deleteChatModel, selectChatModel, getUserAppointments, getAnalysisReports } from '@/api/user'
+import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, createChatSession, lockChatSession, refreshSessionSummary, deleteChatSession, getChatModels, getUserAppointments, getAnalysisReports } from '@/api/user'
 import { useLoadingStore } from '@/stores/loading'
 import { chatWithAIStream, generateReport } from '@/api/ai'
 import { getTestHistory } from '@/api/tests'
@@ -711,6 +650,7 @@ import MyCard from '../expert/MyCard.vue'
 import AppointmentDetail from '../expert/AppointmentDetail.vue'
 import UserAppointmentList from '../expert/UserAppointmentList.vue'
 import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
+import ModelSettingsDialog from "../../components/ModelSettingsDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
 import AppIcon from '@/components/AppIcon.vue'
 import { showToast } from '@/utils/notify'
@@ -847,24 +787,13 @@ const maybeSummarize = (sessionId: string) => {
     .catch(() => {})
 }
 
-// ===== 对话模型管理：添加/删除/选择，可自带网关地址+Key（加密存储），也可走服务端网关 =====
-const modelPanelOpen = ref(false)
+// ===== 对话模型管理：配置弹窗（自带网关地址+Key 加密存储），芯片为入口 =====
 interface CustomModel { model: string; base_url: string; key_hint: string; selected: boolean }
 const modelInfo = ref<{ available: string[]; custom: CustomModel[]; selected: string | null; gateway_enabled: boolean }>({
   available: [], custom: [], selected: null, gateway_enabled: false
 })
-const newModelInput = ref('')
-const newModelUrl = ref('')
-const newModelKey = ref('')
-const modelBusy = ref(false)
+const modelSettingsRef = ref<InstanceType<typeof ModelSettingsDialog> | null>(null)
 
-const allModelOptions = computed<CustomModel[]>(() => {
-  const list: CustomModel[] = modelInfo.value.custom.map(c => ({ ...c }))
-  for (const m of modelInfo.value.available) {
-    if (!list.some(c => c.model === m)) list.push({ model: m, base_url: '', key_hint: '', selected: false })
-  }
-  return list
-})
 const selectedModelLabel = computed(() => modelInfo.value.selected || '默认模型')
 
 const loadChatModels = async () => {
@@ -875,50 +804,15 @@ const loadChatModels = async () => {
     console.error('模型列表加载失败:', e)
   }
 }
-const toggleModelPanel = async () => {
-  modelPanelOpen.value = !modelPanelOpen.value
-  if (modelPanelOpen.value) await loadChatModels()
-}
-const closeModelPanel = () => { modelPanelOpen.value = false }
 
-const onSelectModel = async (m: string) => {
-  if (m === (modelInfo.value.selected || '')) { closeModelPanel(); return }
-  modelBusy.value = true
-  try {
-    await selectChatModel(m)
-    // 不弹提醒：标题行芯片文字变化即状态反馈
-    modelInfo.value.selected = m || null
-    closeModelPanel()
-  } catch (e: any) {
-    error(e?.response?.data?.message || '切换模型失败')
-  } finally {
-    modelBusy.value = false
-  }
+// 打开独立的模型配置弹窗（列表/添加/编辑/删除/测试连接/切换）
+const openModelSettings = () => {
+  modelSettingsRef.value?.show()
 }
-const onAddModel = async () => {
-  const m = newModelInput.value.trim()
-  if (!m) return
-  modelBusy.value = true
-  try {
-    await addChatModel({ model: m, base_url: newModelUrl.value.trim(), api_key: newModelKey.value.trim() })
-    newModelInput.value = ''
-    newModelUrl.value = ''
-    newModelKey.value = ''
-    await loadChatModels()
-  } catch (e: any) {
-    error(e?.response?.data?.message || '添加模型失败')
-  } finally {
-    modelBusy.value = false
-  }
-}
-const onDeleteModel = async (m: string) => {
-  try {
-    await deleteChatModel(m)
-    if (modelInfo.value.selected === m) modelInfo.value.selected = null
-    await loadChatModels()
-  } catch (e: any) {
-    error(e?.response?.data?.message || '删除模型失败')
-  }
+
+// 弹窗内切换/删除模型后同步标题栏芯片显示
+const onModelsChanged = (selected: string | null) => {
+  modelInfo.value.selected = selected
 }
 
 // 删除会话（锁定中的对话不可删除，与后端校验一致）
@@ -1285,7 +1179,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.3'
+  const cur = updateInfo.value?.current_version || '0.4.4'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -2526,175 +2420,6 @@ const scrollToBottom = () => {
 
 .model-chip:hover,
 .model-chip.open {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.model-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 50;
-  width: 260px;
-  background: var(--card-bg);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  padding: 10px;
-}
-
-.mp-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-}
-
-.mp-list {
-  max-height: 220px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.mp-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12.5px;
-  color: var(--text-primary);
-}
-
-.mp-item:hover {
-  background: var(--accent-soft);
-}
-
-.mp-item.selected {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.mp-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mp-check {
-  flex-shrink: 0;
-}
-
-.mp-del {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s, color 0.12s;
-}
-
-.mp-item:hover .mp-del {
-  opacity: 1;
-}
-
-.mp-del:hover {
-  color: var(--danger);
-}
-
-.mp-empty {
-  padding: 12px 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.mp-add {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.mp-add.mp-sub {
-  margin-top: 6px;
-}
-
-.mp-tag {
-  flex-shrink: 0;
-  padding: 1px 5px;
-  font-size: 10px;
-  line-height: 14px;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 6px;
-}
-
-.mp-hint {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.mp-add input {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 9px;
-  font-size: 12px;
-  color: var(--text-primary);
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  outline: none;
-}
-
-.mp-add input:focus {
-  border-color: var(--accent);
-}
-
-.mp-add button {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.mp-add button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.mp-reset {
-  width: 100%;
-  margin-top: 8px;
-  padding: 6px 0;
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px dashed var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.mp-reset:hover {
   color: var(--accent);
   border-color: var(--accent);
 }

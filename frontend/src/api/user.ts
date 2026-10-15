@@ -103,6 +103,11 @@ export const deleteChatModel = (model: string) => {
   return request.delete(`/users/chat-models/${encodeURIComponent(model)}`)
 }
 
+// 测试模型连通性（可直接测表单值，或 use_saved 测已保存配置）
+export const testChatModel = (data: { model: string; base_url?: string; api_key?: string; use_saved?: boolean }) => {
+  return request.post('/users/chat-models/test', data)
+}
+
 // 选择当前对话模型（传空串恢复默认）
 export const selectChatModel = (model: string) => {
   return request.put('/users/chat-models/select', { model })

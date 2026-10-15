@@ -931,6 +931,83 @@ router.put('/chat-models/select', authenticate, asyncHandler(async (req: Request
     res.json({ success: true, message: '已切换模型', data: { selected: model } });
 }));
 
+// 测试模型连通性（发一条 max_tokens=1 的最小补全请求验证端点+密钥+模型可用）
+// - 传 base_url + api_key：测试待保存的表单配置（先测后存）
+// - 传 use_saved: true：测试已保存的模型配置（key 解密使用）
+// - base_url 留空：测试服务端统一模型网关
+router.post('/chat-models/test', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const model = String(req.body?.model || '').trim();
+    const baseUrl = String(req.body?.base_url || '').trim().replace(/\/+$/, '');
+    const apiKey = String(req.body?.api_key || '').trim();
+    const useSaved = Boolean(req.body?.use_saved);
+
+    if (!MODEL_RE.test(model)) {
+        res.status(400).json({ success: false, message: '模型名不合法' });
+        return;
+    }
+
+    let targetURL = baseUrl;
+    let targetKey = apiKey;
+
+    if (useSaved) {
+        const [rows] = await pool.execute(
+            'SELECT base_url, api_key FROM user_chat_models WHERE user_id = ? AND model = ?',
+            [userId, model]
+        );
+        const row = (rows as any[])[0];
+        if (!row) {
+            res.status(404).json({ success: false, message: '该模型配置不存在' });
+            return;
+        }
+        if (row.base_url && row.api_key) {
+            targetURL = String(row.base_url);
+            try {
+                targetKey = decryptSecret(String(row.api_key));
+            } catch {
+                res.json({ success: false, message: '密钥解密失败，请编辑重新保存该模型配置' });
+                return;
+            }
+        } else {
+            targetURL = '';
+            targetKey = '';
+        }
+    }
+
+    if (!targetURL) {
+        const gw = getFallbackConfig();
+        if (!gw) {
+            res.json({ success: false, message: '该模型未带网关配置，且服务端模型网关未配置' });
+            return;
+        }
+        targetURL = gw.baseURL;
+        targetKey = gw.apiKey;
+    }
+
+    const axios = require('axios');
+    const started = Date.now();
+    try {
+        await axios.post(
+            targetURL + '/chat/completions',
+            { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1, stream: false },
+            {
+                headers: { Authorization: 'Bearer ' + targetKey, 'Content-Type': 'application/json' },
+                timeout: 20000,
+                validateStatus: null
+            }
+        ).then((r: any) => {
+            if (r.status >= 200 && r.status < 300) return;
+            const detail = String(r.data?.error?.message || r.data?.message || '').slice(0, 120);
+            const err: any = new Error(`服务返回 ${r.status}${detail ? '：' + detail : ''}`);
+            throw err;
+        });
+        res.json({ success: true, message: '连接成功', latency_ms: Date.now() - started });
+    } catch (e: any) {
+        const brief = String(e.message || e.code || '连接失败').slice(0, 160);
+        res.json({ success: false, message: brief });
+    }
+}));
+
 // ========== 保存聊天记录 ==========
 // session_id 可选：前端为每个对话生成唯一 id，不传时归入 default（旧数据兼容）
 router.post('/chat', authenticate, asyncHandler(async (req: Request, res: Response) => {
