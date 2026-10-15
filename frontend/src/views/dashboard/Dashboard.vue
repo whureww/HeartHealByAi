@@ -1195,7 +1195,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.4'
+  const cur = updateInfo.value?.current_version || '0.4.5'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -1333,8 +1333,6 @@ const silentCheckUpdate = async () => {
 }
 
 onMounted(async () => {
-  // 模型面板：点击面板外自动收起
-  document.addEventListener('click', closeModelPanel)
   if (userStore.isLoggedIn) {
     try {
       await userStore.getInfo()
@@ -1393,7 +1391,6 @@ onMounted(async () => {
 
 
 onUnmounted(() => {
-  document.removeEventListener('click', closeModelPanel)
   disconnectSocket()
 })
 
