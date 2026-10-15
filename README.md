@@ -1,5 +1,7 @@
 # 心愈 (XinYu)
 
+**简体中文** | [English](./English/README.md)
+
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-blue) ![Desktop](https://img.shields.io/badge/desktop-Tauri%202-orange) ![Frontend](https://img.shields.io/badge/frontend-Vue%203-brightgreen) ![Backend](https://img.shields.io/badge/backend-Node.js%20%2B%20Express-green) ![DB](https://img.shields.io/badge/database-MySQL%208%20%2B%20Redis-red)
 
 
