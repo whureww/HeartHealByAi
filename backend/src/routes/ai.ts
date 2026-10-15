@@ -1,9 +1,35 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { authenticate } from '../middleware/auth';
-import { callAI, extractDeltaChunk, getStreamRequestParams } from '../utils/aiClient';
+import {
+    callAI, callAIWithConfig, extractDeltaChunk, getStreamRequestParams,
+    getAIConfig, getFallbackConfig, isRetryableAIError, isProviderError
+} from '../utils/aiClient';
+import { pool } from '../db/mysql';
 
 const router = Router();
+
+/**
+ * 解析当前用户的模型路由：
+ * - 用户选了自定义模型 → 主路 = 副厂网关 + 所选模型，备路 = 默认主厂（DeepSeek）
+ * - 未选择 → 主路 = 默认主厂，备路 = 副厂网关（默认模型）
+ */
+async function resolveUserRouting(userId: number): Promise<{
+    primary: { baseURL: string; apiKey: string; model: string };
+    secondary: { baseURL: string; apiKey: string; model: string } | null;
+}> {
+    const [rows] = await pool.execute(
+        'SELECT model FROM user_chat_models WHERE user_id = ? AND selected = 1 LIMIT 1',
+        [userId]
+    );
+    const selected = (rows as any[])[0]?.model || null;
+    const main = getAIConfig();
+    const gw = getFallbackConfig();
+    if (selected && gw) {
+        return { primary: { ...gw, model: selected }, secondary: main };
+    }
+    return { primary: main, secondary: gw };
+}
 
 const SYSTEM_PROMPT = '你是一位专业且温暖的心理咨询师，名叫心愈。你的职责是：1.倾听与共情：认真倾听用户的情绪倾诉，给予共情和理解 2.专业疏导：运用心理学知识，帮助用户梳理情绪、缓解压力 3.安全边界：不提供医疗诊断，遇到严重心理问题建议寻求专业医生帮助 4.温暖陪伴：用亲切、自然的语气交流，像一位知心朋友。回复要求：语气温暖、亲切，避免说教；适当使用emoji增加亲和力；回复控制在200字以内，简洁有力；如果用户表达负面情绪，先共情再引导';
 
@@ -34,11 +60,20 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    const content = await callAI(buildChatMessages(messages, context), {
-      temperature: 0.7,
-      maxTokens: 800,
-      timeout: 30000
-    });
+    const chatMessages = buildChatMessages(messages, context);
+    const opts = { temperature: 0.7, maxTokens: 800, timeout: 30000 };
+
+    // 用户级模型路由：所选模型走副厂网关，失败自动回落默认主厂
+    const { primary, secondary } = await resolveUserRouting(req.user!.id);
+    let content: string;
+    try {
+      content = await callAIWithConfig(primary, chatMessages, opts);
+    } catch (err: any) {
+      // 瞬时故障或上游明确拒绝（key 封禁等）都回落备用厂商
+      if (!secondary || !(isRetryableAIError(err) || isProviderError(err))) throw err;
+      console.error('[ai/chat] 主路故障（' + (err.code || err.response?.status) + '），回落备用厂商');
+      content = await callAIWithConfig(secondary, chatMessages, opts);
+    }
 
     res.json({
       success: true,
@@ -72,27 +107,41 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    // 统一客户端构造流式请求参数（厂商由环境变量决定）
-    const params = getStreamRequestParams(chatMessages, { temperature: 0.7, maxTokens: 800 });
+    // 用户级模型路由：主路失败 → 1.5s 重试一次 → 仍失败切备路
+    // （未选模型：主=默认厂商，备=副厂网关；选了模型：主=网关+所选模型，备=默认厂商）
+    const { primary, secondary } = await resolveUserRouting(req.user!.id);
+    const primaryParams = getStreamRequestParams(chatMessages, { temperature: 0.7, maxTokens: 800 }, primary);
+    const secondaryParams = secondary
+        ? getStreamRequestParams(chatMessages, { temperature: 0.7, maxTokens: 800 }, secondary)
+        : null;
 
-    const requestStream = () => axios.post(params.url, params.body, {
-      headers: params.headers,
-      timeout: params.timeout,
+    const requestStream = (cfg = primaryParams) => axios.post(cfg.url, cfg.body, {
+      headers: cfg.headers,
+      timeout: cfg.timeout,
       responseType: 'stream'
     });
 
-    // 上游瞬时故障自动重试：DeepSeek 偶发 503/连接重置（实测美国服务器访问
-    // 间歇出现），失败快（尚未发出任何响应头）时静默重试一次
     let response;
     try {
       response = await requestStream();
     } catch (err: any) {
-      const retryable = [502, 503, 504].includes(err.response?.status)
-        || ['ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT', 'EPIPE'].includes(err.code);
-      if (!retryable) throw err;
-      console.error('上游瞬时故障（' + (err.code || err.response?.status) + '），1.5s 后重试一次');
-      await new Promise(r => setTimeout(r, 1500));
-      response = await requestStream();
+      const transient = isRetryableAIError(err);
+      // 瞬时故障先原厂商重试一次；瞬时或明确拒绝（key 封禁等）都可切备路
+      if (!transient && !isProviderError(err)) throw err;
+      if (transient) {
+        console.error('[ai/chat-stream] 主路瞬时故障（' + (err.code || err.response?.status) + '），1.5s 后重试一次');
+        await new Promise(r => setTimeout(r, 1500));
+        try {
+          response = await requestStream();
+        } catch (err2: any) {
+          err = err2;
+        }
+      }
+      if (!response) {
+        if (!secondaryParams || !(isRetryableAIError(err) || isProviderError(err))) throw err;
+        console.error('[ai/chat-stream] 主路不可用（' + (err.code || err.response?.status) + '），切换备用厂商');
+        response = await requestStream(secondaryParams);
+      }
     }
 
     // 转发流式数据（增量文本经 extractDeltaChunk 归一化，兼容各家格式）
