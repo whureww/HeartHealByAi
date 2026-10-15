@@ -11,7 +11,7 @@ import nodemailer from 'nodemailer';
 import jwt from "jsonwebtoken";
 import { TokenManager } from '../utils/tokenManager';
 import { getActiveRestriction } from '../utils/restrict';
-import { callAI } from '../utils/aiClient';
+import { callAI, getFallbackConfig } from '../utils/aiClient';
 
 const router = Router();
 
@@ -788,6 +788,129 @@ router.delete('/chat-sessions/:sessionId', authenticate, asyncHandler(async (req
         message: '会话已删除',
         data: { deleted: result.affectedRows || 0 }
     });
+}));
+
+// ========== 对话模型管理 ==========
+// 用户可添加/删除/选择对话模型；所选模型路由到副厂网关（OpenAI 兼容格式），
+// 未选择时走默认主厂链路。网关可用模型列表由服务端代理拉取（key 不下发前端）
+const MODEL_RE = /^[a-zA-Z0-9._\-\/]{1,80}$/;
+// 网关模型列表内存缓存（5 分钟），避免每次打开面板都打网关
+let gwModelsCache: { at: number; ids: string[] } | null = null;
+
+router.get('/chat-models', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+
+    // 网关可用模型（未配置副厂时为空数组）
+    let available: string[] = [];
+    const gw = getFallbackConfig();
+    if (gw) {
+        if (gwModelsCache && Date.now() - gwModelsCache.at < 5 * 60 * 1000) {
+            available = gwModelsCache.ids;
+        } else {
+            try {
+                const axios = require('axios');
+                const r = await axios.get(gw.baseURL + '/models', {
+                    headers: { Authorization: 'Bearer ' + gw.apiKey },
+                    timeout: 10000
+                });
+                available = (r.data?.data || [])
+                    .map((m: any) => String(m.id || ''))
+                    .filter((id: string) => MODEL_RE.test(id))
+                    .sort();
+                gwModelsCache = { at: Date.now(), ids: available };
+            } catch (e: any) {
+                console.error('[chat-models] 拉取网关模型列表失败:', e.code || e.response?.status || e.message);
+                available = gwModelsCache?.ids || [];
+            }
+        }
+    }
+
+    // 用户已添加的自定义模型 + 当前选中
+    const [rows] = await pool.execute(
+        'SELECT model, selected FROM user_chat_models WHERE user_id = ? ORDER BY id ASC',
+        [userId]
+    );
+    const custom = (rows as any[]).map(r => r.model);
+    const selected = ((rows as any[]).find(r => Number(r.selected) === 1) || {}).model || null;
+
+    res.json({ success: true, data: { available, custom, selected, gateway_enabled: !!gw } });
+}));
+
+// 添加自定义模型（网关列表里没有的新模型名）
+router.post('/chat-models', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const model = String(req.body?.model || '').trim();
+    if (!MODEL_RE.test(model)) {
+        res.status(400).json({ success: false, message: '模型名不合法（限字母数字._-/，80 字符内）' });
+        return;
+    }
+    if (!getFallbackConfig()) {
+        res.status(400).json({ success: false, message: '模型服务未配置，暂时无法添加自定义模型' });
+        return;
+    }
+    const [exists] = await pool.execute(
+        'SELECT id FROM user_chat_models WHERE user_id = ? AND model = ?',
+        [userId, model]
+    );
+    if ((exists as any[]).length === 0) {
+        await pool.execute(
+            'INSERT INTO user_chat_models (user_id, model) VALUES (?, ?)',
+            [userId, model]
+        );
+    }
+    res.json({ success: true, message: '模型已添加' });
+}));
+
+// 删除自定义模型（若删除的是当前选中模型，则同时清空选择，回到默认链路）
+router.delete('/chat-models/:model', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const model = String(req.params.model || '').trim();
+    if (!MODEL_RE.test(model)) {
+        res.status(400).json({ success: false, message: '模型名不合法' });
+        return;
+    }
+    const [ret]: any = await pool.execute(
+        'DELETE FROM user_chat_models WHERE user_id = ? AND model = ?',
+        [userId, model]
+    );
+    // 若删除的是选中模型，清空选择标记（下一次查询 selected 自然为 null）
+    if (ret.affectedRows > 0) {
+        await pool.execute(
+            'UPDATE user_chat_models SET selected = 0 WHERE user_id = ? AND model = ?',
+            [userId, model]
+        );
+    }
+    res.json({ success: true, message: '模型已删除' });
+}));
+
+// 选择/切换当前对话模型（传空串或 null 表示恢复默认模型）
+router.put('/chat-models/select', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const model = req.body?.model == null ? '' : String(req.body.model).trim();
+
+    if (model === '') {
+        await pool.execute('UPDATE user_chat_models SET selected = 0 WHERE user_id = ?', [userId]);
+        res.json({ success: true, message: '已恢复默认模型', data: { selected: null } });
+        return;
+    }
+    if (!MODEL_RE.test(model)) {
+        res.status(400).json({ success: false, message: '模型名不合法' });
+        return;
+    }
+    if (!getFallbackConfig()) {
+        res.status(400).json({ success: false, message: '模型服务未配置，暂时无法切换模型' });
+        return;
+    }
+    await pool.execute('UPDATE user_chat_models SET selected = 0 WHERE user_id = ?', [userId]);
+    await pool.execute(
+        'INSERT IGNORE INTO user_chat_models (user_id, model) VALUES (?, ?)',
+        [userId, model]
+    );
+    await pool.execute(
+        'UPDATE user_chat_models SET selected = 1 WHERE user_id = ? AND model = ?',
+        [userId, model]
+    );
+    res.json({ success: true, message: '已切换模型', data: { selected: model } });
 }));
 
 // ========== 保存聊天记录 ==========

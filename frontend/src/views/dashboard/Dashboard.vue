@@ -107,7 +107,60 @@
 
           <!-- 右侧：聊天主区 -->
           <div class="card chat-card chat-main">
-            <h3>一对一 AI 私密心理倾诉</h3>
+            <div class="chat-head">
+              <h3>一对一 AI 私密心理倾诉</h3>
+              <div class="model-picker">
+                <button
+                  class="model-chip"
+                  :class="{ open: modelPanelOpen }"
+                  :disabled="modelBusy"
+                  title="选择对话模型（自定义模型走模型网关，失败自动回落默认模型）"
+                  @click.stop="toggleModelPanel"
+                >
+                  <AppIcon name="spark" :size="12" />
+                  <span>{{ selectedModelLabel }}</span>
+                  <AppIcon name="chevronDown" :size="12" />
+                </button>
+                <div v-if="modelPanelOpen" class="model-panel" @click.stop>
+                  <div class="mp-title">对话模型</div>
+                  <div class="mp-list">
+                    <div
+                      v-for="m in allModelOptions"
+                      :key="m"
+                      :class="['mp-item', { selected: m === modelInfo.selected }]"
+                      @click="onSelectModel(m)"
+                    >
+                      <span class="mp-name">{{ m }}</span>
+                      <AppIcon v-if="m === modelInfo.selected" name="check" :size="13" class="mp-check" />
+                      <button
+                        class="mp-del"
+                        title="删除该模型"
+                        @click.stop="onDeleteModel(m)"
+                      >
+                        <AppIcon name="trash" :size="12" />
+                      </button>
+                    </div>
+                    <div v-if="!allModelOptions.length" class="mp-empty">
+                      {{ modelInfo.gateway_enabled ? '模型列表为空，可手动添加' : '模型服务未配置，使用默认模型' }}
+                    </div>
+                  </div>
+                  <div class="mp-add">
+                    <input
+                      v-model="newModelInput"
+                      type="text"
+                      placeholder="输入模型名，如 gpt-4o-mini"
+                      @keyup.enter="onAddModel"
+                    >
+                    <button :disabled="!newModelInput.trim()" @click="onAddModel">
+                      <AppIcon name="plus" :size="12" />
+                    </button>
+                  </div>
+                  <button v-if="modelInfo.selected" class="mp-reset" @click="onSelectModel('')">
+                    恢复默认模型
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="chat-box" ref="chatBox">
               <div class="msg-item">
                 <div class="msg-ai selectable-text">你好！我是你的专属心理陪伴助手"心愈"，你所有的情绪、压力、困惑都可以安心告诉我，我会耐心倾听并给予疏导。</div>
@@ -623,7 +676,7 @@ import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useSettingsStore } from '@/stores/settings'
-import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, createChatSession, lockChatSession, refreshSessionSummary, deleteChatSession, getUserAppointments, getAnalysisReports } from '@/api/user'
+import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, createChatSession, lockChatSession, refreshSessionSummary, deleteChatSession, getChatModels, addChatModel, deleteChatModel, selectChatModel, getUserAppointments, getAnalysisReports } from '@/api/user'
 import { useLoadingStore } from '@/stores/loading'
 import { chatWithAIStream, generateReport } from '@/api/ai'
 import { getTestHistory } from '@/api/tests'
@@ -748,7 +801,7 @@ const startNewSession = async () => {
 const toggleLock = async (s: any) => {
   try {
     await lockChatSession(s.session_id, !Number(s.locked))
-    success(Number(s.locked) ? '已解除锁定' : '已锁定，置顶并防止误删')
+    // 成功时不弹提醒：锁按钮高亮 + 置顶排序本身就是状态反馈
     await loadChatSessions()
   } catch (e: any) {
     error(e?.response?.data?.message || '操作失败，请稍后重试')
@@ -770,6 +823,72 @@ const maybeSummarize = (sessionId: string) => {
       }
     })
     .catch(() => {})
+}
+
+// ===== 对话模型管理：添加/删除/选择，所选模型走模型网关，失败自动回落默认模型 =====
+const modelPanelOpen = ref(false)
+const modelInfo = ref<{ available: string[]; custom: string[]; selected: string | null; gateway_enabled: boolean }>({
+  available: [], custom: [], selected: null, gateway_enabled: false
+})
+const newModelInput = ref('')
+const modelBusy = ref(false)
+
+const allModelOptions = computed(() => {
+  const list = [...modelInfo.value.available]
+  for (const m of modelInfo.value.custom) {
+    if (!list.includes(m)) list.push(m)
+  }
+  return list
+})
+const selectedModelLabel = computed(() => modelInfo.value.selected || '默认模型')
+
+const loadChatModels = async () => {
+  try {
+    const res: any = await getChatModels()
+    if (res?.data) modelInfo.value = res.data
+  } catch (e) {
+    console.error('模型列表加载失败:', e)
+  }
+}
+const toggleModelPanel = async () => {
+  modelPanelOpen.value = !modelPanelOpen.value
+  if (modelPanelOpen.value) await loadChatModels()
+}
+const closeModelPanel = () => { modelPanelOpen.value = false }
+
+const onSelectModel = async (m: string) => {
+  if (m === (modelInfo.value.selected || '')) { closeModelPanel(); return }
+  modelBusy.value = true
+  try {
+    await selectChatModel(m)
+    // 不弹提醒：标题行芯片文字变化即状态反馈
+    modelInfo.value.selected = m || null
+    closeModelPanel()
+  } catch (e: any) {
+    error(e?.response?.data?.message || '切换模型失败')
+  } finally {
+    modelBusy.value = false
+  }
+}
+const onAddModel = async () => {
+  const m = newModelInput.value.trim()
+  if (!m) return
+  try {
+    await addChatModel(m)
+    newModelInput.value = ''
+    await loadChatModels()
+  } catch (e: any) {
+    error(e?.response?.data?.message || '添加模型失败')
+  }
+}
+const onDeleteModel = async (m: string) => {
+  try {
+    await deleteChatModel(m)
+    if (modelInfo.value.selected === m) modelInfo.value.selected = null
+    await loadChatModels()
+  } catch (e: any) {
+    error(e?.response?.data?.message || '删除模型失败')
+  }
 }
 
 // 删除会话（锁定中的对话不可删除，与后端校验一致）
@@ -794,7 +913,7 @@ const removeSession = async (s: any) => {
         startNewSession()
       }
     }
-    success('对话已删除')
+    // 删除成功不弹提醒：列表项消失 + 自动切换会话本身就是反馈
   } catch (e: any) {
     error(e?.response?.data?.message || '删除失败，请稍后重试')
   }
@@ -1136,7 +1255,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.1'
+  const cur = updateInfo.value?.current_version || '0.4.2'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -1274,6 +1393,8 @@ const silentCheckUpdate = async () => {
 }
 
 onMounted(async () => {
+  // 模型面板：点击面板外自动收起
+  document.addEventListener('click', closeModelPanel)
   if (userStore.isLoggedIn) {
     try {
       await userStore.getInfo()
@@ -1332,6 +1453,7 @@ onMounted(async () => {
 
 
 onUnmounted(() => {
+  document.removeEventListener('click', closeModelPanel)
   disconnectSocket()
 })
 
@@ -2336,6 +2458,194 @@ const scrollToBottom = () => {
   flex: 1;
   min-width: 0;
   max-width: none;
+}
+
+/* 聊天头部：标题 + 模型选择器 */
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.model-picker {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  cursor: pointer;
+  max-width: 220px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.model-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-chip:hover,
+.model-chip.open {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.model-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: 260px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 10px;
+}
+
+.mp-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.mp-list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mp-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
+.mp-item:hover {
+  background: var(--accent-soft);
+}
+
+.mp-item.selected {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mp-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-check {
+  flex-shrink: 0;
+}
+
+.mp-del {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+
+.mp-item:hover .mp-del {
+  opacity: 1;
+}
+
+.mp-del:hover {
+  color: var(--danger);
+}
+
+.mp-empty {
+  padding: 12px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.mp-add {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mp-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  outline: none;
+}
+
+.mp-add input:focus {
+  border-color: var(--accent);
+}
+
+.mp-add button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.mp-add button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mp-reset {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mp-reset:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .chat-box {

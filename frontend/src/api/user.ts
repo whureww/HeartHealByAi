@@ -87,6 +87,27 @@ export const deleteChatSession = (sessionId: string) => {
   return request.delete(`/users/chat-sessions/${sessionId}`)
 }
 
+// ========== 对话模型管理 ==========
+// 获取可用模型（网关列表 + 用户自定义）与当前选中
+export const getChatModels = () => {
+  return request.get('/users/chat-models')
+}
+
+// 添加自定义模型
+export const addChatModel = (model: string) => {
+  return request.post('/users/chat-models', { model })
+}
+
+// 删除自定义模型
+export const deleteChatModel = (model: string) => {
+  return request.delete(`/users/chat-models/${encodeURIComponent(model)}`)
+}
+
+// 选择当前对话模型（传空串恢复默认）
+export const selectChatModel = (model: string) => {
+  return request.put('/users/chat-models/select', { model })
+}
+
 // ========== 测评 ==========
 export const getTests = () => {
   return request.get('/users/tests')

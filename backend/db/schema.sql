@@ -121,6 +121,19 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     KEY idx_session_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ========== 用户对话模型偏好表 ==========
+-- 用户在程序内添加/选择的自定义对话模型（路由到副厂网关，OpenAI 兼容格式）；
+-- selected=1 的行为当前生效模型，无选中时走默认主厂链路
+CREATE TABLE IF NOT EXISTS user_chat_models (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    model VARCHAR(80) NOT NULL,
+    selected TINYINT NOT NULL DEFAULT 0 COMMENT '1=当前使用的对话模型',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '添加时间',
+    UNIQUE KEY uk_user_model (user_id, model),
+    KEY idx_model_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ========== AI 分析报告表 ==========
 CREATE TABLE IF NOT EXISTS analysis_reports (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

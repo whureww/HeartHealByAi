@@ -22,6 +22,31 @@ export function getAIConfig(): AIConfig {
     return { baseURL, apiKey, model };
 }
 
+/**
+ * 备用厂商配置（双厂商自动容灾）：
+ * 三个环境变量 AI_FALLBACK_BASE_URL / AI_FALLBACK_API_KEY / AI_FALLBACK_MODEL
+ * 齐全时启用；主厂商请求失败（可重试类错误）时自动切换备用重试。
+ */
+export function getFallbackConfig(): AIConfig | null {
+    const baseURL = process.env.AI_FALLBACK_BASE_URL;
+    const apiKey = process.env.AI_FALLBACK_API_KEY;
+    const model = process.env.AI_FALLBACK_MODEL;
+    if (!baseURL || !apiKey || !model) return null;
+    return { baseURL: baseURL.replace(/\/+$/, ''), apiKey, model };
+}
+
+/** 是否为可容灾的瞬时故障（网络类错误或网关类状态码），切换厂商重试有意义 */
+export function isRetryableAIError(err: any): boolean {
+    return [502, 503, 504].includes(err?.response?.status)
+        || ['ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(err?.code);
+}
+
+/** 上游明确拒绝（key 无效/封禁/模型不存在等配置类错误），切备用厂商比直接报错更合理 */
+export function isProviderError(err: any): boolean {
+    return [400, 401, 403, 404].includes(err?.response?.status)
+        || ['ECONNREFUSED', 'CERT_HAS_EXPIRED'].includes(err?.code);
+}
+
 // 去除推理型模型的思考标签（DeepSeek-R1 / QwQ 等会输出 <think>...</think>）
 function stripThink(text: string): string {
     return text
@@ -85,17 +110,17 @@ export interface CallAIOptions {
     json?: boolean;
 }
 
-/** 统一的非流式调用，返回归一化后的正文文本 */
-export async function callAI(
+/** 按指定厂商配置调用（配合 getAIConfig/getFallbackConfig 实现用户级模型路由） */
+export async function callAIWithConfig(
+    config: AIConfig,
     messages: { role: string; content: string }[],
     opts: CallAIOptions = {}
 ): Promise<string> {
-    const { baseURL, apiKey, model } = getAIConfig();
-    if (!apiKey) {
+    if (!config.apiKey) {
         throw new Error('AI 服务未配置（缺少 AI_API_KEY / DEEPSEEK_API_KEY）');
     }
     const body: Record<string, unknown> = {
-        model,
+        model: config.model,
         messages,
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? 2000
@@ -103,11 +128,31 @@ export async function callAI(
     if (opts.json) {
         body.response_format = { type: 'json_object' };
     }
-    const response = await axios.post(baseURL + '/chat/completions', body, {
-        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+    const response = await axios.post(config.baseURL + '/chat/completions', body, {
+        headers: { Authorization: 'Bearer ' + config.apiKey, 'Content-Type': 'application/json' },
         timeout: opts.timeout ?? 60000
     });
     return extractAIContent(response.data);
+}
+
+/**
+ * 统一的非流式调用，返回归一化后的正文文本。
+ * 配置了备用厂商（AI_FALLBACK_*）时，主厂商遇可容灾故障自动切换备用重试。
+ */
+export async function callAI(
+    messages: { role: string; content: string }[],
+    opts: CallAIOptions = {}
+): Promise<string> {
+    try {
+        return await callAIWithConfig(getAIConfig(), messages, opts);
+    } catch (err) {
+        const fallback = getFallbackConfig();
+        if (fallback && isRetryableAIError(err)) {
+            console.error('[aiClient] 主厂商瞬时故障（' + (err.code || (err as any)?.response?.status) + '），切换备用厂商 ' + fallback.baseURL + ' 重试');
+            return await callAIWithConfig(fallback, messages, opts);
+        }
+        throw err;
+    }
 }
 
 /** 从模型输出中稳健提取 JSON（容忍 ```json 包裹或前后说明文字） */
@@ -165,22 +210,22 @@ export async function callAIJson(
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
-/** 获取流式调用的请求配置（axios 参数），由调用方接管 SSE 转发 */
+/** 获取流式调用的请求配置（axios 参数），由调用方接管 SSE 转发；可传入备用厂商配置用于容灾 */
 export function getStreamRequestParams(
     messages: { role: string; content: string }[],
-    opts: CallAIOptions = {}
+    opts: CallAIOptions = {},
+    config: AIConfig = getAIConfig()
 ) {
-    const { baseURL, apiKey, model } = getAIConfig();
     return {
-        url: baseURL + '/chat/completions',
+        url: config.baseURL + '/chat/completions',
         body: {
-            model,
+            model: config.model,
             messages,
             temperature: opts.temperature ?? 0.7,
             max_tokens: opts.maxTokens ?? 2000,
             stream: true
         },
-        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        headers: { Authorization: 'Bearer ' + config.apiKey, 'Content-Type': 'application/json' },
         timeout: opts.timeout ?? 30000
     };
 }
