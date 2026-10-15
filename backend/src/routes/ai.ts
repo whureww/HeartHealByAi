@@ -75,14 +75,48 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
     // 统一客户端构造流式请求参数（厂商由环境变量决定）
     const params = getStreamRequestParams(chatMessages, { temperature: 0.7, maxTokens: 800 });
 
-    const response = await axios.post(params.url, params.body, {
+    const requestStream = () => axios.post(params.url, params.body, {
       headers: params.headers,
       timeout: params.timeout,
       responseType: 'stream'
     });
 
+    // 上游瞬时故障自动重试：DeepSeek 偶发 503/连接重置（实测美国服务器访问
+    // 间歇出现），失败快（尚未发出任何响应头）时静默重试一次
+    let response;
+    try {
+      response = await requestStream();
+    } catch (err: any) {
+      const retryable = [502, 503, 504].includes(err.response?.status)
+        || ['ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT', 'EPIPE'].includes(err.code);
+      if (!retryable) throw err;
+      console.error('上游瞬时故障（' + (err.code || err.response?.status) + '），1.5s 后重试一次');
+      await new Promise(r => setTimeout(r, 1500));
+      response = await requestStream();
+    }
+
     // 转发流式数据（增量文本经 extractDeltaChunk 归一化，兼容各家格式）
     const stream = response.data;
+
+    // 上游流看门狗：axios 的 timeout 只覆盖到收到响应头为止，若对端在
+    // 传输阶段停滞（连接挂着但一个字节都不来），超时不会触发，请求会
+    // 永久挂死（前端表现为一直"思考中"）。这里在持续无数据 30 秒时
+    // 主动断开上游并向前端下发错误事件，让界面能恢复可输入状态
+    const INACTIVITY_MS = 30000;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    const clearWatchdog = () => {
+        if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+    };
+    const resetWatchdog = () => {
+        clearWatchdog();
+        watchdog = setTimeout(() => {
+            console.error('流式响应看门狗触发：上游 ' + INACTIVITY_MS + 'ms 无数据，主动断开');
+            try { stream.destroy(); } catch (e) { /* 忽略销毁异常 */ }
+            res.write(`data: ${JSON.stringify({ error: 'AI 响应超时，请稍后重试' })}\n\n`);
+            res.end();
+        }, INACTIVITY_MS);
+    };
+    resetWatchdog();
 
     // 跨 chunk 缓冲：TCP 分包可能把一行 data: {...} 拆到两个 chunk，
     // 按 chunk 直接切行会把拆断的行静默丢弃（回复随机丢字）；
@@ -112,6 +146,7 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
     };
 
     stream.on('data', (chunk: Buffer) => {
+      resetWatchdog();
       lineBuffer += decoder.decode(chunk, { stream: true });
       const lines = lineBuffer.split('\n');
       lineBuffer = lines.pop() || '';   // 不完整的尾行留到下一个 chunk 拼接
@@ -121,6 +156,7 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
     });
 
     stream.on('end', () => {
+      clearWatchdog();
       lineBuffer += decoder.decode();   // flush 解码器残留字节
       if (lineBuffer.trim() !== '') {
         handleLine(lineBuffer);         // 处理结尾未带换行符的最后一行
@@ -129,6 +165,7 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
     });
 
     stream.on('error', (err: any) => {
+      clearWatchdog();
       console.error('流式响应错误:', err);
       res.write(`data: ${JSON.stringify({ error: '流式响应中断' })}\n\n`);
       res.end();
