@@ -384,23 +384,39 @@
 
           <!-- 外观设置 -->
           <div class="settings-group">
-            <div class="settings-group-head"><AppIcon name="sun" :size="15" /><h3>外观设置</h3></div>
+            <div class="settings-group-head"><AppIcon name="sun" :size="15" /><h3>{{ $t('settings.appearance') }}</h3></div>
             <div class="settings-group-body">
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>外观主题</span>
-                <span class="setting-desc">选择应用主题颜色</span>
+                <span>{{ $t('settings.theme') }}</span>
+                <span class="setting-desc">{{ $t('settings.themeDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <div class="theme-options">
                   <button class="theme-option" :class="{ selected: settingsStore.theme === 'light' }" @click="settingsStore.setTheme('light')">
-                    <AppIcon name="sun" :size="15" /><span>浅色</span>
+                    <AppIcon name="sun" :size="15" /><span>{{ $t('settings.light') }}</span>
                   </button>
                   <button class="theme-option" :class="{ selected: settingsStore.theme === 'dark' }" @click="settingsStore.setTheme('dark')">
-                    <AppIcon name="moon" :size="15" /><span>深色</span>
+                    <AppIcon name="moon" :size="15" /><span>{{ $t('settings.dark') }}</span>
                   </button>
                   <button class="theme-option" :class="{ selected: settingsStore.theme === 'system' }" @click="settingsStore.setTheme('system')">
-                    <AppIcon name="monitor" :size="15" /><span>跟随系统</span>
+                    <AppIcon name="monitor" :size="15" /><span>{{ $t('settings.system') }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-item-left">
+                <span>{{ $t('settings.language') }}</span>
+                <span class="setting-desc">{{ $t('settings.languageDesc') }}</span>
+              </div>
+              <div class="setting-item-right">
+                <div class="theme-options">
+                  <button class="theme-option" :class="{ selected: settingsStore.locale === 'zh-CN' }" @click="settingsStore.setLocale('zh-CN')">
+                    <span>中文</span>
+                  </button>
+                  <button class="theme-option" :class="{ selected: settingsStore.locale === 'en' }" @click="settingsStore.setLocale('en')">
+                    <span>English</span>
                   </button>
                 </div>
               </div>

@@ -3,26 +3,26 @@
     <div class="card login-card">
       <div class="brand">
         <div class="brand-mark"><AppIcon name="brand" :size="30" /></div>
-        <h2>心愈</h2>
-        <p>创建账号 · 注册后即可开始使用</p>
+        <h2>{{ $t('common.appName') }}</h2>
+        <p>{{ $t('register.tagline') }}</p>
       </div>
 
       <div class="input-group" :class="{ shake: showError.username }">
         <AppIcon name="user" :size="16" class="input-icon" />
         <input v-model="form.username" @focus="showError.username = false" @blur="validateName" placeholder=" " />
-        <span class="text" :class="{ red: showError.username }">{{ showError.username ? '用户名至少2位' : '用户名' }}</span>
+        <span class="text" :class="{ red: showError.username }">{{ showError.username ? $t('register.usernameMin') : $t('register.username') }}</span>
       </div>
 
       <div class="input-group" :class="{ shake: showError.email }">
         <AppIcon name="mail" :size="16" class="input-icon" />
         <input v-model="form.email" type="email" @focus="showError.email = false" @blur="validateEmail" placeholder=" " />
-        <span class="text" :class="{ red: showError.email }">{{ showError.email ? '邮箱格式不正确' : '邮箱' }}</span>
+        <span class="text" :class="{ red: showError.email }">{{ showError.email ? $t('register.emailInvalid') : $t('common.email') }}</span>
       </div>
 
       <div class="input-group" :class="{ shake: showError.password }">
         <AppIcon name="lock" :size="16" class="input-icon" />
         <input v-model="form.password" type="password" @focus="showError.password = false" @blur="validatePwd" placeholder=" " />
-        <span class="text" :class="{ red: showError.password }">{{ showError.password ? '密码至少6位' : '密码' }}</span>
+        <span class="text" :class="{ red: showError.password }">{{ showError.password ? $t('common.passwordMin') : $t('common.password') }}</span>
       </div>
 
       <div class="code-row" :class="{ shake: showError.code }">
@@ -35,45 +35,49 @@
             placeholder=" "
           />
           <span class="text" :class="{ red: showError.code }">
-            {{ showError.code ? '6位验证码' : '验证码' }}
+            {{ showError.code ? $t('common.codeLen') : $t('common.code') }}
           </span>
         </div>
         <button
           class="btn-send"
           @click="sendCode"
-          :disabled="loading.code || codeText !== '发送验证码'"
+          :disabled="loading.code || counting"
         >
-          {{ codeText }}
+          {{ codeLabel }}
         </button>
       </div>
 
       <button class="btn login-btn" @click="handleRegister" :disabled="loading.register">
-        {{ loading.register ? '注册中...' : '注册' }}
+        {{ loading.register ? $t('register.submitting') : $t('register.submit') }}
       </button>
 
       <p class="link">
-        <a href="#" @click.prevent="goTo('/login')">已有账号？返回登录</a>
+        <a href="#" @click.prevent="goTo('/login')">{{ $t('register.haveAccount') }}</a>
       </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { useLoadingStore } from '@/stores/loading'
 import { sendRegisterCode } from '@/api/user'
 import { alert, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const userStore = useUserStore()
 const loadingStore = useLoadingStore()
 
 const form = ref({ username: '', email: '', password: '', code: '' })
 const loading = ref({ register: false, code: false })
-const codeText = ref('发送验证码')
+const sec = ref(0)
+const counting = computed(() => sec.value > 0)
+const codeLabel = computed(() => counting.value ? t('common.resendIn', { sec: sec.value }) : t('common.sendCode'))
 let countdown: number | null = null
 
 const showError = ref({ username: false, email: false, password: false, code: false })
@@ -101,7 +105,7 @@ const validateCode = () => {
 }
 
 const goTo = (path: string) => {
-  loadingStore.show('页面切换中...')
+  loadingStore.show(t('common.pageSwitching'))
   setTimeout(() => { router.push(path); loadingStore.hide() }, 400)
 }
 
@@ -111,16 +115,14 @@ const sendCode = async () => {
   loading.value.code = true
   try {
     await sendRegisterCode({ email: form.value.email })
-    await alert('验证码已发送，请检查邮箱', '已发送')
-    let sec = 60
-    codeText.value = `${sec}秒后重发`
+    await alert(t('common.codeSentMsg'), t('common.codeSentTitle'))
+    sec.value = 60
     countdown = window.setInterval(() => {
-      sec--
-      codeText.value = `${sec}秒后重发`
-      if (sec <= 0) { clearInterval(countdown!); countdown = null; codeText.value = '发送验证码' }
+      sec.value--
+      if (sec.value <= 0) { clearInterval(countdown!); countdown = null; sec.value = 0 }
     }, 1000)
   } catch (e: any) {
-    await error(e?.message || '发送失败', '发送失败')
+    await error(e?.message || t('common.sendFailed'), t('common.sendFailed'))
   }
   finally { loading.value.code = false }
 }
@@ -131,7 +133,7 @@ const handleRegister = async () => {
 
   try {
     loading.value.register = true
-    loadingStore.show('注册中...')
+    loadingStore.show(t('register.submitting'))
 
     const res = await userStore.register(form.value)
 
@@ -140,14 +142,14 @@ const handleRegister = async () => {
       setTimeout(async () => {
         loadingStore.hide();
         loading.value.register = false;
-        await success('注册成功', '注册成功');
+        await success(t('register.successMsg'), t('register.successTitle'));
         await router.replace('/dashboard')
       }, 800)
     }
   } catch (e: any) {
     loadingStore.hide();
     loading.value.register = false;
-    await error(e?.message || '注册失败', '注册失败')
+    await error(e?.message || t('register.failed'), t('register.failed'))
   }
 }
 </script>
