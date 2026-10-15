@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { secureSet, isTauri } from '@/utils/secureStore'
+import { i18n, setAppLocale, type AppLocale } from '@/i18n'
 
 type Theme = 'light' | 'dark' | 'system'
 type CloseAction = 'minimize' | 'exit' | 'ask'
@@ -10,6 +11,9 @@ type NotifyType = 'all' | 'important' | 'none'
 export const useSettingsStore = defineStore('settings', () => {
   // ===== 主题设置 =====
   const theme = ref<Theme>((localStorage.getItem('theme') as Theme) || 'system')
+
+  // ===== 语言设置（初值来自 i18n 已判定的 locale）=====
+  const locale = ref<AppLocale>(i18n.global.locale.value as AppLocale)
   
   // ===== 消息提醒 =====
   const notifications = ref<NotifyType>((localStorage.getItem('notifications') as NotifyType) || 'all')
@@ -27,8 +31,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const lockTimeout = ref(Number(localStorage.getItem('lockTimeout')) || 5)
 
   // 监听变化并保存
-  watch([theme, notifications, soundEnabled, closeAction, autoBackup, backupInterval, lockOnLeave, lockTimeout], () => {
+  watch([theme, locale, notifications, soundEnabled, closeAction, autoBackup, backupInterval, lockOnLeave, lockTimeout], () => {
     localStorage.setItem('theme', theme.value)
+    localStorage.setItem('locale', locale.value)
     localStorage.setItem('notifications', notifications.value)
     localStorage.setItem('soundEnabled', String(soundEnabled.value))
     localStorage.setItem('closeAction', closeAction.value)
@@ -39,6 +44,7 @@ export const useSettingsStore = defineStore('settings', () => {
     // 同步到本地加密文件（AppData\Roaming\com.xinyu.heart\secure\config.dat）
     secureSet('config', {
       theme: theme.value,
+      locale: locale.value,
       notifications: notifications.value,
       soundEnabled: String(soundEnabled.value),
       closeAction: closeAction.value,
@@ -89,6 +95,12 @@ export const useSettingsStore = defineStore('settings', () => {
     applyTheme(t)
   }
 
+  // 设置语言：切换 i18n 全局 locale，watch 负责持久化
+  const setLocale = (l: AppLocale) => {
+    locale.value = l
+    setAppLocale(l)
+  }
+
   // 设置关闭行为
   const setCloseAction = (action: CloseAction) => {
     closeAction.value = action
@@ -118,6 +130,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const refreshFromLocal = () => {
     const themeVal = localStorage.getItem('theme') as Theme | null
     if (themeVal) theme.value = themeVal
+    const localeVal = localStorage.getItem('locale') as AppLocale | null
+    if (localeVal === 'zh-CN' || localeVal === 'en') { locale.value = localeVal; setAppLocale(localeVal) }
     const notifyVal = localStorage.getItem('notifications') as NotifyType | null
     if (notifyVal) notifications.value = notifyVal
     soundEnabled.value = localStorage.getItem('soundEnabled') !== 'false'
@@ -132,6 +146,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     theme,
+    locale,
     notifications,
     soundEnabled,
     closeAction,
@@ -140,6 +155,7 @@ export const useSettingsStore = defineStore('settings', () => {
     lockOnLeave,
     lockTimeout,
     setTheme,
+    setLocale,
     initTheme,
     setCloseAction,
     setNotifications,

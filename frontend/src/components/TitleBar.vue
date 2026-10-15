@@ -2,14 +2,14 @@
   <div class="title-bar" data-tauri-drag-region>
     <div class="title" data-tauri-drag-region>
       <AppIcon name="brand" :size="14" class="title-mark" />
-      <span>心愈</span>
-      <span class="title-sub">心理健康系统</span>
+      <span>{{ $t('common.appName') }}</span>
+      <span class="title-sub">{{ $t('titlebar.subtitle') }}</span>
     </div>
     <div class="window-controls">
-      <button class="win-btn" @click="minimize" title="最小化" aria-label="最小化">
+      <button class="win-btn" @click="minimize" :title="$t('titlebar.minimize')" :aria-label="$t('titlebar.minimize')">
         <svg width="12" height="12" viewBox="0 0 12 12"><line x1="1.5" y1="6" x2="10.5" y2="6" stroke="currentColor" stroke-width="1.2"/></svg>
       </button>
-      <button class="win-btn btn-close" @click="onCloseClick" title="关闭" aria-label="关闭">
+      <button class="win-btn btn-close" @click="onCloseClick" :title="$t('titlebar.close')" :aria-label="$t('titlebar.close')">
         <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
       </button>
     </div>

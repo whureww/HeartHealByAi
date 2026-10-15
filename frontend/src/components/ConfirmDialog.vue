@@ -2,20 +2,20 @@
   <transition name="fade">
     <div v-if="visible" class="dialog-overlay" @click="onCancel">
       <div class="dialog-box" @click.stop>
-        <button class="dialog-close" @click="onCancel" title="取消" aria-label="取消">
+        <button class="dialog-close" @click="onCancel" :title="$t('confirmClose.cancel')" :aria-label="$t('confirmClose.cancel')">
           <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
         </button>
-        <h3>确认关闭</h3>
-        <p>您希望如何操作？</p>
+        <h3>{{ $t('confirmClose.title') }}</h3>
+        <p>{{ $t('confirmClose.question') }}</p>
 
         <div class="buttons-row">
-          <button class="btn-minimize" @click="onMinimize">最小化</button>
-          <button class="btn-exit" @click="onExit">直接退出</button>
+          <button class="btn-minimize" @click="onMinimize">{{ $t('confirmClose.minimize') }}</button>
+          <button class="btn-exit" @click="onExit">{{ $t('confirmClose.exit') }}</button>
         </div>
 
         <label class="remember">
           <input type="checkbox" v-model="remember" />
-          <span>记住我的选择，不再询问</span>
+          <span>{{ $t('confirmClose.remember') }}</span>
         </label>
       </div>
     </div>

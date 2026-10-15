@@ -3,14 +3,14 @@
     <div class="card login-card">
       <div class="brand">
         <div class="brand-mark"><AppIcon name="brand" :size="30" /></div>
-        <h2>心愈</h2>
-        <p>找回密码 · 输入邮箱重置密码</p>
+        <h2>{{ $t('common.appName') }}</h2>
+        <p>{{ $t('forget.tagline') }}</p>
       </div>
 
       <div class="input-group" :class="{ shake: showError.email }">
         <AppIcon name="mail" :size="16" class="input-icon" />
         <input v-model="form.email" type="email" @focus="showError.email = false" @blur="validateEmail" placeholder=" " />
-        <span class="text" :class="{ red: showError.email }">{{ showError.email ? '请输入有效邮箱' : '邮箱' }}</span>
+        <span class="text" :class="{ red: showError.email }">{{ showError.email ? $t('common.invalidEmail') : $t('common.email') }}</span>
       </div>
 
       <div class="code-row" :class="{ shake: showError.code }">
@@ -23,49 +23,53 @@
             placeholder=" "
           />
           <span class="text" :class="{ red: showError.code }">
-            {{ showError.code ? '6位验证码' : '验证码' }}
+            {{ showError.code ? $t('common.codeLen') : $t('common.code') }}
           </span>
         </div>
         <button
           class="btn-send"
           @click="sendCode"
-          :disabled="loading.code || codeText !== '发送验证码'"
+          :disabled="loading.code || counting"
         >
-          {{ codeText }}
+          {{ codeLabel }}
         </button>
       </div>
 
       <div class="input-group" :class="{ shake: showError.newPassword }">
         <AppIcon name="lock" :size="16" class="input-icon" />
         <input v-model="form.newPassword" type="password" @focus="showError.newPassword = false" @blur="validatePwd" placeholder=" " />
-        <span class="text" :class="{ red: showError.newPassword }">{{ showError.newPassword ? '密码至少6位' : '新密码' }}</span>
+        <span class="text" :class="{ red: showError.newPassword }">{{ showError.newPassword ? $t('common.passwordMin') : $t('forget.newPassword') }}</span>
       </div>
 
       <button class="btn login-btn" @click="resetPwd" :disabled="loading.reset">
-        {{ loading.reset ? '重置中...' : '重置密码' }}
+        {{ loading.reset ? $t('forget.resetting') : $t('forget.resetBtn') }}
       </button>
 
       <p class="link">
-        <a href="#" @click.prevent="goTo('/login')">返回登录</a>
+        <a href="#" @click.prevent="goTo('/login')">{{ $t('common.backToLogin') }}</a>
       </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useLoadingStore } from '@/stores/loading'
 import { sendResetCode, resetPassword } from '@/api/user'
 import { alert, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const loadingStore = useLoadingStore()
 
 const form = ref({ email: '', code: '', newPassword: '' })
 const loading = ref({ code: false, reset: false })
-const codeText = ref('发送验证码')
+const sec = ref(0)
+const counting = computed(() => sec.value > 0)
+const codeLabel = computed(() => counting.value ? t('common.resendIn', { sec: sec.value }) : t('common.sendCode'))
 let countdown: number | null = null
 
 const showError = ref({ email: false, code: false, newPassword: false })
@@ -89,7 +93,7 @@ const validatePwd = () => {
 }
 
 const goTo = (path: string) => {
-  loadingStore.show('页面切换中...')
+  loadingStore.show(t('common.pageSwitching'))
   setTimeout(() => { router.push(path); loadingStore.hide() }, 400)
 }
 
@@ -99,15 +103,13 @@ const sendCode = async () => {
   loading.value.code = true
   try {
     await sendResetCode({ email: form.value.email })
-    await alert('验证码已发送，请检查邮箱', '已发送')
-    let sec = 60
-    codeText.value = `${sec}秒后重发`
+    await alert(t('common.codeSentMsg'), t('common.codeSentTitle'))
+    sec.value = 60
     countdown = window.setInterval(() => {
-      sec--
-      codeText.value = `${sec}秒后重发`
-      if (sec <= 0) { clearInterval(countdown!); countdown = null; codeText.value = '发送验证码' }
+      sec.value--
+      if (sec.value <= 0) { clearInterval(countdown!); countdown = null; sec.value = 0 }
     }, 1000)
-  } catch (err: any) { await error(err.message || '发送失败', '发送失败') }
+  } catch (err: any) { await error(err.message || t('common.sendFailed'), t('common.sendFailed')) }
   finally { loading.value.code = false }
 }
 
@@ -115,19 +117,19 @@ const resetPwd = async () => {
   validateEmail(); validateCode(); validatePwd()
   if (showError.value.email || showError.value.code || showError.value.newPassword) return
   loading.value.reset = true
-  loadingStore.show('重置中...')
+  loadingStore.show(t('forget.resetting'))
   try {
     await resetPassword({ email: form.value.email, code: form.value.code, newPassword: form.value.newPassword })
     setTimeout(async () => {
       loadingStore.hide();
       loading.value.reset = false;
-      await success('密码重置成功，请使用新密码登录', '重置成功');
+      await success(t('forget.successMsg'), t('forget.successTitle'));
       router.push('/login')
     }, 800)
   } catch (err: any) {
     loadingStore.hide();
     loading.value.reset = false;
-    await error(err.message || '重置失败', '重置失败')
+    await error(err.message || t('forget.failed'), t('forget.failed'))
   }
 }
 </script>
