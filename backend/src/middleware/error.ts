@@ -30,6 +30,11 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
         message = err.errors.map(e => e.message).join(', ');
     }
 
+    // 服务端错误必须落日志（此前 500 只返回响应不记日志，线上排障无从下手）
+    if (statusCode >= 500) {
+        console.error(`[error] ${req.method} ${req.originalUrl} -> ${statusCode}:`, message);
+    }
+
     res.status(statusCode).json({
         success: false,
         message,
