@@ -118,7 +118,7 @@
                   {{ $t('admin.report.handle') }}
                 </button>
                 <button
-                  v-if="r.status !== 0 && isActiveRestricted(r)"
+                  v-if="canLift(r)"
                   class="btn-lift"
                   :title="$t('admin.report.liftTitle')"
                   @click="lift(r)"
@@ -126,7 +126,7 @@
                   <AppIcon name="check" :size="13" />
                   {{ $t('admin.report.lift') }}
                 </button>
-                <span v-if="r.status !== 0 && !isActiveRestricted(r)" class="handled-note" :title="r.handle_note">
+                <span v-if="r.status !== 0 && !canLift(r)" class="handled-note" :title="r.handle_note">
                   {{ r.handle_note || $t('admin.report.noNote') }}
                 </span>
               </td>
@@ -221,7 +221,7 @@
                         <p>{{ r.handle_note || $t('admin.report.noHandleNote') }}</p>
                         <span v-if="r.handled_at" class="result-time">{{ formatDate(r.handled_at) }}</span>
                       </div>
-                      <div v-if="isActiveRestricted(r)" class="lift-block">
+                      <div v-if="canLift(r)" class="lift-block">
                         <p class="lift-tip">{{ $t('admin.report.liftTip') }}</p>
                         <button class="btn-lift full" @click="lift(r)">
                           <AppIcon name="check" :size="13" />
@@ -338,6 +338,21 @@ function restrictLabel(r: any): string {
 function isActiveRestricted(r: any): boolean {
   return restrictionCode(r) !== 'none'
 }
+
+// 解除按钮归属：同一账号的当前限制只由「最新一条已处置（status=1）」的举报行持有，
+// 其余历史举报行显示处置备注——避免历史行也出现解除按钮，点一行看起来像全被点击、按钮一起消失
+const liftOwners = computed(() => {
+  const latest = new Map<number, any>()
+  for (const r of reports.value) {
+    if (Number(r.status) !== 1 || !r.reported_id) continue
+    const cur = latest.get(r.reported_id)
+    const tNew = new Date(r.handled_at || r.created_at || 0).getTime()
+    const tCur = cur ? new Date(cur.handled_at || cur.created_at || 0).getTime() : -1
+    if (!cur || tNew > tCur) latest.set(r.reported_id, r)
+  }
+  return new Map([...latest.entries()].map(([id, r]) => [id, r.id]))
+})
+const canLift = (r: any): boolean => isActiveRestricted(r) && liftOwners.value.get(r.reported_id) === r.id
 
 function initial(name: string): string {
   return String(name || '?').trim().charAt(0).toUpperCase() || '?'

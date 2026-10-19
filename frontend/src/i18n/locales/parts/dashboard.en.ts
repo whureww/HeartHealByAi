@@ -82,7 +82,12 @@ export default {
       docTitle: 'Comprehensive Mental State Analysis Report',
       period: 'Analysis period: {start} to {end}',
       generatedAt: 'Generated at: {time}',
-      fileName: 'Mental-analysis-report_{start}_{end}.html'
+      fileName: 'Mental-analysis-report_{start}_{end}.html',
+      translate: 'AI Translate Report',
+      translating: 'Translating...',
+      translateFailed: 'Translation failed, please try again later',
+      viewOriginal: 'Show Original',
+      viewTranslation: 'Show Translation'
     },
     stats: {
       myData: 'My Statistics',

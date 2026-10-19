@@ -82,6 +82,13 @@ export default {
       testFailNamed: '「{model}」{message}',
       testFailed: '连接失败'
     },
+    date: {
+      year: '年',
+      month: '月',
+      day: '日',
+      yearSuffix: '年',
+      daySuffix: '日'
+    },
     lock: {
       title: '心愈已锁定',
       awayTip: '你离开了 {duration}，为保护隐私请重新验证',

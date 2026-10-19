@@ -270,7 +270,7 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
 // ===== 生成心理分析报告接口 =====
 router.post('/summarize-report', authenticate, async (req: Request, res: Response) => {
   try {
-    const { chatHistory, testResults, startDate, endDate } = req.body;
+    const { chatHistory, testResults, startDate, endDate, locale } = req.body;
 
     if (!startDate || !endDate) {
       res.status(400).json({ error: '请提供完整的起止日期' });
@@ -290,7 +290,11 @@ router.post('/summarize-report', authenticate, async (req: Request, res: Respons
       desc: result.result_desc || ''
     }));
 
-    const periodStr = String(startDate) + ' 至 ' + String(endDate);
+    // 报告语言跟随生成时的界面语言；时间段文案同步本地化
+    const isEn = locale === 'en';
+    const periodStr = isEn
+      ? `${startDate} to ${endDate}`
+      : `${startDate} 至 ${endDate}`;
 
     const analysisData = {
       period: periodStr,
@@ -300,9 +304,13 @@ router.post('/summarize-report', authenticate, async (req: Request, res: Respons
 
     const userPrompt = '请根据以下用户心理数据生成一份专业的心理状态分析报告：' + JSON.stringify(analysisData, null, 2);
 
+    const systemPrompt = isEn
+      ? REPORT_PROMPT + ' Write the entire report in English regardless of the language of the input data.'
+      : REPORT_PROMPT;
+
     const report = await callAI(
       [
-        { role: 'system', content: REPORT_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
       { temperature: 0.5, maxTokens: 2500, timeout: 60000 }
@@ -318,6 +326,37 @@ router.post('/summarize-report', authenticate, async (req: Request, res: Respons
     res.status(500).json({
       success: false,
       error: '报告生成服务暂时不可用: ' + (error.response?.data?.error?.message || error.message)
+    });
+  }
+});
+
+// ===== 报告翻译：已生成报告按当前界面语言翻译（译文不落库、不覆盖原文） =====
+router.post('/translate', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { text, locale } = req.body || {};
+    const raw = String(text || '').trim();
+    if (!raw) {
+      res.status(400).json({ success: false, error: '缺少待翻译文本' });
+      return;
+    }
+    const target = locale === 'en' ? 'English' : '简体中文';
+    const translated = await callAI(
+      [
+        {
+          role: 'system',
+          content: 'You are a professional translator for psychological analysis reports. Translate the user text into ' + target
+            + '. Preserve the original Markdown structure, headings, lists and line breaks exactly. Translate faithfully and naturally; output ONLY the translation with no explanations.'
+        },
+        { role: 'user', content: raw.slice(0, 12000) }
+      ],
+      { temperature: 0.3, maxTokens: 4000, timeout: 90000 }
+    );
+    res.json({ success: true, translated: translated || '' });
+  } catch (error: any) {
+    console.error('翻译接口错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: '翻译服务暂时不可用: ' + (error.response?.data?.error?.message || error.message)
     });
   }
 });

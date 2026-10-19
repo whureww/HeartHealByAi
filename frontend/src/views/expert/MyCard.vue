@@ -27,6 +27,34 @@
         <span class="char-count">{{ (form.intro || '').length }}/500</span>
       </div>
 
+      <!-- 英文信息（选填）：英文界面优先展示，留空回落中文 -->
+      <div class="en-group">
+        <div class="en-group-title">
+          <AppIcon name="globe" :size="14" />
+          {{ $t('expert.card.enGroup') }}
+        </div>
+        <div class="form-item">
+          <label>{{ $t('expert.card.nameEn') }}</label>
+          <input v-model="form.name_en" maxlength="80" :placeholder="$t('expert.card.nameEnPh')" />
+        </div>
+        <div class="form-row">
+          <div class="form-item">
+            <label>{{ $t('expert.card.jobTitleEn') }}</label>
+            <input v-model="form.title_en" maxlength="80" :placeholder="$t('expert.card.jobTitleEnPh')" />
+          </div>
+          <div class="form-item">
+            <label>{{ $t('expert.card.specialtyEn') }}</label>
+            <input v-model="form.specialty_en" maxlength="300" :placeholder="$t('expert.card.specialtyEnPh')" />
+          </div>
+        </div>
+        <div class="form-item">
+          <label>{{ $t('expert.card.introEn') }}</label>
+          <textarea v-model="form.intro_en" rows="3" maxlength="500" :placeholder="$t('expert.card.introEnPh')"></textarea>
+          <span class="char-count">{{ (form.intro_en || '').length }}/500</span>
+        </div>
+        <p class="en-fallback-tip">{{ $t('expert.card.enFallbackTip') }}</p>
+      </div>
+
       <div class="form-actions">
         <button class="btn-primary" :disabled="saving" @click="submit">
           {{ saving ? $t('expert.card.submitting') : (card?.status === 2 ? $t('expert.card.resubmit') : $t('expert.card.saveSubmit')) }}
@@ -51,11 +79,15 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMyCard, saveMyCard } from '@/api/expert'
 import { success, error } from '@/utils/dialog'
+import AppIcon from '@/components/AppIcon.vue'
 
 const { t } = useI18n()
 
 const card = ref<any>(null)
-const form = ref({ name: '', title: '', specialty: '', intro: '' })
+const form = ref({
+  name: '', title: '', specialty: '', intro: '',
+  name_en: '', title_en: '', specialty_en: '', intro_en: ''
+})
 const saving = ref(false)
 
 const statusText = computed(() => {
@@ -76,7 +108,11 @@ const load = async () => {
         name: res.data.name || '',
         title: res.data.title || '',
         specialty: res.data.specialty || '',
-        intro: res.data.intro || ''
+        intro: res.data.intro || '',
+        name_en: res.data.name_en || '',
+        title_en: res.data.title_en || '',
+        specialty_en: res.data.specialty_en || '',
+        intro_en: res.data.intro_en || ''
       }
     }
   } catch (e: any) {
@@ -215,6 +251,37 @@ onMounted(load)
   display: flex;
   justify-content: flex-end;
   margin-top: 8px;
+}
+
+/* 英文信息分组（选填，供英文界面展示） */
+.en-group {
+  margin: 6px 0 20px;
+  padding: 16px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-ctl);
+  background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
+}
+
+.en-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.en-fallback-tip {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .btn-primary {

@@ -187,10 +187,10 @@
               <div v-for="doc in userStore.doctors" :key="doc.id" class="doc-card">
                 <div class="doc-card-head">
                   <img v-if="doc.avatar" :src="doc.avatar" class="doc-avatar" alt="" />
-                  <span v-else class="doc-avatar doc-avatar-fallback">{{ (doc.name || '?').charAt(0) }}</span>
+                  <span v-else class="doc-avatar doc-avatar-fallback">{{ (docField(doc, 'name') || '?').charAt(0) }}</span>
                   <div class="doc-head-info">
-                    <h4>{{ doc.name }}</h4>
-                    <span class="doc-title">{{ doc.title }}</span>
+                    <h4>{{ docField(doc, 'name') }}</h4>
+                    <span class="doc-title">{{ docField(doc, 'title') }}</span>
                   </div>
                   <span class="online-badge" :class="{ online: isUserOnline(doc.user_id) }">
                     <span class="status-dot" :class="{ online: isUserOnline(doc.user_id) }"></span>
@@ -198,8 +198,8 @@
                   </span>
                 </div>
                 <div class="doc-card-body">
-                  <p class="doc-specialty"><span class="doc-label">{{ $t('dashboard.doctor.specialtyLabel') }}</span>{{ doc.specialty || $t('dashboard.doctor.notFilled') }}</p>
-                  <p class="doc-intro"><span class="doc-label">{{ $t('dashboard.doctor.introLabel') }}</span>{{ doc.intro || $t('dashboard.doctor.noIntro') }}</p>
+                  <p class="doc-specialty"><span class="doc-label">{{ $t('dashboard.doctor.specialtyLabel') }}</span>{{ docField(doc, 'specialty') || $t('dashboard.doctor.notFilled') }}</p>
+                  <p class="doc-intro"><span class="doc-label">{{ $t('dashboard.doctor.introLabel') }}</span>{{ docField(doc, 'intro') || $t('dashboard.doctor.noIntro') }}</p>
                 </div>
                 <div class="doc-card-foot">
                   <button class="btn-book" @click="bookDoctor(doc)">{{ $t('dashboard.doctor.bookNow') }}</button>
@@ -218,9 +218,9 @@
             {{ $t('dashboard.report.subtitle') }}
           </p>
           <div class="time-select">
-            <input type="date" v-model="startDate">
+            <DateSelect v-model="startDate" />
             <span>{{ $t('dashboard.report.to') }}</span>
-            <input type="date" v-model="endDate">
+            <DateSelect v-model="endDate" />
             <button @click="createReport" :disabled="reportLoading">
               {{ reportLoading ? $t('dashboard.report.generating') : $t('dashboard.report.generateBtn') }}
             </button>
@@ -238,8 +238,19 @@
               <div class="report-doc" v-html="reportHtml"></div>
             </div>
           </div>
-          <!-- 导出报告按钮 -->
+          <!-- 导出报告按钮（已翻译时可切换原文/译文视图） -->
           <div v-if="reportContent && !reportLoading" class="report-actions">
+            <button
+              v-if="translationText"
+              class="btn-export"
+              @click="showingTranslation = !showingTranslation"
+            ><AppIcon name="globe" :size="15" /> {{ showingTranslation ? $t('dashboard.report.viewOriginal') : $t('dashboard.report.viewTranslation') }}</button>
+            <button
+              v-else
+              class="btn-export"
+              :disabled="translating"
+              @click="translateCurrentReport"
+            ><AppIcon name="globe" :size="15" /> {{ translating ? $t('dashboard.report.translating') : $t('dashboard.report.translate') }}</button>
             <button class="btn-export" @click="exportReport"><AppIcon name="fileText" :size="15" /> {{ $t('dashboard.report.copyContent') }}</button>
             <button class="btn-export" @click="downloadReport"><AppIcon name="download" :size="15" /> {{ $t('dashboard.report.exportHtml') }}</button>
           </div>
@@ -681,6 +692,8 @@ import { bindChatNotification, registerChatOpener } from '@/utils/taskbar'
 import { checkUpdate, downloadUpdate, cancelDownload, installUpdate, onUpdateProgress, hasRemindedUpdate, markUpdateReminded, type UpdateInfo, type UpdatePhase, type DownloadProgress } from '@/utils/updater'
 import { isTauri } from '@/utils/secureStore'
 import { renderReportHtml, reportToPlainText } from '@/utils/reportRender'
+import { translateReport } from '@/api/ai'
+import DateSelect from '@/components/DateSelect.vue'
 
 const streamingContent = ref('')
 const isStreaming = ref(false)    
@@ -961,11 +974,42 @@ const aiLoading = ref(false)
 const reportLoading = ref(false)
 
 // 报告 Markdown → 结构化 HTML（占位文案/加载中的提示文本不参与渲染）
+// 译文视图：translationText 存在且 showingTranslation 时展示译文，原文始终保留
+const translationText = ref('')
+const translating = ref(false)
+const showingTranslation = ref(false)
+const displayedReport = computed(() => {
+  if (translationText.value && showingTranslation.value) return translationText.value
+  return reportContent.value
+})
 const reportHtml = computed(() => {
-  const text = reportContent.value
+  const text = displayedReport.value
   if (!text || text === REPORT_LOADING || text === REPORT_FAILED) return ''
   return renderReportHtml(text)
 })
+
+// 报告 AI 翻译：按当前界面语言翻译已生成报告（不落库、不覆盖原文）
+const translateCurrentReport = async () => {
+  if (translating.value || !reportContent.value) return
+  translating.value = true
+  try {
+    const res = await translateReport(reportContent.value)
+    if (res?.translated) {
+      translationText.value = res.translated
+      showingTranslation.value = true
+    }
+  } catch (e: any) {
+    await error(e?.message || t('dashboard.report.translateFailed'))
+  } finally {
+    translating.value = false
+  }
+}
+const resetReportTranslation = () => {
+  translationText.value = ''
+  showingTranslation.value = false
+}
+// 语言切换后译文与目标语言不再匹配，重置回原文视图
+watch(() => settingsStore.locale, resetReportTranslation)
 
 // ===== Socket.IO 全局连接 =====
 const socket = shallowRef<Socket | null>(null)
@@ -979,6 +1023,15 @@ provide('socket', socket)
 const isUserOnline = (userId: number | undefined) => {
   if (!userId) return false
   return onlineUserIds.value.has(userId)
+}
+
+// 专家名片双语展示：英文界面优先 _en 字段（后端 /users/doctors 返回 name_en 等字段），留空回落中文
+const docField = (doc: any, field: 'name' | 'title' | 'specialty' | 'intro'): string => {
+  if (settingsStore.locale === 'en') {
+    const en = doc?.[`${field}_en`]
+    if (en) return en
+  }
+  return doc?.[field] || ''
 }
 
 // 初始化 Socket 连接
@@ -1090,16 +1143,16 @@ const onProfileSaved = () => {
   userStore.getInfo()
 }
 
-// 复制纯文本报告
+// 复制纯文本报告（译文视图下复制译文）
 const exportReport = async () => {
   try {
-    const plainText = reportToPlainText(reportContent.value)
+    const plainText = reportToPlainText(displayedReport.value)
 
     await navigator.clipboard.writeText(plainText)
     await success(t('dashboard.report.copied'), t('dashboard.report.copySuccessTitle'))
   } catch (e) {
     const textarea = document.createElement('textarea')
-    textarea.value = reportToPlainText(reportContent.value)
+    textarea.value = reportToPlainText(displayedReport.value)
     document.body.appendChild(textarea)
     textarea.select()
     document.execCommand('copy')
@@ -1108,15 +1161,15 @@ const exportReport = async () => {
   }
 }
 
-// 导出 HTML 文件
+// 导出 HTML 文件（译文视图下导出译文）
 const downloadReport = () => {
-  if (!reportContent.value) {
+  if (!displayedReport.value) {
     alert(t('dashboard.report.generateFirst'))
     return
   }
 
   // 与界面同源渲染：Markdown → 结构化 HTML（reportRender 内部已做实体转义）
-  const bodyHtml = renderReportHtml(reportContent.value)
+  const bodyHtml = renderReportHtml(displayedReport.value)
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1239,7 +1292,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.8'
+  const cur = updateInfo.value?.current_version || '0.4.9'
   const base = t('dashboard.update.appVersion', { version: cur })
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return t('dashboard.update.availableDesc', { latest: updateInfo.value.latest_version, current: cur })
@@ -1653,7 +1706,7 @@ const sendChat = async () => {
 const bookDoctor = async (doc: any) => {
   try {
     await createAppointment({ doctorId: doc.id })
-    await success(t('dashboard.doctor.bookSuccess', { name: doc.name }), t('dashboard.doctor.bookSuccessTitle'))
+    await success(t('dashboard.doctor.bookSuccess', { name: docField(doc, 'name') }), t('dashboard.doctor.bookSuccessTitle'))
   } catch (e: any) {
     await error(e.message || t('dashboard.doctor.bookFailed'))
   }
@@ -1668,6 +1721,7 @@ const createReport = async () => {
 
   reportContent.value = REPORT_LOADING
   reportLoading.value = true
+  resetReportTranslation()
 
   try {
     // 拉取用户已完成的测评记录，按报告时间段过滤后一并提供给 AI 分析

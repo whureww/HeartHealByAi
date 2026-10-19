@@ -20,6 +20,9 @@ export const getExpertStats = () => request.get('/expert/stats')
 // 我的名片：读取
 export const getMyCard = () => request.get('/expert/my-card')
 
-// 我的名片：保存并提交审核
-export const saveMyCard = (data: { name: string; title: string; specialty: string; intro: string }) =>
+// 我的名片：保存并提交审核（英文信息选填，供英文界面展示）
+export const saveMyCard = (data: {
+  name: string; title: string; specialty: string; intro: string;
+  name_en?: string; title_en?: string; specialty_en?: string; intro_en?: string
+}) =>
   request.put('/expert/my-card', data)

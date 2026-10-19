@@ -12,6 +12,7 @@ import jwt from "jsonwebtoken";
 import { TokenManager } from '../utils/tokenManager';
 import { getActiveRestriction } from '../utils/restrict';
 import { callAI, getFallbackConfig } from '../utils/aiClient';
+import { ensureDoctorEnColumns } from '../utils/doctorCols';
 import { encryptSecret, decryptSecret, maskSecret } from '../utils/secretBox';
 
 const router = Router();
@@ -1156,8 +1157,10 @@ router.get('/tests', authenticate, asyncHandler(async (req: Request, res: Respon
 
 // ========== 获取专家列表 ==========
 router.get('/doctors', authenticate, asyncHandler(async (req: any, res: any) => {
+    await ensureDoctorEnColumns();
     const [rows] = await pool.execute(
-        `SELECT d.id, d.name, d.title, d.specialty, d.intro, d.user_id, u.avatar
+        `SELECT d.id, d.name, d.title, d.specialty, d.intro, d.user_id,
+                d.name_en, d.title_en, d.specialty_en, d.intro_en, u.avatar
          FROM doctors d
          LEFT JOIN users u ON d.user_id = u.id
          WHERE d.status = 1`
@@ -1249,9 +1252,11 @@ router.post('/appointments', authenticate, asyncHandler(async (req: Request, res
 }));
 // ========== 获取我的预约列表 ==========
 router.get('/appointments', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    await ensureDoctorEnColumns();
     const userId = req.user!.id;
     const [rows] = await pool.execute(
-        `SELECT ar.*, d.name as doctor_name, d.title as doctor_title
+        `SELECT ar.*, d.name as doctor_name, d.title as doctor_title,
+                d.name_en as doctor_name_en, d.title_en as doctor_title_en
          FROM appointment_records ar
          JOIN doctors d ON ar.doctor_id = d.id
          WHERE ar.user_id = ?

@@ -37,8 +37,8 @@
       >
         <div class="card-header">
           <div class="expert-info">
-            <span class="expert-name">{{ item.expert_name || $t('expert.appt.fallbackExpert') }}</span>
-            <span class="expert-title">{{ item.expert_title || $t('expert.appt.fallbackTitle') }}</span>
+            <span class="expert-name">{{ doctorField(item, 'name') || $t('expert.appt.fallbackExpert') }}</span>
+            <span class="expert-title">{{ doctorField(item, 'title') || $t('expert.appt.fallbackTitle') }}</span>
           </div>
           <span :class="['status-badge', `status-${item.status}`]">
             {{ statusText(item.status) }}
@@ -97,7 +97,7 @@ const emit = defineEmits<{
   (e: 'view-detail', id: number): void
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const userStore = useUserStore()
 const appointments = ref<any[]>([])
@@ -105,6 +105,16 @@ const loading = ref(false)
 const socket = ref<Socket | null>(null)
 const isSocketConnected = ref(false)
 const recentlyUpdated = ref<Set<number>>(new Set())
+
+// 专家双语展示：英文界面优先 _en 字段（后端返回 doctor_name/doctor_title/name_en/title_en）
+const doctorField = (item: any, field: 'name' | 'title'): string => {
+  const isEn = locale.value === 'en'
+  if (isEn) {
+    const en = item[`doctor_${field}_en`]
+    if (en) return en
+  }
+  return item[`doctor_${field}`] || ''
+}
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {
@@ -171,7 +181,7 @@ const canceling = ref<number | null>(null)
 
 const handleCancel = async (item: any) => {
   const ok = await confirm(
-    t('expert.appt.cancelWithExpert', { name: item.expert_name || t('expert.appt.fallbackExpert') }),
+    t('expert.appt.cancelWithExpert', { name: doctorField(item, 'name') || t('expert.appt.fallbackExpert') }),
     t('expert.appt.titleCancel')
   )
   if (!ok) return

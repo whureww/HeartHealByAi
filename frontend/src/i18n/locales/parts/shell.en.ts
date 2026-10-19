@@ -82,6 +82,13 @@ export default {
       testFailNamed: '"{model}" {message}',
       testFailed: 'Connection failed'
     },
+    date: {
+      year: 'Year',
+      month: 'Month',
+      day: 'Day',
+      yearSuffix: '',
+      daySuffix: ''
+    },
     lock: {
       title: 'XinYu is locked',
       awayTip: 'You were away for {duration}. Please verify again to protect your privacy',

@@ -1,72 +1,99 @@
 <template>
   <div class="detail-layout" :class="{ 'user-view': isUserView }">
-    <!-- 左侧：用户信息和问卷结果（仅专家可见） -->
-    <div v-if="!isUserView" class="left-panel">
-      <div class="panel-card">
-        <h3>
-          <AppIcon name="user" :size="16" />
-          {{ $t('expert.detail.ownerInfo') }}
-        </h3>
-        <div class="info-item">
-          <span class="label">{{ $t('expert.detail.name') }}</span>
-          <span>{{ appointment.user_name }}</span>
+    <!-- 左侧：专家视角显示预约人信息；用户视角显示专家公开信息（不含邮箱/手机等隐私，无操作按钮） -->
+    <div class="left-panel">
+      <!-- 专家视角：预约人信息 + 操作 -->
+      <template v-if="!isUserView">
+        <div class="panel-card">
+          <h3>
+            <AppIcon name="user" :size="16" />
+            {{ $t('expert.detail.ownerInfo') }}
+          </h3>
+          <div class="info-item">
+            <span class="label">{{ $t('expert.detail.name') }}</span>
+            <span>{{ appointment.user_name }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">{{ $t('expert.detail.email') }}</span>
+            <span>{{ appointment.user_email }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">{{ $t('expert.detail.phone') }}</span>
+            <span>{{ appointment.user_phone || '-' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">{{ $t('expert.detail.status') }}</span>
+            <span :class="['status-tag', `status-${appointment.status}`]">
+              {{ statusText(appointment.status) }}
+            </span>
+          </div>
+          <div class="action-btns">
+            <button
+              v-if="appointment.status === 'pending'"
+              class="btn-confirm"
+              @click="updateStatus('confirmed')"
+            >
+              <AppIcon name="check" :size="14" />
+              {{ $t('expert.detail.confirmBtn') }}
+            </button>
+            <button
+              v-if="appointment.status === 'confirmed'"
+              class="btn-complete"
+              @click="updateStatus('completed')"
+            >
+              <AppIcon name="check" :size="14" />
+              {{ $t('expert.detail.completeBtn') }}
+            </button>
+          </div>
         </div>
-        <div class="info-item">
-          <span class="label">{{ $t('expert.detail.email') }}</span>
-          <span>{{ appointment.user_email }}</span>
+
+        <div class="panel-card" v-if="testResults.length > 0">
+          <h3>
+            <AppIcon name="clipboard" :size="16" />
+            {{ $t('expert.detail.testResults') }}
+          </h3>
+          <div v-for="result in testResults" :key="result.id" class="result-item">
+            <div class="result-header">
+              <span class="test-name">{{ result.test_name }}</span>
+              <span class="test-score">{{ $t('expert.detail.scoreVal', { n: result.total_score }) }}</span>
+            </div>
+            <div class="result-level">{{ result.result_level }}</div>
+            <p class="result-desc">{{ result.result_desc }}</p>
+            <button class="btn-view-detail" @click="openDetailModal(result)">
+              <AppIcon name="search" :size="14" />
+              {{ $t('expert.detail.viewAnswers') }}
+            </button>
+          </div>
         </div>
-        <div class="info-item">
-          <span class="label">{{ $t('expert.detail.phone') }}</span>
-          <span>{{ appointment.user_phone || '-' }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">{{ $t('expert.detail.status') }}</span>
-          <span :class="['status-tag', `status-${appointment.status}`]">
-            {{ statusText(appointment.status) }}
+      </template>
+
+      <!-- 用户视角：专家公开信息卡（姓名/职称/专长/简介/在线状态，仅展示无操作） -->
+      <div v-else class="panel-card expert-card">
+        <div class="expert-card-head">
+          <img v-if="otherAvatar" :src="otherAvatar" class="expert-avatar" alt="" />
+          <span v-else class="expert-avatar expert-avatar-fallback">{{ (docName || '?').charAt(0) }}</span>
+          <div class="expert-head-info">
+            <h4>{{ docName }}</h4>
+            <span class="expert-title">{{ docTitle }}</span>
+          </div>
+          <span class="online-badge" :class="{ online: isOtherOnline }">
+            <span class="status-dot" :class="{ online: isOtherOnline }"></span>
+            {{ isOtherOnline ? $t('dashboard.doctor.online') : $t('dashboard.doctor.offline') }}
           </span>
         </div>
-        <div class="action-btns">
-          <button
-            v-if="appointment.status === 'pending'"
-            class="btn-confirm"
-            @click="updateStatus('confirmed')"
-          >
-            <AppIcon name="check" :size="14" />
-            {{ $t('expert.detail.confirmBtn') }}
-          </button>
-          <button
-            v-if="appointment.status === 'confirmed'"
-            class="btn-complete"
-            @click="updateStatus('completed')"
-          >
-            <AppIcon name="check" :size="14" />
-            {{ $t('expert.detail.completeBtn') }}
-          </button>
-        </div>
-      </div>
-
-      <div class="panel-card" v-if="testResults.length > 0">
-        <h3>
-          <AppIcon name="clipboard" :size="16" />
-          {{ $t('expert.detail.testResults') }}
-        </h3>
-        <div v-for="result in testResults" :key="result.id" class="result-item">
-          <div class="result-header">
-            <span class="test-name">{{ result.test_name }}</span>
-            <span class="test-score">{{ $t('expert.detail.scoreVal', { n: result.total_score }) }}</span>
-          </div>
-          <div class="result-level">{{ result.result_level }}</div>
-          <p class="result-desc">{{ result.result_desc }}</p>
-          <button class="btn-view-detail" @click="openDetailModal(result)">
-            <AppIcon name="search" :size="14" />
-            {{ $t('expert.detail.viewAnswers') }}
-          </button>
+        <div class="expert-card-body">
+          <p class="expert-line">
+            <span class="doc-label">{{ $t('expert.detail.specialtyLabel') }}</span>{{ docSpecialty || $t('expert.detail.notFilled') }}
+          </p>
+          <p class="expert-line expert-intro">
+            <span class="doc-label">{{ $t('expert.detail.introLabel') }}</span>{{ docIntro || $t('expert.detail.noIntro') }}
+          </p>
         </div>
       </div>
     </div>
 
     <!-- 右侧：聊天（所有角色都可见） -->
-    <div class="right-panel" :class="{ 'full-width': isUserView }">
+    <div class="right-panel">
       <div class="chat-header">
         <h3>
           <AppIcon name="chat" :size="16" />
@@ -277,7 +304,7 @@ const emit = defineEmits<{
 }>()
 
 const userStore = useUserStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const appointmentId = props.id
 const currentUserId = computed(() => userStore.userInfo?.id || 0)
 
@@ -396,6 +423,14 @@ const otherAvatar = computed(() => {
   if (!ap) return ''
   return currentUserId.value === ap.user_id ? (ap.doctor_avatar || '') : (ap.user_avatar || '')
 })
+
+// ===== 用户视角专家信息卡（双语：英文界面优先 _en 字段，留空回落中文） =====
+const isEnLocale = computed(() => locale.value === 'en')
+const pick = (zh: any, en: any) => (isEnLocale.value && en ? en : zh)
+const docName = computed(() => pick(appointment.value.doctor_name, appointment.value.doctor_name_en) || t('expert.appt.fallbackExpert'))
+const docTitle = computed(() => pick(appointment.value.doctor_title, appointment.value.doctor_title_en) || t('expert.appt.fallbackTitle'))
+const docSpecialty = computed(() => pick(appointment.value.doctor_specialty, appointment.value.doctor_specialty_en) || '')
+const docIntro = computed(() => pick(appointment.value.doctor_intro, appointment.value.doctor_intro_en) || '')
 
 const avatarFor = (senderId: number): string => {
   return senderId === currentUserId.value ? selfAvatar.value : otherAvatar.value
@@ -731,16 +766,17 @@ watch(() => appointment.value, (newVal) => {
   height: calc(100vh - var(--titlebar-h) - 48px);
 }
 
-.detail-layout.user-view {
-  gap: 0;
-}
-
 .left-panel {
   width: 380px;
   display: flex;
   flex-direction: column;
   gap: 20px;
   overflow-y: auto;
+}
+
+/* 用户视角：左栏改为专家公开信息卡（较窄，仅展示无操作） */
+.user-view .left-panel {
+  width: 320px;
 }
 
 .left-panel::-webkit-scrollbar {
@@ -763,15 +799,95 @@ watch(() => appointment.value, (newVal) => {
   min-width: 0;
 }
 
-.user-view .right-panel {
-  border-radius: 0;
-  border: none;
-  box-shadow: none;
-  background: transparent;
+/* ===== 用户视角专家信息卡（仅展示公开信息，无操作按钮） ===== */
+.expert-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-.right-panel.full-width {
-  width: 100%;
+.expert-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.expert-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: none;
+}
+
+.expert-head-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.expert-head-info h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.expert-title {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.online-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  white-space: nowrap;
+}
+
+.online-badge.online {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.expert-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.expert-line {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.expert-line .doc-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.expert-intro {
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .panel-card {

@@ -82,7 +82,12 @@ export default {
       docTitle: '心理状态综合分析报告',
       period: '分析时间段：{start} 至 {end}',
       generatedAt: '生成时间：{time}',
-      fileName: '心理分析报告_{start}_{end}.html'
+      fileName: '心理分析报告_{start}_{end}.html',
+      translate: 'AI 翻译报告',
+      translating: 'AI 翻译中...',
+      translateFailed: '翻译失败，请稍后重试',
+      viewOriginal: '查看原文',
+      viewTranslation: '查看译文'
     },
     stats: {
       myData: '我的数据统计',

@@ -91,12 +91,22 @@ export const chatWithAIStream = (
   })
 }
 
-// 生成心理分析报告
+// 生成心理分析报告（携带界面语言：英文界面生成英文报告）
 export const generateReport = (data: {
   chatHistory: any[],
   testResults: any[],
   startDate: string,
   endDate: string
 }): Promise<AIReportResponse> => {
-  return request.post('/ai/summarize-report', data) as Promise<AIReportResponse>
+  return request.post('/ai/summarize-report', { ...data, locale: i18n.global.locale.value }) as Promise<AIReportResponse>
+}
+
+export interface AITranslateResponse {
+  success: boolean
+  translated: string
+}
+
+// 翻译已生成的报告（译文不落库，仅本次展示；原文始终保留）
+export const translateReport = (text: string): Promise<AITranslateResponse> => {
+  return request.post('/ai/translate', { text, locale: i18n.global.locale.value }) as Promise<AITranslateResponse>
 }

@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { isAppointmentParticipant } from '../utils/guards';
+import { ensureDoctorEnColumns } from '../utils/doctorCols';
 
 const router = Router();
 
@@ -14,11 +15,14 @@ const requireExpert = asyncHandler(async (req: any, res: any, next: any) => {
     next();
 });
 
+// ========== doctors 表英文列懒迁移见 utils/doctorCols.ts（双语名片：英文界面优先显示 _en 字段，留空回落中文） ==========
+
 // ========== 专家名片：读取我的名片 ==========
 router.get('/my-card', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureDoctorEnColumns();
     const expertUserId = req.user.id;
     const [rows] = await pool.execute(
-        'SELECT id, name, title, specialty, intro, status FROM doctors WHERE user_id = ?',
+        'SELECT id, name, title, specialty, intro, name_en, title_en, specialty_en, intro_en, status FROM doctors WHERE user_id = ?',
         [expertUserId]
     );
     const card = (rows as any[])[0] || null;
@@ -28,8 +32,9 @@ router.get('/my-card', authenticate, requireExpert, asyncHandler(async (req: any
 // ========== 专家名片：保存并提交审核 ==========
 // 保存后状态置为 2（待审核），管理员通过后才显示在专家列表
 router.put('/my-card', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureDoctorEnColumns();
     const expertUserId = req.user.id;
-    const { name, title, specialty, intro } = req.body;
+    const { name, title, specialty, intro, name_en, title_en, specialty_en, intro_en } = req.body;
 
     if (!name || !String(name).trim()) {
         throw new BusinessError('专家姓名不能为空', 400);
@@ -46,14 +51,22 @@ router.put('/my-card', authenticate, requireExpert, asyncHandler(async (req: any
 
     if (existing) {
         await pool.execute(
-            'UPDATE doctors SET name = ?, title = ?, specialty = ?, intro = ?, status = 2 WHERE id = ?',
-            [String(name).trim(), String(title || ''), String(specialty || ''), String(intro || ''), existing.id]
+            'UPDATE doctors SET name = ?, title = ?, specialty = ?, intro = ?, name_en = ?, title_en = ?, specialty_en = ?, intro_en = ?, status = 2 WHERE id = ?',
+            [
+                String(name).trim(), String(title || ''), String(specialty || ''), String(intro || ''),
+                String(name_en || '').trim().slice(0, 80), String(title_en || '').trim().slice(0, 80),
+                String(specialty_en || '').trim().slice(0, 300), String(intro_en || '').trim(), existing.id
+            ]
         );
     } else {
         // 兜底：老专家账号可能无名片记录，自动补建
         await pool.execute(
-            'INSERT INTO doctors (name, title, specialty, intro, user_id, status) VALUES (?, ?, ?, ?, ?, 2)',
-            [String(name).trim(), String(title || ''), String(specialty || ''), String(intro || ''), expertUserId]
+            'INSERT INTO doctors (name, title, specialty, intro, name_en, title_en, specialty_en, intro_en, user_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 2)',
+            [
+                String(name).trim(), String(title || ''), String(specialty || ''), String(intro || ''),
+                String(name_en || '').trim().slice(0, 80), String(title_en || '').trim().slice(0, 80),
+                String(specialty_en || '').trim().slice(0, 300), String(intro_en || '').trim(), expertUserId
+            ]
         );
     }
 
@@ -156,6 +169,7 @@ router.get('/stats', authenticate, requireExpert, asyncHandler(async (req: any, 
 
 // 获取预约详情（带权限校验 - 普通用户和专家分别校验）
 router.get('/appointments/:id', authenticate, asyncHandler(async (req: any, res: any) => {
+    await ensureDoctorEnColumns();
     const appointmentId = req.params.id;
     const userId = req.user.id;
     const userRole = req.user.role;
@@ -191,13 +205,26 @@ router.get('/appointments/:id', authenticate, asyncHandler(async (req: any, res:
 
     let doctorUserId = null;
     if (appointment.doctor_id) {
+        // 附带专家名片公开信息（姓名/职称/专长/简介/头像）：
+        // 用户端聊天页展示「专家信息」卡使用，不包含邮箱/手机等隐私字段
         const [docRows] = await pool.execute(
-            'SELECT d.user_id, u.avatar AS doctor_avatar FROM doctors d LEFT JOIN users u ON d.user_id = u.id WHERE d.id = ?',
+            `SELECT d.user_id, u.avatar AS doctor_avatar, d.name AS doctor_name, d.title AS doctor_title,
+                    d.specialty AS doctor_specialty, d.intro AS doctor_intro,
+                    d.name_en, d.title_en, d.specialty_en, d.intro_en
+             FROM doctors d LEFT JOIN users u ON d.user_id = u.id WHERE d.id = ?`,
             [appointment.doctor_id]
         );
         const doc = (docRows as any[])[0];
         doctorUserId = doc?.user_id || null;
         appointment.doctor_avatar = doc?.doctor_avatar || null;
+        appointment.doctor_name = doc?.doctor_name || null;
+        appointment.doctor_title = doc?.doctor_title || null;
+        appointment.doctor_specialty = doc?.doctor_specialty || null;
+        appointment.doctor_intro = doc?.doctor_intro || null;
+        appointment.doctor_name_en = doc?.name_en || null;
+        appointment.doctor_title_en = doc?.title_en || null;
+        appointment.doctor_specialty_en = doc?.specialty_en || null;
+        appointment.doctor_intro_en = doc?.intro_en || null;
     }
     appointment.doctor_user_id = doctorUserId;
 
