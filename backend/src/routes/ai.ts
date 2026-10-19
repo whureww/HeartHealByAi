@@ -8,6 +8,7 @@ import {
 import { decryptSecret } from '../utils/secretBox';
 import { pool } from '../db/mysql';
 import { retrieveRagContext, extractAndStoreMemories, backfillChatEmbeddings } from '../utils/memory';
+import { isSupportedLang, translateText } from '../utils/translate';
 
 const router = Router();
 
@@ -195,13 +196,23 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
 
 // ===== 流式 AI 聊天接口（SSE）=====
 router.post('/chat-stream', authenticate, async (req: Request, res: Response) => {
+  // 响应是否已收尾/中断（防止在途译文向已结束的连接写入；try/catch 作用域外声明）
+  let responseClosed = false;
+  res.on('close', () => { responseClosed = true; });
+
   try {
-    const { messages, context, locale, session_id } = req.body;
+    const { messages, context, locale, session_id, translate_to } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'messages 不能为空' });
       return;
     }
+
+    // 实时翻译目标语言（可选）：携带受支持的语言码时，AI 增量按句送
+    // bilibili Index-Translate 同步翻译，译文经 {translated} 事件下发
+    const translateTo = typeof translate_to === 'string' && isSupportedLang(translate_to)
+      ? String(translate_to).toLowerCase()
+      : '';
 
     // RAG：检索记忆与相关历史注入系统提示词（失败自动降级为无 RAG 对话）
     const rag = await retrieveContextSafe(req.user!.id, messages);
@@ -257,6 +268,79 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
     const lastUser = [...messages].reverse().find((m: any) => m.role === 'user');
     let fullReply = '';
 
+    // ===== 实时翻译（bilibili Index-Translate，fail-open：译文失败不影响原文转发）=====
+    // AI 增量按句切分 → 句子进翻译队列（并发 2）→ 完成后严格按原文句序经 {translated} 事件下发
+    let sentenceBuf = '';
+    let translatedSeq = 0;                       // 已入队句子序号
+    let flushSeq = 0;                            // 下一个待下发的句子序号
+    const translatedMap = new Map<number, string>();
+    const translateQueue: { idx: number; text: string }[] = [];
+    let translateInFlight = 0;
+    let translateEnded = false;                  // 上游流已结束
+    let finishAfterTranslate: (() => void) | null = null;
+    const TRANSLATE_PARALLEL = 2;
+
+    const emitTranslated = () => {
+      if (responseClosed) return;
+      while (translatedMap.has(flushSeq)) {
+        const t = translatedMap.get(flushSeq)!;
+        translatedMap.delete(flushSeq);
+        flushSeq++;
+        if (t) res.write(`data: ${JSON.stringify({ translated: t })}\n\n`);
+      }
+    };
+
+    const pumpTranslate = () => {
+      while (translateInFlight < TRANSLATE_PARALLEL && translateQueue.length > 0) {
+        const job = translateQueue.shift()!;
+        translateInFlight++;
+        translateText(job.text, translateTo, undefined, 30000)
+          .then((t) => { translatedMap.set(job.idx, t); })
+          .catch((e: any) => {
+            console.error('[ai/chat-stream] 实时翻译单句失败（跳过该句）:', e?.message);
+            translatedMap.set(job.idx, '');
+          })
+          .finally(() => {
+            translateInFlight--;
+            emitTranslated();
+            pumpTranslate();
+            if (translateEnded && translateInFlight === 0 && translateQueue.length === 0 && finishAfterTranslate) {
+              const fin = finishAfterTranslate;
+              finishAfterTranslate = null;
+              fin();
+            }
+          });
+      }
+    };
+
+    // 从缓冲切出完整句子：中文句末标点必切；英文 .!? 需后随空白/结尾且句子足够长
+    //（避免小数、缩写被切碎，不满足则并入下一句），不完整尾段留在缓冲
+    const splitSentences = (buf: string): { sentences: string[]; rest: string } => {
+      const sentences: string[] = [];
+      let start = 0;
+      const re = /[。！？；…\n]|([.!?])(?=\s|$)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(buf)) !== null) {
+        const end = m.index + m[0].length;
+        const seg = buf.slice(start, end);
+        if (m[1] && seg.trim().length < 8) continue;
+        start = end;
+        if (seg.trim()) sentences.push(seg);
+      }
+      return { sentences, rest: buf.slice(start) };
+    };
+
+    const feedTranslation = (delta: string) => {
+      if (!translateTo) return;
+      sentenceBuf += delta;
+      const { sentences, rest } = splitSentences(sentenceBuf);
+      sentenceBuf = rest;
+      for (const s of sentences) {
+        translateQueue.push({ idx: translatedSeq++, text: s });
+      }
+      if (sentences.length) pumpTranslate();
+    };
+
     // 上游流看门狗：axios 的 timeout 只覆盖到收到响应头为止，若对端在
     // 传输阶段停滞（连接挂着但一个字节都不来），超时不会触发，请求会
     // 永久挂死（前端表现为一直"思考中"）。这里在持续无数据 30 秒时
@@ -271,6 +355,7 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
         watchdog = setTimeout(() => {
             console.error('流式响应看门狗触发：上游 ' + INACTIVITY_MS + 'ms 无数据，主动断开');
             try { stream.destroy(); } catch (e) { /* 忽略销毁异常 */ }
+            responseClosed = true;
             res.write(`data: ${JSON.stringify({ error: 'AI 响应超时，请稍后重试' })}\n\n`);
             res.end();
         }, INACTIVITY_MS);
@@ -298,6 +383,7 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
           if (content) {
             fullReply += content;
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
+            feedTranslation(content);
           }
         } catch (e) {
           // 忽略解析失败的行
@@ -315,12 +401,8 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
       }
     });
 
-    stream.on('end', () => {
-      clearWatchdog();
-      lineBuffer += decoder.decode();   // flush 解码器残留字节
-      if (lineBuffer.trim() !== '') {
-        handleLine(lineBuffer);         // 处理结尾未带换行符的最后一行
-      }
+    const finishResponse = () => {
+      responseClosed = true;
       // 流结束后异步抽取长期记忆（fire-and-forget，不阻塞响应收尾）
       if (fullReply.trim()) {
         scheduleMemoryExtraction(
@@ -331,11 +413,54 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
         );
       }
       res.end();
+    };
+
+    stream.on('end', () => {
+      clearWatchdog();
+      lineBuffer += decoder.decode();   // flush 解码器残留字节
+      if (lineBuffer.trim() !== '') {
+        handleLine(lineBuffer);         // 处理结尾未带换行符的最后一行
+      }
+      if (!translateTo) {
+        finishResponse();
+        return;
+      }
+      // 实时翻译收尾：剩余不满一句的尾巴也送翻译；等在途/排队译文按序
+      // 下发完再结束响应。兜底 15s 强制收尾，宁缺译文不断流（fail-open）
+      if (sentenceBuf.trim()) {
+        translateQueue.push({ idx: translatedSeq++, text: sentenceBuf.trim() });
+        sentenceBuf = '';
+      }
+      translateEnded = true;
+      finishAfterTranslate = () => {
+        emitTranslated();
+        finishResponse();
+      };
+      const forceEnd = setTimeout(() => {
+        if (finishAfterTranslate) {
+          console.error('[ai/chat-stream] 实时翻译收尾超时（15s），跳过剩余译文');
+          const fin = finishAfterTranslate;
+          finishAfterTranslate = null;
+          fin();
+        }
+      }, 15000);
+      const oldFin = finishAfterTranslate;
+      finishAfterTranslate = () => {
+        clearTimeout(forceEnd);
+        oldFin();
+      };
+      pumpTranslate();
+      if (translateInFlight === 0 && translateQueue.length === 0 && finishAfterTranslate) {
+        const fin = finishAfterTranslate;
+        finishAfterTranslate = null;
+        fin();
+      }
     });
 
     stream.on('error', (err: any) => {
       clearWatchdog();
       console.error('流式响应错误:', err);
+      responseClosed = true;
       res.write(`data: ${JSON.stringify({ error: '流式响应中断' })}\n\n`);
       res.end();
     });
@@ -348,6 +473,7 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
         error: 'AI 服务暂时不可用: ' + (error.response?.data?.error?.message || error.message)
       });
     } else {
+      responseClosed = true;
       res.write(`data: ${JSON.stringify({ error: '服务异常' })}\n\n`);
       res.end();
     }
@@ -417,28 +543,51 @@ router.post('/summarize-report', authenticate, async (req: Request, res: Respons
   }
 });
 
-// ===== 报告翻译：已生成报告按当前界面语言翻译（译文不落库、不覆盖原文） =====
+// ===== 报告翻译：走 bilibili Index-Translate 公共网关（32 语种），不可用时回落主厂大模型 =====
+// 译文不落库、不覆盖原文
 router.post('/translate', authenticate, async (req: Request, res: Response) => {
   try {
-    const { text, locale } = req.body || {};
+    const { text, locale, target } = req.body || {};
     const raw = String(text || '').trim();
     if (!raw) {
       res.status(400).json({ success: false, error: '缺少待翻译文本' });
       return;
     }
-    const target = locale === 'en' ? 'English' : '简体中文';
-    const translated = await callAI(
-      [
-        {
-          role: 'system',
-          content: 'You are a professional translator for psychological analysis reports. Translate the user text into ' + target
-            + '. Preserve the original Markdown structure, headings, lists and line breaks exactly. Translate faithfully and naturally; output ONLY the translation with no explanations.'
-        },
-        { role: 'user', content: raw.slice(0, 12000) }
-      ],
-      { temperature: 0.3, maxTokens: 4000, timeout: 90000 }
-    );
-    res.json({ success: true, translated: translated || '' });
+    // 目标语言：显式语言码（Index-Translate 语种表）优先；未传/不支持时随界面语言回落中英
+    const targetCode = isSupportedLang(String(target || ''))
+      ? String(target).toLowerCase()
+      : (locale === 'en' ? 'en' : 'zh');
+
+    // 首选 Index-Translate 公共翻译网关（免费、多语种）
+    try {
+      const translated = await translateText(
+        raw.slice(0, 12000),
+        targetCode,
+        '严格保留原文的 Markdown 结构、标题、列表与换行，忠实且自然地翻译全部内容',
+        90000
+      );
+      if (translated) {
+        res.json({ success: true, translated });
+        return;
+      }
+      throw new Error('empty translation');
+    } catch (e: any) {
+      // 公共网关不可用 → 回落主厂大模型翻译链路（保底）
+      console.error('[ai/translate] Index-Translate 不可用，回落主厂模型:', e?.message);
+      const targetName = locale === 'en' ? 'English' : '简体中文';
+      const fallback = await callAI(
+        [
+          {
+            role: 'system',
+            content: 'You are a professional translator for psychological analysis reports. Translate the user text into ' + targetName
+              + '. Preserve the original Markdown structure, headings, lists and line breaks exactly. Translate faithfully and naturally; output ONLY the translation with no explanations.'
+          },
+          { role: 'user', content: raw.slice(0, 12000) }
+        ],
+        { temperature: 0.3, maxTokens: 4000, timeout: 90000 }
+      );
+      res.json({ success: true, translated: fallback || '' });
+    }
   } catch (error: any) {
     console.error('翻译接口错误:', error.message);
     res.status(500).json({

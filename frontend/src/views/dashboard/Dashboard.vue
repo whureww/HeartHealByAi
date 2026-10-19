@@ -109,16 +109,57 @@
           <div class="card chat-card chat-main">
             <div class="chat-head">
               <h3>{{ $t('dashboard.chat.title') }}</h3>
-              <div class="model-picker">
-                <button
-                  class="model-chip"
-                  :title="$t('dashboard.chat.modelConfigTip')"
-                  @click="openModelSettings"
-                >
-                  <AppIcon name="spark" :size="12" />
-                  <span>{{ selectedModelLabel }}</span>
-                  <AppIcon name="chevronDown" :size="12" />
-                </button>
+              <div class="chat-head-tools">
+                <!-- 实时翻译开关 + 目标语言 + 视图模式（译文不落库，仅本次展示） -->
+                <div class="translate-picker">
+                  <button
+                    class="model-chip"
+                    :class="{ open: chatTranslateMenu, active: chatTranslateEnabled }"
+                    :title="$t('dashboard.chat.translateTip')"
+                    @click.stop="chatTranslateMenu = !chatTranslateMenu"
+                  >
+                    <AppIcon name="globe" :size="12" />
+                    <span>{{ chatTranslateEnabled ? langLabel(chatTranslateTarget) : $t('dashboard.chat.translate') }}</span>
+                    <AppIcon name="chevronDown" :size="12" />
+                  </button>
+                  <div v-if="chatTranslateMenu" class="translate-menu" @click.stop>
+                    <div class="tm-row">
+                      <span>{{ $t('dashboard.chat.enableTranslate') }}</span>
+                      <button
+                        class="tm-switch"
+                        :class="{ on: chatTranslateEnabled }"
+                        role="switch"
+                        :aria-checked="chatTranslateEnabled"
+                        @click="toggleChatTranslate"
+                      ><span class="tm-knob"></span></button>
+                    </div>
+                    <div class="tm-row">
+                      <span>{{ $t('dashboard.chat.translateTarget') }}</span>
+                      <select v-model="chatTranslateTarget" class="tm-select" :disabled="!chatTranslateEnabled">
+                        <option v-for="code in TRANSLATE_LANGS" :key="code" :value="code">{{ langLabel(code) }}</option>
+                      </select>
+                    </div>
+                    <div class="tm-row">
+                      <span>{{ $t('dashboard.chat.viewMode') }}</span>
+                      <div class="tm-seg">
+                        <button :class="{ on: chatViewMode === 'original' }" @click="chatViewMode = 'original'">{{ $t('dashboard.chat.viewOriginal') }}</button>
+                        <button :class="{ on: chatViewMode === 'translated' }" @click="chatViewMode = 'translated'">{{ $t('dashboard.chat.viewTranslated') }}</button>
+                        <button :class="{ on: chatViewMode === 'bilingual' }" @click="chatViewMode = 'bilingual'">{{ $t('dashboard.chat.viewBilingual') }}</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="model-picker">
+                  <button
+                    class="model-chip"
+                    :title="$t('dashboard.chat.modelConfigTip')"
+                    @click="openModelSettings"
+                  >
+                    <AppIcon name="spark" :size="12" />
+                    <span>{{ selectedModelLabel }}</span>
+                    <AppIcon name="chevronDown" :size="12" />
+                  </button>
+                </div>
               </div>
             </div>
             <div class="chat-box" ref="chatBox">
@@ -132,11 +173,23 @@
                 <div class="msg-ai selectable-text">{{ $t('dashboard.chat.greeting') }}</div>
               </div>
               <div v-for="(msg, index) in chatMessages" :key="index" class="msg-item">
-                <div :class="[msg.type === 'user' ? 'msg-user' : 'msg-ai', 'selectable-text']">{{ msg.content }}</div>
+                <!-- AI 消息：存在译文且非原文视图时按 译文/双语 展示（历史消息无译文回落原文） -->
+                <div
+                  v-if="msg.type === 'ai' && msg.translated && chatViewMode !== 'original'"
+                  class="msg-ai selectable-text"
+                >
+                  <template v-if="chatViewMode === 'bilingual'">{{ msg.content }}</template>
+                  <div :class="{ 'msg-translated': chatViewMode === 'bilingual' }">{{ msg.translated }}</div>
+                </div>
+                <div v-else :class="[msg.type === 'user' ? 'msg-user' : 'msg-ai', 'selectable-text']">{{ msg.content }}</div>
               </div>
-              <!-- 流式输出中的 AI 消息 -->
-              <div v-if="streamingContent" class="msg-item">
-                <div class="msg-ai selectable-text streaming">{{ streamingContent }}<span class="cursor">|</span></div>
+              <!-- 流式输出中的 AI 消息（开启翻译时译文随句追加；译文未到前先显示原文） -->
+              <div v-if="streamingContent || streamingTranslated" class="msg-item">
+                <div class="msg-ai selectable-text streaming">
+                  <template v-if="chatViewMode === 'original' || !streamingTranslated">{{ streamingContent }}</template>
+                  <div v-if="chatViewMode !== 'original' && streamingTranslated" :class="{ 'msg-translated': chatViewMode === 'bilingual' }">{{ streamingTranslated }}</div>
+                  <span class="cursor">|</span>
+                </div>
               </div>
             </div>
             <div class="input-row">
@@ -238,19 +291,23 @@
               <div class="report-doc" v-html="reportHtml"></div>
             </div>
           </div>
-          <!-- 导出报告按钮（已翻译时可切换原文/译文视图） -->
+          <!-- 导出报告按钮（已翻译时可切换原文/译文视图；翻译前可选 32 语种目标语言） -->
           <div v-if="reportContent && !reportLoading" class="report-actions">
-            <button
-              v-if="translationText"
-              class="btn-export"
-              @click="showingTranslation = !showingTranslation"
-            ><AppIcon name="globe" :size="15" /> {{ showingTranslation ? $t('dashboard.report.viewOriginal') : $t('dashboard.report.viewTranslation') }}</button>
+            <template v-if="!translationText">
+              <select v-model="reportTranslateTarget" class="btn-export lang-select" :disabled="translating">
+                <option v-for="code in TRANSLATE_LANGS" :key="code" :value="code">{{ langLabel(code) }}</option>
+              </select>
+              <button
+                class="btn-export"
+                :disabled="translating"
+                @click="translateCurrentReport"
+              ><AppIcon name="globe" :size="15" /> {{ translating ? $t('dashboard.report.translating') : $t('dashboard.report.translate') }}</button>
+            </template>
             <button
               v-else
               class="btn-export"
-              :disabled="translating"
-              @click="translateCurrentReport"
-            ><AppIcon name="globe" :size="15" /> {{ translating ? $t('dashboard.report.translating') : $t('dashboard.report.translate') }}</button>
+              @click="showingTranslation = !showingTranslation"
+            ><AppIcon name="globe" :size="15" /> {{ showingTranslation ? $t('dashboard.report.viewOriginal') : $t('dashboard.report.viewTranslation') }}</button>
             <button class="btn-export" @click="exportReport"><AppIcon name="fileText" :size="15" /> {{ $t('dashboard.report.copyContent') }}</button>
             <button class="btn-export" @click="downloadReport"><AppIcon name="download" :size="15" /> {{ $t('dashboard.report.exportHtml') }}</button>
           </div>
@@ -747,7 +804,40 @@ const { t } = useI18n()
 const currentPage = ref('')
 const currentAppointmentId = ref(0)
 const chatInput = ref('')
-const chatMessages = ref<{type: string, content: string}[]>([])
+const chatMessages = ref<{type: string, content: string, translated?: string}[]>([])
+
+// ===== 聊天实时翻译（bilibili Index-Translate 公共翻译引擎，译文不落库）=====
+const TRANSLATE_LANGS = [
+  'en', 'zh', 'de', 'fr', 'es', 'ja', 'ko', 'pt', 'ru', 'ar', 'it', 'nl', 'pl',
+  'ro', 'sv', 'tr', 'hi', 'vi', 'th', 'id', 'ms', 'fil', 'ukr_cyrl', 'fas_arab',
+  'ces_latn', 'ell_grek', 'dan_latn', 'hun_latn', 'fin_latn', 'nob_latn', 'slk_latn', 'bul_cyrl'
+]
+const chatTranslateEnabled = ref(false)
+const chatTranslateTarget = ref('en')
+const chatViewMode = ref<'original' | 'translated' | 'bilingual'>('original')
+const chatTranslateMenu = ref(false)
+// 流式过程中的译文累积（与 streamingContent 并行增长）
+const streamingTranslated = ref('')
+// 语言显示名走 i18n（dashboard.langs.*，中英双语对齐）
+const langLabel = (code: string) => t(`dashboard.langs.${code}`)
+
+const toggleChatTranslate = () => {
+  chatTranslateEnabled.value = !chatTranslateEnabled.value
+  if (chatTranslateEnabled.value) {
+    // 开启翻译时默认双语视图（原文在上、译文在下，译文滞后到达也不遮挡）
+    if (chatViewMode.value === 'original') chatViewMode.value = 'bilingual'
+  } else {
+    chatViewMode.value = 'original'
+    chatTranslateMenu.value = false
+  }
+}
+// 点击弹层外部收起翻译菜单
+const onDocClickForTranslate = (e: MouseEvent) => {
+  const el = document.querySelector('.translate-picker')
+  if (el && !el.contains(e.target as Node)) chatTranslateMenu.value = false
+}
+onMounted(() => document.addEventListener('click', onDocClickForTranslate))
+onUnmounted(() => document.removeEventListener('click', onDocClickForTranslate))
 // AI 对话会话：侧栏列表 + 当前激活会话
 const chatSessions = ref<any[]>([])
 const activeSessionId = ref('')
@@ -1030,12 +1120,14 @@ const reportHtml = computed(() => {
   return renderReportHtml(text)
 })
 
-// 报告 AI 翻译：按当前界面语言翻译已生成报告（不落库、不覆盖原文）
+// 报告 AI 翻译：bilibili Index-Translate 公共网关（32 语种，后端不可用时自动回落主厂模型）
+// 按所选目标语言翻译已生成报告（不落库、不覆盖原文）
+const reportTranslateTarget = ref(settingsStore.locale === 'en' ? 'zh' : 'en')
 const translateCurrentReport = async () => {
   if (translating.value || !reportContent.value) return
   translating.value = true
   try {
-    const res = await translateReport(reportContent.value)
+    const res = await translateReport(reportContent.value, reportTranslateTarget.value)
     if (res?.translated) {
       translationText.value = res.translated
       showingTranslation.value = true
@@ -1050,8 +1142,15 @@ const resetReportTranslation = () => {
   translationText.value = ''
   showingTranslation.value = false
 }
-// 语言切换后译文与目标语言不再匹配，重置回原文视图
-watch(() => settingsStore.locale, resetReportTranslation)
+// 语言切换后译文与目标语言不再匹配，重置回原文视图；目标语言默认随界面语言取互补
+watch(() => settingsStore.locale, (loc) => {
+  reportTranslateTarget.value = loc === 'en' ? 'zh' : 'en'
+  resetReportTranslation()
+})
+// 已有译文时切换目标语言 → 重置回原文，便于按新语言重新翻译
+watch(reportTranslateTarget, () => {
+  if (translationText.value) resetReportTranslation()
+})
 
 // ===== Socket.IO 全局连接 =====
 const socket = shallowRef<Socket | null>(null)
@@ -1334,7 +1433,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.5.0'
+  const cur = updateInfo.value?.current_version || '0.6.0'
   const base = t('dashboard.update.appVersion', { version: cur })
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return t('dashboard.update.availableDesc', { latest: updateInfo.value.latest_version, current: cur })
@@ -1673,9 +1772,10 @@ const sendChat = async () => {
   aiLoading.value = true
   isStreaming.value = true
   streamingContent.value = ''
+  streamingTranslated.value = ''
 
   try {
-    // 3. 调用流式 AI 接口
+    // 3. 调用流式 AI 接口（开启实时翻译时后端按句同步翻译，译文经 onTranslated 送达）
     await chatWithAIStream(
       messageHistory,
       (content: string) => {
@@ -1688,8 +1788,9 @@ const sendChat = async () => {
         // 流中断保留半截内容：已接收部分上屏并落库，不再「说一半就消失」
         if (streamingContent.value) {
           const partial = streamingContent.value
-          chatMessages.value.push({ type: 'ai', content: partial })
+          chatMessages.value.push({ type: 'ai', content: partial, translated: streamingTranslated.value || undefined })
           streamingContent.value = ''
+          streamingTranslated.value = ''
           void saveChat({ content: partial, type: 'ai', session_id: sessionId })
             .then(() => loadChatSessions())
             .catch(() => {})
@@ -1707,11 +1808,12 @@ const sendChat = async () => {
         isStreaming.value = false
         aiLoading.value = false
 
-        // 把流式内容保存到消息列表
+        // 把流式内容保存到消息列表（开启实时翻译时译文一并挂到消息上，仅本次展示不落库）
         if (streamingContent.value) {
           const finalContent = streamingContent.value
-          chatMessages.value.push({ type: 'ai', content: finalContent })
+          chatMessages.value.push({ type: 'ai', content: finalContent, translated: streamingTranslated.value || undefined })
           streamingContent.value = ''
+          streamingTranslated.value = ''
 
           // AI 回复落库（用户消息已在发送时保存）；落库后刷新侧栏列表，
           // 让「N 条」计数与最近活跃排序实时跟上，而不是停在打开时的旧值
@@ -1728,7 +1830,14 @@ const sendChat = async () => {
         testCount: userStore.stats?.testCount || 0,
         username: userStore.userInfo?.username
       },
-      sessionId
+      sessionId,
+      {
+        translateTo: chatTranslateEnabled.value ? chatTranslateTarget.value : undefined,
+        onTranslated: (c: string) => {
+          streamingTranslated.value += c
+          scrollToBottom()
+        }
+      }
     )
 
   } catch (e: any) {
@@ -1736,6 +1845,7 @@ const sendChat = async () => {
     isStreaming.value = false
     aiLoading.value = false
     streamingContent.value = ''
+    streamingTranslated.value = ''
 
     chatMessages.value.push({
       type: 'ai',
@@ -2666,6 +2776,143 @@ const scrollToBottom = () => {
 .model-chip.open {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* 聊天头部工具区：翻译选择器 + 模型选择器 */
+.chat-head-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.translate-picker {
+  position: relative;
+}
+
+.model-chip.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* 翻译设置弹层（不透明背景，圆角卡片） */
+.translate-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 240px;
+  padding: 12px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tm-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--accent-soft);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.tm-switch .tm-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  transition: transform 0.15s;
+}
+
+.tm-switch.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.tm-switch.on .tm-knob {
+  transform: translateX(16px);
+  border-color: var(--accent);
+}
+
+.tm-select {
+  max-width: 150px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-primary, var(--text-secondary));
+  background: var(--accent-soft);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.tm-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tm-seg {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tm-seg button {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--card-bg);
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tm-seg button + button {
+  border-left: 1px solid var(--border-color);
+}
+
+.tm-seg button.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* AI 消息双语视图：译文区（上方加分隔线，视觉与原文区分） */
+.msg-translated {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+  opacity: 0.92;
+}
+
+/* 报告翻译目标语言下拉（沿用 btn-export 胶囊外观，仅微调内距） */
+.lang-select {
+  width: auto;
+  min-width: 130px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  cursor: pointer;
 }
 
 .chat-box {
