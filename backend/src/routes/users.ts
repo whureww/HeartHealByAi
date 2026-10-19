@@ -722,7 +722,7 @@ router.post('/chat-sessions/:sessionId/summary', authenticate, asyncHandler(asyn
                 { role: 'system', content: '你是聊天记录标题生成器。根据对话内容生成一个不超过12个字的简短标题，概括对话的主题或情绪。要求：只输出标题文字本身；不要引号、句号或任何修饰；不要使用"对话""聊天"这类空泛词；语气中性客观。' },
                 { role: 'user', content: transcript }
             ],
-            { temperature: 0.3, maxTokens: 30, timeout: 15000 }
+            { temperature: 0.3, maxTokens: 30, timeout: 60000 }
         );
 
         // 清洗：去引号/换行/首尾空白，超长截断
@@ -733,7 +733,7 @@ router.post('/chat-sessions/:sessionId/summary', authenticate, asyncHandler(asyn
             .slice(0, 20);
 
         if (!clean) {
-            res.json({ success: true, data: { title: '新对话' } });
+            await fallbackTitle(msgs, userId, sessionId, res);
             return;
         }
 
@@ -744,11 +744,26 @@ router.post('/chat-sessions/:sessionId/summary', authenticate, asyncHandler(asyn
 
         res.json({ success: true, data: { title: clean } });
     } catch (e: any) {
-        console.error('生成对话标题失败:', e.message);
-        // AI 不可用时静默降级：保留原标题，不打断前端
-        res.json({ success: false, message: '标题生成暂时不可用' });
+        console.error('生成对话标题失败，启用本地兜底:', e.message);
+        // AI 不可用时本地兜底：取首条用户消息前 12 字做标题，避免标题一直停留「新对话」
+        await fallbackTitle(msgs, userId, sessionId, res);
     }
 }));
+
+// 本地兜底标题：AI 总结不可用时，用首条用户消息前 12 字概括（与历史回填同思路）
+async function fallbackTitle(msgs: any[], userId: number, sessionId: string, res: Response) {
+    const firstUser = msgs.find((m: any) => m.type === 'user');
+    const local = String(firstUser?.content || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 12);
+    const title = local || '新对话';
+    await pool.execute(
+        'UPDATE chat_sessions SET title = ? WHERE user_id = ? AND session_id = ?',
+        [title, userId, sessionId]
+    );
+    res.json({ success: true, data: { title, fallback: true } });
+}
 
 // ========== 删除会话 ==========
 // 锁定中的对话不允许删除，需先解除锁定

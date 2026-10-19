@@ -1195,7 +1195,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.5'
+  const cur = updateInfo.value?.current_version || '0.4.6'
   const base = `心愈 AI心理系统 v${cur}`
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
@@ -1559,9 +1559,12 @@ const sendChat = async () => {
           const finalContent = streamingContent.value
           chatMessages.value.push({ type: 'ai', content: finalContent })
           streamingContent.value = ''
-          
-          // AI 回复落库（用户消息已在发送时保存）
-          void saveChat({ content: finalContent, type: 'ai', session_id: sessionId }).catch(() => {})
+
+          // AI 回复落库（用户消息已在发送时保存）；落库后刷新侧栏列表，
+          // 让「N 条」计数与最近活跃排序实时跟上，而不是停在打开时的旧值
+          void saveChat({ content: finalContent, type: 'ai', session_id: sessionId })
+            .then(() => loadChatSessions())
+            .catch(() => {})
           // 首轮回复后 / 每 6 条消息：让 AI 总结更新对话标题
           maybeSummarize(sessionId)
         }
