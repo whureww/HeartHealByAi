@@ -13,6 +13,11 @@ export default {
     },
     tray: {
       appTitle: '心愈 · 心理系统',
+      tooltip: '心愈 · 心理健康系统',
+      menuShow: '显示心愈',
+      menuQuit: '退出心愈',
+      tip: '心愈 · {sender}：{brief}',
+      tipUnread: '心愈 · 【{count}条未读】{sender}：{brief}',
       titlePreview: '{sender}：{text}',
       newMsgTitle: '【新消息{count}】{text}',
       defaultSender: '新消息',

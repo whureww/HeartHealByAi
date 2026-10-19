@@ -55,13 +55,19 @@ export async function flashForMessage(sender: string, content: string, appointme
     )
 
     // 托盘 QQ 式提醒：红色数字角标 + 整图标消失/重现频闪 + tooltip 消息预览
-    // （携带预约 id 与发送者头像：托盘悬浮卡片点击直达对应聊天并展示头像）
+    // （携带预约 id 与发送者头像：托盘悬浮卡片点击直达对应聊天并展示头像；
+    //   tooltip 按当前语言拼好传入，Rust 侧缺省时回退内置中文）
+    const brief = String(content || '').replace(/\s+/g, ' ').trim().slice(0, 24)
+    const tip = unreadCount > 1
+      ? i18n.global.t('core.tray.tipUnread', { count: unreadCount, sender, brief })
+      : i18n.global.t('core.tray.tip', { sender, brief })
     invoke('update_tray_unread', {
       sender,
       content: String(content || '').slice(0, 40),
       unread: unreadCount,
       appointmentId: appointmentId ?? null,
-      avatar: avatar ?? null
+      avatar: avatar ?? null,
+      tip
     }).catch(() => {})
 
     // DWM 图标位图：任务栏悬浮缩略图渲染成消息卡片（发送者 + 内容 + 未读数）
@@ -102,9 +108,23 @@ export async function clearUnreadFlash() {
   }
 }
 
+/**
+ * 托盘系统界面文案跟随语言：菜单项（显示/退出）与默认 tooltip 由前端按当前
+ * 语言下发（Rust 侧初始为中文兜底）。启动时与每次切换语言时调用。
+ */
+export function applyTrayTexts() {
+  if (!isTauri()) return
+  invoke('set_tray_texts', {
+    show: i18n.global.t('core.tray.menuShow'),
+    quit: i18n.global.t('core.tray.menuQuit'),
+    tooltip: i18n.global.t('core.tray.tooltip')
+  }).catch(() => {})
+}
+
 /** 应用启动时初始化：窗口获得焦点即清除提醒状态；托盘卡片点击直达聊天（幂等注册） */
 export function initTaskbarNotifier() {
   if (!isTauri()) return
+  applyTrayTexts()
   getCurrentWindow()
     .onFocusChanged(({ payload: focused }) => {
       if (focused) void clearUnreadFlash()

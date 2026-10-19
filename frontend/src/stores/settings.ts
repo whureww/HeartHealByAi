@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { secureSet, isTauri } from '@/utils/secureStore'
 import { i18n, setAppLocale, type AppLocale } from '@/i18n'
+import { applyTrayTexts } from '@/utils/taskbar'
 
 type Theme = 'light' | 'dark' | 'system'
 type CloseAction = 'minimize' | 'exit' | 'ask'
@@ -95,10 +96,12 @@ export const useSettingsStore = defineStore('settings', () => {
     applyTheme(t)
   }
 
-  // 设置语言：切换 i18n 全局 locale，watch 负责持久化
+  // 设置语言：切换 i18n 全局 locale，watch 负责持久化；
+  // 托盘菜单/tooltip 等 Rust 侧系统文案同步跟随语言
   const setLocale = (l: AppLocale) => {
     locale.value = l
     setAppLocale(l)
+    applyTrayTexts()
   }
 
   // 设置关闭行为

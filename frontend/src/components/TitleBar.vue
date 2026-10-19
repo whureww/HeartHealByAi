@@ -1,11 +1,12 @@
 <template>
-  <div class="title-bar" data-tauri-drag-region>
+  <div class="title-bar" :class="{ 'is-mac': isMac }" data-tauri-drag-region>
     <div class="title" data-tauri-drag-region>
       <AppIcon name="brand" :size="14" class="title-mark" />
       <span>{{ $t('common.appName') }}</span>
       <span class="title-sub">{{ $t('titlebar.subtitle') }}</span>
     </div>
-    <div class="window-controls">
+    <!-- macOS：由原生红绿灯提供窗口控制（titleBarStyle Overlay），隐藏自绘按钮 -->
+    <div v-if="!isMac" class="window-controls">
       <button class="win-btn" @click="minimize" :title="$t('titlebar.minimize')" :aria-label="$t('titlebar.minimize')">
         <svg width="12" height="12" viewBox="0 0 12 12"><line x1="1.5" y1="6" x2="10.5" y2="6" stroke="currentColor" stroke-width="1.2"/></svg>
       </button>
@@ -34,6 +35,10 @@ import { useSettingsStore } from '@/stores/settings'
 // 浏览器开发环境下无 Tauri 容器，窗口 API 需守卫
 const window = isTauri() ? getCurrentWindow() : null
 const settingsStore = useSettingsStore()
+
+// macOS：原生红绿灯叠加在自绘标题栏左侧（titleBarStyle Overlay），
+// 隐藏自绘最小化/关闭按钮，并给红绿灯让出空间
+const isMac = /mac/i.test(navigator.userAgent)
 
 const showDialog = ref(false)
 
@@ -128,6 +133,11 @@ const onCancel = () => {
 .title-sub {
   font-weight: 400;
   color: var(--text-muted);
+}
+
+/* macOS：左侧给原生红绿灯让位（三个按钮约 70px + 间距） */
+.title-bar.is-mac {
+  padding-left: 80px;
 }
 
 .window-controls {

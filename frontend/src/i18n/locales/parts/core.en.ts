@@ -13,6 +13,11 @@ export default {
     },
     tray: {
       appTitle: 'XinYu · Mental Health System',
+      tooltip: 'XinYu · Mental Health',
+      menuShow: 'Show XinYu',
+      menuQuit: 'Quit XinYu',
+      tip: 'XinYu · {sender}: {brief}',
+      tipUnread: 'XinYu · [{count} unread] {sender}: {brief}',
       titlePreview: '{sender}: {text}',
       newMsgTitle: '[New message{count}] {text}',
       defaultSender: 'New message',

@@ -140,8 +140,62 @@ fn register_notification_app_id(app: &tauri::AppHandle) {
 #[cfg(not(target_os = "windows"))]
 fn register_notification_app_id(_app: &tauri::AppHandle) {}
 
+// ===== macOS 平台适配 =====
+// Windows 专属提醒在 macOS 上的对应实现：
+// - 未读数 → Dock 图标角标（NSDockTile setBadgeLabel）
+// - 任务栏频闪 → Dock 图标弹跳（requestUserAttention / cancelUserAttentionRequest）
+// 所有 AppKit 调用都派发到主线程执行（fire-and-forget，不阻塞命令线程）
+
+#[cfg(target_os = "macos")]
+mod macos_ui {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSRequestUserAttentionType};
+    use objc2_foundation::NSString;
+    use std::sync::atomic::{AtomicIsize, Ordering};
+
+    /// 最近一次 requestUserAttention 返回的请求 id（用于取消弹跳）
+    static ATTENTION_REQ: AtomicIsize = AtomicIsize::new(0);
+
+    pub fn set_dock_badge(app: &tauri::AppHandle, count: Option<u32>) {
+        let _ = app.run_on_main_thread(move || {
+            if let Some(mtm) = MainThreadMarker::new() {
+                let ns_app = NSApplication::sharedApplication(mtm);
+                let dock = ns_app.dockTile();
+                match count {
+                    Some(n) => dock.setBadgeLabel(Some(&NSString::from_str(&n.to_string()))),
+                    None => dock.setBadgeLabel(None),
+                }
+            }
+        });
+    }
+
+    pub fn request_attention(app: &tauri::AppHandle) {
+        let _ = app.run_on_main_thread(move || {
+            if let Some(mtm) = MainThreadMarker::new() {
+                let ns_app = NSApplication::sharedApplication(mtm);
+                let req =
+                    ns_app.requestUserAttention(NSRequestUserAttentionType::CriticalRequest);
+                ATTENTION_REQ.store(req, Ordering::SeqCst);
+            }
+        });
+    }
+
+    pub fn cancel_attention(app: &tauri::AppHandle) {
+        let prev = ATTENTION_REQ.swap(0, Ordering::SeqCst);
+        if prev != 0 {
+            let _ = app.run_on_main_thread(move || {
+                if let Some(mtm) = MainThreadMarker::new() {
+                    let ns_app = NSApplication::sharedApplication(mtm);
+                    ns_app.cancelUserAttentionRequest(prev);
+                }
+            });
+        }
+    }
+}
+
 /// 任务栏闪烁提醒（QQ 式新消息）：窗口失焦时橙色频闪任务栏图标直至回到前台。
 /// stop=true 立即停止闪烁（获得焦点/已读时由前端调用）。
+/// macOS 上对应 Dock 图标弹跳（requestUserAttention）。
 #[tauri::command]
 fn flash_taskbar(window: tauri::WebviewWindow, stop: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -161,6 +215,17 @@ fn flash_taskbar(window: tauri::WebviewWindow, stop: bool) -> Result<(), String>
         };
         unsafe { FlashWindowEx(&mut info) };
     }
+    #[cfg(target_os = "macos")]
+    {
+        let app = window.app_handle().clone();
+        if stop {
+            macos_ui::cancel_attention(&app);
+        } else {
+            macos_ui::request_attention(&app);
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let _ = (window, stop);
     Ok(())
 }
 
@@ -391,7 +456,7 @@ fn set_taskbar_preview(
         iconic_preview::activate(hwnd, sender, content, unread);
     }
     #[cfg(not(target_os = "windows"))]
-    let _ = (sender, content, unread);
+    let _ = (window, sender, content, unread);
     Ok(())
 }
 
@@ -403,6 +468,8 @@ fn clear_taskbar_preview(window: tauri::WebviewWindow) -> Result<(), String> {
         let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
         iconic_preview::deactivate(hwnd);
     }
+    #[cfg(not(target_os = "windows"))]
+    let _ = window;
     Ok(())
 }
 
@@ -458,10 +525,45 @@ fn tray_icon_cache() -> &'static [Option<tauri::image::Image<'static>>; 9] {
 
 fn badge_image(n: usize) -> Option<tauri::image::Image<'static>> {
     let idx = if n >= 9 { 8 } else { n.checked_sub(1)? };
-    tray_icon_cache()[idx].clone()
+    let img = tray_icon_cache()[idx].clone()?;
+    #[cfg(target_os = "macos")]
+    return resize_for_menu_bar(&img);
+    #[cfg(not(target_os = "macos"))]
+    Some(img)
+}
+
+/// macOS 菜单栏状态图标按约 22pt 显示：内置角标图为 32×32，直接使用会撑高菜单栏，
+/// 这里统一缩放到 22×22（Retina 下由系统放大，视觉可接受）
+#[cfg(target_os = "macos")]
+fn resize_for_menu_bar(img: &tauri::image::Image<'_>) -> Option<tauri::image::Image<'static>> {
+    use image::{imageops, ImageBuffer, Rgba};
+    const MENU_BAR_SIZE: u32 = 22;
+    let w = img.width() as u32;
+    let h = img.height() as u32;
+    let rgba = img.rgba();
+    if w == 0 || h == 0 || rgba.is_empty() {
+        return None;
+    }
+    let src = ImageBuffer::<Rgba<u8>, &[u8]>::from_raw(w, h, rgba)?;
+    let resized = imageops::resize(&src, MENU_BAR_SIZE, MENU_BAR_SIZE, imageops::FilterType::Lanczos3);
+    Some(tauri::image::Image::new_owned(
+        resized.into_raw(),
+        MENU_BAR_SIZE.into(),
+        MENU_BAR_SIZE.into(),
+    ))
+}
+
+/// 托盘常态图标：Windows 直接用应用图标；macOS 需缩放到菜单栏尺寸
+fn default_tray_icon(app: &tauri::AppHandle) -> Option<tauri::image::Image<'static>> {
+    let icon = app.default_window_icon()?.to_owned();
+    #[cfg(target_os = "macos")]
+    return resize_for_menu_bar(&icon);
+    #[cfg(not(target_os = "macos"))]
+    Some(icon)
 }
 
 /// 系统任务栏是否为浅色主题（读 SystemUsesLightTheme，失败默认浅色）
+#[cfg(target_os = "windows")]
 fn taskbar_is_light() -> bool {
     use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
     unsafe {
@@ -484,6 +586,7 @@ fn taskbar_is_light() -> bool {
     }
 }
 
+#[cfg(target_os = "windows")]
 static TASKBAR_LIGHT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
 /// 频闪「灭」帧：近乎全透明图标（alpha=1/255），像素底色取任务栏背景色。
@@ -491,6 +594,7 @@ static TASKBAR_LIGHT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 /// 纯透明图会被 GDI 掩码路径渲染成黑色色块；改为「低 alpha + 任务栏同色底」双保险：
 /// 若走 alpha 路径则 99.6% 透明不可见，若走掩码路径则渲染为任务栏同色同样不可见——
 /// 两种管线下都表现为「图标消失但托盘槽位保留」，即 QQ 式不透明/透明交替闪烁
+#[cfg(target_os = "windows")]
 fn blank_image() -> tauri::image::Image<'static> {
     let light = TASKBAR_LIGHT.get_or_init(taskbar_is_light);
     let (r, g, b) = if *light {
@@ -509,7 +613,9 @@ fn blank_image() -> tauri::image::Image<'static> {
 }
 
 /// 频闪线程：未读时 600ms 交替「角标帧 ↔ 透明帧」（QQ 式不透明/透明交替，
-/// 托盘槽位保留不移除）；停止后恢复常态图标（仅恢复一次）
+/// 托盘槽位保留不移除）；停止后恢复常态图标（仅恢复一次）。
+/// 仅 Windows：macOS 菜单栏图标不做透明频闪（非惯例），改用 Dock 角标。
+#[cfg(target_os = "windows")]
 fn spawn_tray_flasher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut blank_shown = false;
@@ -539,7 +645,9 @@ fn spawn_tray_flasher(app: tauri::AppHandle) {
 }
 
 /// 托盘未读提醒：叠加数字角标、开始频闪、tooltip 变为消息预览，
-/// 同时记录卡片数据（弹窗已显示时同步刷新内容）
+/// 同时记录卡片数据（弹窗已显示时同步刷新内容）。
+/// tip：由前端按当前语言拼好的 tooltip；缺省时回退到内置中文格式。
+/// macOS：不频闪，菜单栏图标切到角标帧，同时写 Dock 角标数字。
 #[tauri::command]
 fn update_tray_unread(
     app: tauri::AppHandle,
@@ -548,23 +656,30 @@ fn update_tray_unread(
     unread: u32,
     appointment_id: Option<u64>,
     avatar: Option<String>,
+    tip: Option<String>,
 ) -> Result<(), String> {
     let idx = if unread >= 9 { 9 } else { (unread as usize).clamp(1, 8) };
     TRAY_BADGE.store(idx, Ordering::SeqCst);
+    #[cfg(target_os = "windows")]
     TRAY_FLASH.store(true, Ordering::SeqCst);
 
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let brief: String = content.chars().take(24).collect();
-        let tip = if unread > 1 {
-            format!("心愈 · 【{unread}条未读】{sender}：{brief}")
-        } else {
-            format!("心愈 · {sender}：{brief}")
-        };
+        let tip = tip.unwrap_or_else(|| {
+            if unread > 1 {
+                format!("心愈 · 【{unread}条未读】{sender}：{brief}")
+            } else {
+                format!("心愈 · {sender}：{brief}")
+            }
+        });
         let _ = tray.set_tooltip(Some(&tip));
         if let Some(img) = badge_image(idx) {
             let _ = tray.set_icon(Some(img));
         }
     }
+
+    #[cfg(target_os = "macos")]
+    macos_ui::set_dock_badge(&app, Some(unread));
 
     let msg = TrayMsg {
         sender: sender.clone(),
@@ -584,7 +699,8 @@ fn update_tray_unread(
     Ok(())
 }
 
-/// 托盘恢复常态：停止频闪、还原图标与 tooltip、清空卡片数据并隐藏悬浮卡片
+/// 托盘恢复常态：停止频闪、还原图标与 tooltip、清空卡片数据并隐藏悬浮卡片。
+/// macOS 同时清除 Dock 角标。
 #[tauri::command]
 fn clear_tray_unread(app: tauri::AppHandle) {
     TRAY_FLASH.store(false, Ordering::SeqCst);
@@ -596,8 +712,25 @@ fn clear_tray_unread(app: tauri::AppHandle) {
     }
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let _ = tray.set_tooltip(Some(TRAY_TOOLTIP_DEFAULT));
-        if let Some(icon) = app.default_window_icon().cloned() {
+        if let Some(icon) = default_tray_icon(&app) {
             let _ = tray.set_icon(Some(icon));
+        }
+    }
+    #[cfg(target_os = "macos")]
+    macos_ui::set_dock_badge(&app, None);
+}
+
+/// 更新托盘菜单与默认 tooltip 文案（前端切换语言时调用，实现托盘界面跟随语言）
+#[tauri::command]
+fn set_tray_texts(app: tauri::AppHandle, show: String, quit: String, tooltip: String) {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(&tooltip));
+        let show_item = MenuItem::with_id(&app, "show", &show, true, None::<&str>);
+        let quit_item = MenuItem::with_id(&app, "quit", &quit, true, None::<&str>);
+        if let (Ok(s), Ok(q)) = (show_item, quit_item) {
+            if let Ok(menu) = Menu::with_items(&app, &[&s, &q]) {
+                let _ = tray.set_menu(Some(menu));
+            }
         }
     }
 }
@@ -684,7 +817,13 @@ const GITEE_RELEASES_LATEST: &str =
     "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/latest";
 const GITHUB_RELEASES_LATEST: &str =
     "https://api.github.com/repos/whureww/HeartHealByAi/releases/latest";
-const SETUP_SUFFIX: &str = "_x64-setup.exe";
+
+/// 各平台安装包附件后缀：Windows 为 Inno Setup 安装器；macOS 为 Tauri 产出的
+/// DMG（Apple Silicon 优先，其次 Intel）。下载与安装校验均按当前平台后缀执行。
+#[cfg(target_os = "windows")]
+const INSTALLER_SUFFIXES: [&str; 1] = ["_x64-setup.exe"];
+#[cfg(target_os = "macos")]
+const INSTALLER_SUFFIXES: [&str; 2] = ["_aarch64.dmg", "_x64.dmg"];
 
 /// 语义化版本比较：返回 Some(true) 表示 remote 更新，None 表示解析失败
 fn version_is_newer(remote: &str, local: &str) -> Option<bool> {
@@ -718,14 +857,16 @@ struct UpdateInfo {
     release_notes: String,
 }
 
-/// 从 release 的 assets 里找 `*_x64-setup.exe` 附件的下载地址
-fn find_setup_asset(rel: &serde_json::Value) -> Option<String> {
+/// 从 release 的 assets 里找当前平台安装包附件的下载地址（按后缀优先级匹配）
+fn find_installer_asset(rel: &serde_json::Value) -> Option<String> {
     let assets = rel.get("assets")?.as_array()?;
     for a in assets {
         let name = a.get("name")?.as_str().unwrap_or("");
-        if name.ends_with(SETUP_SUFFIX) {
-            if let Some(url) = a.get("browser_download_url").and_then(|v| v.as_str()) {
-                return Some(url.to_string());
+        for suffix in INSTALLER_SUFFIXES {
+            if name.ends_with(suffix) {
+                if let Some(url) = a.get("browser_download_url").and_then(|v| v.as_str()) {
+                    return Some(url.to_string());
+                }
             }
         }
     }
@@ -815,7 +956,7 @@ fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
     // 优先取有安装包附件的最高版本源；都没有附件时回退最高版本源（前端会提示地址缺失）
     let (best_rel, latest_ver) = candidates
         .iter()
-        .find(|(rel, _)| find_setup_asset(rel).is_some())
+        .find(|(rel, _)| find_installer_asset(rel).is_some())
         .unwrap_or(&candidates[0])
         .clone();
 
@@ -825,7 +966,7 @@ fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
         has_update,
         latest_version: latest_ver,
         current_version: current,
-        download_url: find_setup_asset(&best_rel).unwrap_or_default(),
+        download_url: find_installer_asset(&best_rel).unwrap_or_default(),
         release_notes: best_rel
             .get("body")
             .and_then(|v| v.as_str())
@@ -846,7 +987,7 @@ async fn download_update(app: tauri::AppHandle, download_url: String) -> Result<
 }
 
 fn download_update_blocking(app: tauri::AppHandle, download_url: String) -> Result<String, String> {
-    if !download_url.ends_with(SETUP_SUFFIX) {
+    if !INSTALLER_SUFFIXES.iter().any(|s| download_url.ends_with(s)) {
         return Err("下载地址异常，已阻止".into());
     }
 
@@ -953,16 +1094,20 @@ fn urldecode(s: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|_| s.to_string())
 }
 
-/// 退出程序并启动新版本安装器
+/// 退出程序并启动新版本安装器。
+/// Windows：直接执行 Inno Setup 安装器；macOS：用 open 挂载 DMG 引导安装。
 #[tauri::command]
 fn install_update(app: tauri::AppHandle, installer_path: String) -> Result<(), String> {
     let path = std::path::PathBuf::from(&installer_path);
-    if !path.exists() || !path.to_string_lossy().ends_with(SETUP_SUFFIX) {
+    if !path.exists() || !INSTALLER_SUFFIXES.iter().any(|s| path.to_string_lossy().ends_with(s)) {
         return Err("安装包无效".into());
     }
 
-    // 直接以子进程启动安装器（exe 本身可直接执行，彻底规避 cmd start 的
-    // 引号/中文路径转义问题），子进程独立于父进程，本程序退出不影响其运行
+    // Windows：exe 可直接执行；macOS：open 挂载 dmg（Finder 接管拖拽安装）。
+    // 子进程独立于父进程，本程序退出不影响其运行
+    #[cfg(target_os = "macos")]
+    let spawn = std::process::Command::new("open").arg(&path).spawn();
+    #[cfg(not(target_os = "macos"))]
     let spawn = std::process::Command::new(&path).spawn();
 
     match spawn {
@@ -1013,6 +1158,7 @@ fn main() {
             clear_taskbar_preview,
             update_tray_unread,
             clear_tray_unread,
+            set_tray_texts,
             tray_popup_hover,
             tray_popup_open_chat,
             check_update,
@@ -1050,7 +1196,8 @@ fn main() {
 
             // 去掉 Windows 11 给窗口加的圆角、非客户区边框光晕与 1px 系统边框
             // （透明窗口上会呈现为一圈半透明毛玻璃描边/淡边，用户反馈碍眼）；
-            // 仅保留卡片本体自绘的圆角与阴影
+            // 仅保留卡片本体自绘的圆角与阴影。仅 Windows：DWM 属性不适用 macOS。
+            #[cfg(target_os = "windows")]
             if let Ok(popup) = popup_window {
                 if let Ok(hwnd) = popup.hwnd() {
                     let hwnd = hwnd.0 as isize;
@@ -1080,6 +1227,8 @@ fn main() {
                     }
                 }
             }
+            #[cfg(not(target_os = "windows"))]
+            let _ = popup_window;
 
             // 系统托盘：左键单击唤起窗口，菜单提供“显示心愈 / 退出心愈”
             let show = MenuItem::with_id(app, "show", "显示心愈", true, None::<&str>)?;
@@ -1145,12 +1294,13 @@ fn main() {
                     _ => {}
                 });
 
-            if let Some(icon) = app.default_window_icon().cloned() {
+            if let Some(icon) = default_tray_icon(app.handle()) {
                 tray = tray.icon(icon);
             }
             tray.build(app)?;
 
-            // 托盘角标频闪线程（常驻，未读时交替闪烁）
+            // 托盘角标频闪线程（常驻，未读时交替闪烁；仅 Windows，macOS 走 Dock 角标）
+            #[cfg(target_os = "windows")]
             spawn_tray_flasher(app.handle().clone());
 
             register_notification_app_id(app.handle());

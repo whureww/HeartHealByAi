@@ -30,6 +30,15 @@ windows-sys = { version = "0.52", features = [
     "Win32_System_Registry",
 ] }
 
+# macOS 适配：透明托盘悬浮卡片窗口（macos-private-api）、Dock 角标与图标弹跳
+# （AppKit）、托盘角标图缩放到菜单栏尺寸（image）
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString"] }
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSDockTile", "NSResponder"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 [profile.release]
 strip = true
 lto = true

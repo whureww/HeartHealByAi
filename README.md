@@ -1,6 +1,6 @@
 # 心愈 (XinYu)
 
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-blue) ![Desktop](https://img.shields.io/badge/desktop-Tauri%202-orange) ![Frontend](https://img.shields.io/badge/frontend-Vue%203-brightgreen) ![Backend](https://img.shields.io/badge/backend-Node.js%20%2B%20Express-green) ![DB](https://img.shields.io/badge/database-MySQL%208%20%2B%20Redis-red)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2B%20%7C%20macOS%2012%2B-blue) ![Desktop](https://img.shields.io/badge/desktop-Tauri%202-orange) ![Frontend](https://img.shields.io/badge/frontend-Vue%203-brightgreen) ![Backend](https://img.shields.io/badge/backend-Node.js%20%2B%20Express-green) ![DB](https://img.shields.io/badge/database-MySQL%208%20%2B%20Redis-red)
 
 > 简体中文与 English 逐节对照 / Chinese and English, section by section.
 
@@ -220,18 +220,24 @@ cd frontend
 npm install
 npm run dev          # 浏览器开发预览 browser dev preview (Vite)
 npm run tauri:dev    # 桌面端开发模式 desktop dev mode
-npm run tauri:build  # 打包 Windows 桌面应用 package the Windows desktop app (产出 outputs target/release/心愈.exe)
+npm run tauri:build  # 打包桌面应用 package the desktop app
+# Windows 产出 outputs target/release/心愈.exe
+# macOS 产出 outputs .app 与 .dmg（Apple Silicon 为 aarch64 版）
 ```
 
 前端通过 `.env.development` / `.env.production` 中的 `VITE_API_BASE`、`VITE_SOCKET_URL` 指向后端地址，修改即可，无需改代码。
 The frontend points at the backend via `VITE_API_BASE` and `VITE_SOCKET_URL` in `.env.development` / `.env.production`; edit those, no code change needed.
 
-### 4. 打包安装程序 / Package the installer (Inno Setup)
+### 4. 打包安装程序 / Package the installer
 
 ```bash
 # 先执行 Run npm run tauri:build 产出主程序 to produce the main executable, then 再运行 run:
-"C:\Program Files\Inno Setup 7\ISCC.exe" frontend\src-tauri\windows\xinyu.iss
+# Windows（Inno Setup）：
+"C:\Program Files (x86)\Inno Setup 7\ISCC.exe" frontend\src-tauri\windows\xinyu.iss
 # 产物 Output: frontend\src-tauri\target\release\bundle\inno\心愈_<版本 version>_x64-setup.exe
+
+# macOS：tauri:build 已直接产出 .dmg（bundle/dmg/），无需额外打包步骤
+# macOS: tauri:build already produces the .dmg under bundle/dmg/, no extra step needed
 ```
 
 ---
