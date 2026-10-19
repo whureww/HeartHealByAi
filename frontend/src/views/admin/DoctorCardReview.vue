@@ -2,8 +2,8 @@
   <div class="page-container">
     <div class="page-header">
       <div>
-        <h2>名片审核</h2>
-        <p class="subtitle">审核专家提交的名片，通过后显示在用户端专家列表</p>
+        <h2>{{ $t('admin.doctor.title') }}</h2>
+        <p class="subtitle">{{ $t('admin.doctor.subtitle') }}</p>
       </div>
     </div>
 
@@ -11,13 +11,13 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>专家</th>
-            <th>职称</th>
-            <th>专长</th>
-            <th>简介</th>
-            <th>状态</th>
-            <th>提交时间</th>
-            <th>操作</th>
+            <th>{{ $t('admin.doctor.th.doctor') }}</th>
+            <th>{{ $t('admin.doctor.th.title') }}</th>
+            <th>{{ $t('admin.doctor.th.specialty') }}</th>
+            <th>{{ $t('admin.doctor.th.intro') }}</th>
+            <th>{{ $t('admin.doctor.th.status') }}</th>
+            <th>{{ $t('admin.doctor.th.createdAt') }}</th>
+            <th>{{ $t('admin.doctor.th.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -25,7 +25,7 @@
             <td>
               <div class="user-info">
                 <span>{{ card.name }}</span>
-                <span class="user-email">{{ card.user_email || '未关联账号' }}</span>
+                <span class="user-email">{{ card.user_email || $t('admin.doctor.noAccount') }}</span>
               </div>
             </td>
             <td>{{ card.title || '—' }}</td>
@@ -40,29 +40,29 @@
                 <button
                   v-if="card.status !== 1"
                   class="btn-approve"
-                  title="通过并上架专家列表"
+                  :title="$t('admin.doctor.approveTitle')"
                   @click="review(card, 'approve')"
                 >
                   <AppIcon name="check" :size="14" />
-                  通过
+                  {{ $t('admin.doctor.approve') }}
                 </button>
                 <button
                   v-if="card.status !== 0"
                   class="btn-reject"
-                  title="拒绝并下架"
+                  :title="$t('admin.doctor.rejectTitle')"
                   @click="review(card, 'reject')"
                 >
                   <AppIcon name="close" :size="14" />
-                  拒绝
+                  {{ $t('admin.doctor.reject') }}
                 </button>
-                <span v-if="card.status === 0" class="status-tip">已下架</span>
+                <span v-if="card.status === 0" class="status-tip">{{ $t('admin.doctor.stOff') }}</span>
               </div>
             </td>
           </tr>
           <tr v-if="cards.length === 0">
             <td colspan="7" class="empty-cell">
               <AppIcon name="stethoscope" :size="28" />
-              <p>暂无名片数据</p>
+              <p>{{ $t('admin.doctor.empty') }}</p>
             </td>
           </tr>
         </tbody>
@@ -73,14 +73,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getDoctorCards, reviewDoctorCard } from '@/api/admin'
 import { success, error, confirm } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const cards = ref<any[]>([])
 
 const statusText = (s: number) =>
-  (({ 0: '已下架', 1: '已上架', 2: '待审核' } as Record<number, string>)[s] ?? '未知')
+  (({ 0: t('admin.doctor.stOff'), 1: t('admin.doctor.stOn'), 2: t('admin.doctor.stPending') } as Record<number, string>)[s] ?? t('admin.doctor.unknown'))
 
 const formatDate = (d: string) => (d ? new Date(d).toLocaleString('zh-CN', { hour12: false }) : '—')
 
@@ -89,7 +91,7 @@ const load = async () => {
     const res = await getDoctorCards() as any
     cards.value = res.data || []
   } catch (e: any) {
-    await error(e.message || '加载失败')
+    await error(e.message || t('admin.doctor.loadFailed'))
   }
 }
 
@@ -97,17 +99,17 @@ const review = async (card: any, action: 'approve' | 'reject') => {
   const isApprove = action === 'approve'
   const ok = await confirm(
     isApprove
-      ? `通过「${card.name}」的名片？通过后立即显示在专家列表。`
-      : `拒绝「${card.name}」的名片？拒绝后将从专家列表下架。`,
-    isApprove ? '通过名片' : '拒绝名片'
+      ? t('admin.doctor.confirmApprove', { name: card.name })
+      : t('admin.doctor.confirmReject', { name: card.name }),
+    isApprove ? t('admin.doctor.approveCard') : t('admin.doctor.rejectCard')
   )
   if (!ok) return
   try {
     const res = await reviewDoctorCard(card.id, action) as any
-    await success(res.message || '操作成功')
+    await success(res.message || t('admin.doctor.opSuccess'))
     await load()
   } catch (e: any) {
-    await error(e.message || '操作失败')
+    await error(e.message || t('admin.doctor.opFailed'))
   }
 }
 

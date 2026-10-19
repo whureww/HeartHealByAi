@@ -3,12 +3,12 @@
     <div class="header">
       <button class="btn-back" @click="onGoBack">
         <AppIcon name="back" :size="15" />
-        返回
+        {{ $t('tests.back') }}
       </button>
-      <h2>测评结果详情</h2>
+      <h2>{{ $t('tests.resultDetail') }}</h2>
     </div>
 
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ $t('tests.loading') }}</div>
     <div v-else-if="result" class="result-content">
       <h3>{{ result.test_name }}</h3>
       <div class="score-box">
@@ -18,14 +18,15 @@
         </span>
       </div>
       <p class="desc">{{ result.result_desc }}</p>
-      <div class="time">完成时间：{{ formatTime(result.completed_at) }}</div>
+      <div class="time">{{ $t('tests.completedAt', { time: formatTime(result.completed_at) }) }}</div>
     </div>
-    <div v-else class="empty">结果不存在</div>
+    <div v-else class="empty">{{ $t('tests.notFound') }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getTestResult } from '@/api/tests'
 import { error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
@@ -39,6 +40,8 @@ const props = defineProps({
 
 const emit = defineEmits(['go-back'])
 
+const { t } = useI18n()
+
 const result = ref<any>(null)
 const loading = ref(false)
 
@@ -48,7 +51,7 @@ onMounted(async () => {
     const res = await getTestResult(props.resultId)
     result.value = res.data
   } catch (e: any) {
-    error(e?.message || '获取结果失败')
+    error(e?.message || t('tests.loadResultFailed'))
   } finally {
     loading.value = false
   }

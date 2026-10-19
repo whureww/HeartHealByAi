@@ -5,8 +5,8 @@
       <div class="logo-box">
         <div class="logo-mark"><AppIcon name="brand" :size="19" /></div>
         <div class="logo-text">
-          <h2>心愈</h2>
-          <p>AI 心理系统</p>
+          <h2>{{ $t('common.appName') }}</h2>
+          <p>{{ $t('dashboard.nav.subtitle') }}</p>
         </div>
       </div>
       <nav class="menu-list">
@@ -16,7 +16,7 @@
           :class="{ active: currentPage === item.id }"
           @click="switchPage(item.id)">
           <AppIcon :name="item.icon" :size="17" />
-          <span class="menu-text">{{ item.name }}</span>
+          <span class="menu-text">{{ $t(item.name) }}</span>
         </button>
       </nav>
       <div class="sidebar-footer">
@@ -25,12 +25,12 @@
             <img
               v-if="userStore.userInfo?.avatar"
               :src="userStore.userInfo.avatar"
-              alt="头像"
+              :alt="$t('dashboard.common.avatar')"
             />
             <span v-else class="footer-avatar-text">{{ userStore.userInfo?.username?.[0]?.toUpperCase() || '?' }}</span>
           </div>
-          <span class="footer-name">{{ userStore.userInfo?.username || '心理用户' }}</span>
-          <button class="btn-logout" title="退出登录" @click="logout">
+          <span class="footer-name">{{ userStore.userInfo?.username || $t('dashboard.common.defaultUser') }}</span>
+          <button class="btn-logout" :title="$t('dashboard.settings.logout')" @click="logout">
             <AppIcon name="logout" :size="16" />
           </button>
         </div>
@@ -41,7 +41,7 @@
     <div class="main-content">
       <!-- 空白提示 -->
       <div v-if="!currentPage" class="empty-tip">
-        请点击左侧功能菜单开始使用
+        {{ $t('dashboard.common.emptyTip') }}
       </div>
 
       <!-- 1. AI倾诉页面 -->
@@ -51,19 +51,19 @@
           <aside :class="['session-sidebar', { collapsed: sessionCollapsed }]">
             <div class="session-head">
               <template v-if="!sessionCollapsed">
-                <span class="session-title">对话记录</span>
-                <button class="ss-icon-btn" title="收起侧栏" @click="sessionCollapsed = true">
+                <span class="session-title">{{ $t('dashboard.session.history') }}</span>
+                <button class="ss-icon-btn" :title="$t('dashboard.session.collapseSidebar')" @click="sessionCollapsed = true">
                   <AppIcon name="back" :size="14" />
                 </button>
               </template>
-              <button v-else class="ss-icon-btn" title="展开侧栏" @click="sessionCollapsed = false">
+              <button v-else class="ss-icon-btn" :title="$t('dashboard.session.expandSidebar')" @click="sessionCollapsed = false">
                 <AppIcon name="chevronRight" :size="14" />
               </button>
             </div>
 
             <button class="new-chat-btn" :class="{ mini: sessionCollapsed }" @click="startNewSession">
               <AppIcon name="plus" :size="14" />
-              <span v-if="!sessionCollapsed">新建对话</span>
+              <span v-if="!sessionCollapsed">{{ $t('dashboard.chat.newSession') }}</span>
             </button>
 
             <div v-if="!sessionCollapsed" class="session-list">
@@ -71,21 +71,21 @@
                 v-for="s in chatSessions"
                 :key="s.session_id"
                 :class="['session-item', { active: s.session_id === activeSessionId }]"
-                :title="`创建于 ${formatSessionFull(s.created_at)}${Number(s.locked) === 1 ? ' · 已锁定（置顶且不可删除）' : ''}`"
+                :title="Number(s.locked) === 1 ? $t('dashboard.session.createdAtLocked', { time: formatSessionFull(s.created_at) }) : $t('dashboard.session.createdAt', { time: formatSessionFull(s.created_at) })"
                 @click="openSession(s.session_id)"
               >
                 <AppIcon name="chat" :size="14" class="si-icon" />
                 <div class="si-body">
-                  <span class="si-title">{{ s.title || '未命名对话' }}</span>
+                  <span class="si-title">{{ s.title || $t('dashboard.session.untitled') }}</span>
                   <span class="si-meta">
                     <AppIcon name="clock" :size="11" />
-                    创建于 {{ formatSessionTime(s.created_at) }} · {{ s.message_count }} 条
+                    {{ $t('dashboard.session.meta', { time: formatSessionTime(s.created_at), count: s.message_count }) }}
                   </span>
                 </div>
                 <button
                   class="si-act"
                   :class="{ 'is-locked': Number(s.locked) === 1 }"
-                  :title="Number(s.locked) === 1 ? '已锁定（置顶且不可删除），点击解除锁定' : '锁定对话（置顶且防误删）'"
+                  :title="Number(s.locked) === 1 ? $t('dashboard.session.lockedTip') : $t('dashboard.session.lockTip')"
                   @click.stop="toggleLock(s)"
                 >
                   <AppIcon name="lock" :size="13" />
@@ -93,14 +93,14 @@
                 <button
                   v-if="Number(s.locked) !== 1"
                   class="si-act si-del"
-                  title="删除对话"
+                  :title="$t('dashboard.session.delete')"
                   @click.stop="removeSession(s)"
                 >
                   <AppIcon name="trash" :size="13" />
                 </button>
               </div>
               <div v-if="!chatSessions.length" class="session-empty">
-                暂无历史对话
+                {{ $t('dashboard.session.empty') }}
               </div>
             </div>
           </aside>
@@ -108,11 +108,11 @@
           <!-- 右侧：聊天主区 -->
           <div class="card chat-card chat-main">
             <div class="chat-head">
-              <h3>一对一 AI 私密心理倾诉</h3>
+              <h3>{{ $t('dashboard.chat.title') }}</h3>
               <div class="model-picker">
                 <button
                   class="model-chip"
-                  title="模型配置（添加/编辑/删除/测试连接/切换模型）"
+                  :title="$t('dashboard.chat.modelConfigTip')"
                   @click="openModelSettings"
                 >
                   <AppIcon name="spark" :size="12" />
@@ -123,7 +123,7 @@
             </div>
             <div class="chat-box" ref="chatBox">
               <div class="msg-item">
-                <div class="msg-ai selectable-text">你好！我是你的专属心理陪伴助手"心愈"，你所有的情绪、压力、困惑都可以安心告诉我，我会耐心倾听并给予疏导。</div>
+                <div class="msg-ai selectable-text">{{ $t('dashboard.chat.greeting') }}</div>
               </div>
               <div v-for="(msg, index) in chatMessages" :key="index" class="msg-item">
                 <div :class="[msg.type === 'user' ? 'msg-user' : 'msg-ai', 'selectable-text']">{{ msg.content }}</div>
@@ -137,13 +137,13 @@
               <input
                 v-model="chatInput"
                 type="text"
-                placeholder="输入你的心情与困惑..."
+                :placeholder="$t('dashboard.chat.inputPlaceholder')"
                 @keyup.enter="sendChat"
                 :disabled="aiLoading">
               <button class="btn-send-chat" @click="sendChat" :disabled="aiLoading || !chatInput.trim()">
                 <AppIcon v-if="!aiLoading" name="send" :size="15" />
                 <AppIcon v-else name="spark" :size="15" class="spin" />
-                <span>{{ aiLoading ? '思考中...' : '发送' }}</span>
+                <span>{{ aiLoading ? $t('dashboard.chat.thinking') : $t('dashboard.chat.send') }}</span>
               </button>
             </div>
           </div>
@@ -173,9 +173,9 @@
       <!-- 3. 专家问诊页面 -->
       <div v-if="currentPage === 'doctor'" class="page show">
         <div class="card">
-          <h3>在线心理专家问诊预约</h3>
+          <h3>{{ $t('dashboard.doctor.title') }}</h3>
           <!-- 仅首次（无缓存数据）显示加载条：重取时静默刷新，避免加载条把已有内容向下压 -->
-          <div v-if="loading.doctors && !userStore.doctors.length" class="loading-text">加载中...</div>
+          <div v-if="loading.doctors && !userStore.doctors.length" class="loading-text">{{ $t('dashboard.common.loading') }}</div>
           <div class="scroll-content doc-scroll">
             <div class="doc-grid">
               <div v-for="doc in userStore.doctors" :key="doc.id" class="doc-card">
@@ -188,15 +188,15 @@
                   </div>
                   <span class="online-badge" :class="{ online: isUserOnline(doc.user_id) }">
                     <span class="status-dot" :class="{ online: isUserOnline(doc.user_id) }"></span>
-                    {{ isUserOnline(doc.user_id) ? '在线' : '离线' }}
+                    {{ isUserOnline(doc.user_id) ? $t('dashboard.doctor.online') : $t('dashboard.doctor.offline') }}
                   </span>
                 </div>
                 <div class="doc-card-body">
-                  <p class="doc-specialty"><span class="doc-label">擅长方向</span>{{ doc.specialty || '未填写' }}</p>
-                  <p class="doc-intro"><span class="doc-label">专家简介</span>{{ doc.intro || '该专家暂未填写简介' }}</p>
+                  <p class="doc-specialty"><span class="doc-label">{{ $t('dashboard.doctor.specialtyLabel') }}</span>{{ doc.specialty || $t('dashboard.doctor.notFilled') }}</p>
+                  <p class="doc-intro"><span class="doc-label">{{ $t('dashboard.doctor.introLabel') }}</span>{{ doc.intro || $t('dashboard.doctor.noIntro') }}</p>
                 </div>
                 <div class="doc-card-foot">
-                  <button class="btn-book" @click="bookDoctor(doc)">立即预约问诊</button>
+                  <button class="btn-book" @click="bookDoctor(doc)">{{ $t('dashboard.doctor.bookNow') }}</button>
                 </div>
               </div>
             </div>
@@ -207,35 +207,35 @@
       <!-- 4. 周期AI分析报告 -->
       <div v-if="currentPage === 'analysis'" class="page show">
         <div class="card">
-          <h3>阶段性心理数据 AI 系统性分析</h3>
+          <h3>{{ $t('dashboard.report.title') }}</h3>
           <p class="sub-title">
-            系统将汇总【选定时间段内所有AI对话记录 + 所有心理测评数据】，由 AI 生成完整心理状态分析报告
+            {{ $t('dashboard.report.subtitle') }}
           </p>
           <div class="time-select">
             <input type="date" v-model="startDate">
-            <span>至</span>
+            <span>{{ $t('dashboard.report.to') }}</span>
             <input type="date" v-model="endDate">
             <button @click="createReport" :disabled="reportLoading">
-              {{ reportLoading ? 'AI 分析中...' : 'AI 生成综合分析报告' }}
+              {{ reportLoading ? $t('dashboard.report.generating') : $t('dashboard.report.generateBtn') }}
             </button>
           </div>
           <div class="scroll-content">
             <div v-if="reportLoading" class="loading-text">
-              <AppIcon name="spark" class="spin" /> AI 正在分析您的心理数据，请稍候...
+              <AppIcon name="spark" class="spin" /> {{ $t('dashboard.report.loadingTip') }}
             </div>
-            <div v-else-if="!reportContent || reportContent === '报告内容将在此处展示...'" class="report-empty">
+            <div v-else-if="!reportContent" class="report-empty">
               <div class="report-empty-mark"><AppIcon name="moon" :size="22" /></div>
-              <p class="report-empty-title">报告会在台灯下等你</p>
-              <p class="report-empty-sub">选择时间段后生成，AI 将综合你的倾诉与测评，写下一份只有你能看见的分析</p>
+              <p class="report-empty-title">{{ $t('dashboard.report.emptyTitle') }}</p>
+              <p class="report-empty-sub">{{ $t('dashboard.report.emptySub') }}</p>
             </div>
             <div v-else class="report-result selectable-text">
               <div class="report-doc" v-html="reportHtml"></div>
             </div>
           </div>
           <!-- 导出报告按钮 -->
-          <div v-if="reportContent && reportContent !== '报告内容将在此处展示...' && !reportLoading" class="report-actions">
-            <button class="btn-export" @click="exportReport"><AppIcon name="fileText" :size="15" /> 复制报告内容</button>
-            <button class="btn-export" @click="downloadReport"><AppIcon name="download" :size="15" /> 导出为 HTML</button>
+          <div v-if="reportContent && !reportLoading" class="report-actions">
+            <button class="btn-export" @click="exportReport"><AppIcon name="fileText" :size="15" /> {{ $t('dashboard.report.copyContent') }}</button>
+            <button class="btn-export" @click="downloadReport"><AppIcon name="download" :size="15" /> {{ $t('dashboard.report.exportHtml') }}</button>
           </div>
         </div>
       </div>
@@ -251,14 +251,14 @@
                 v-if="userStore.userInfo?.avatar"
                 :src="userStore.userInfo.avatar"
                 class="avatar-img"
-                alt="头像"
+                :alt="$t('dashboard.common.avatar')"
               />
               <div v-else class="avatar-placeholder">
                 {{ userStore.userInfo?.username?.[0]?.toUpperCase() || '?' }}
               </div>
             </div>
             <div class="user-base-info">
-              <h4>{{ userStore.userInfo?.username || '心理用户' }}</h4>
+              <h4>{{ userStore.userInfo?.username || $t('dashboard.common.defaultUser') }}</h4>
               <p>{{ userRoleText }}</p>
             </div>
             <span class="edit-icon"><AppIcon name="edit" :size="16" /></span>
@@ -266,25 +266,25 @@
 
           <!-- 普通用户统计 -->
           <div v-if="userStore.userInfo?.role === 1" class="settings-group">
-            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>我的数据统计</h3></div>
+            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>{{ $t('dashboard.stats.myData') }}</h3></div>
             <div class="settings-group-body">
-            <div v-if="loading.stats" class="loading-text">加载中...</div>
+            <div v-if="loading.stats" class="loading-text">{{ $t('dashboard.common.loading') }}</div>
             <div v-else class="user-data-list">
               <div class="data-item">
                 <div class="num">{{ userChatCount }}</div>
-                <div class="text">累计倾诉次数</div>
+                <div class="text">{{ $t('dashboard.stats.chatCount') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ userStore.stats?.testCount || 0 }}</div>
-                <div class="text">完成心理测评</div>
+                <div class="text">{{ $t('dashboard.stats.testCount') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ userStore.stats?.doctorCount || 0 }}</div>
-                <div class="text">专家问诊次数</div>
+                <div class="text">{{ $t('dashboard.stats.doctorCount') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ userStore.stats?.reportCount || 0 }}</div>
-                <div class="text">生成分析报告</div>
+                <div class="text">{{ $t('dashboard.stats.reportCount') }}</div>
               </div>
             </div>
             </div>
@@ -292,25 +292,25 @@
 
           <!-- 专家统计 -->
           <div v-if="userStore.userInfo?.role === 2" class="settings-group">
-            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>专家工作台统计</h3></div>
+            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>{{ $t('dashboard.stats.expertData') }}</h3></div>
             <div class="settings-group-body">
-            <div v-if="loading.stats" class="loading-text">加载中...</div>
+            <div v-if="loading.stats" class="loading-text">{{ $t('dashboard.common.loading') }}</div>
             <div v-else class="user-data-list expert-stats">
               <div class="data-item">
                 <div class="num">{{ expertStats.pendingCount }}</div>
-                <div class="text">待处理预约</div>
+                <div class="text">{{ $t('dashboard.stats.pendingAppointments') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ expertStats.completedCount }}</div>
-                <div class="text">完成咨询次数</div>
+                <div class="text">{{ $t('dashboard.stats.completedSessions') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ expertStats.unfinishedCount }}</div>
-                <div class="text">未完成咨询</div>
+                <div class="text">{{ $t('dashboard.stats.unfinishedSessions') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ expertStats.totalPatients }}</div>
-                <div class="text">累计服务用户</div>
+                <div class="text">{{ $t('dashboard.stats.totalUsers') }}</div>
               </div>
             </div>
             </div>
@@ -318,25 +318,25 @@
 
           <!-- 管理员统计 -->
           <div v-if="userStore.userInfo?.role === 3" class="settings-group">
-            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>平台数据统计</h3></div>
+            <div class="settings-group-head"><AppIcon name="chart" :size="15" /><h3>{{ $t('dashboard.stats.platformData') }}</h3></div>
             <div class="settings-group-body">
-            <div v-if="loading.stats" class="loading-text">加载中...</div>
+            <div v-if="loading.stats" class="loading-text">{{ $t('dashboard.common.loading') }}</div>
             <div v-else class="user-data-list admin-stats">
               <div class="data-item">
                 <div class="num">{{ adminStats.totalUsers }}</div>
-                <div class="text">注册用户</div>
+                <div class="text">{{ $t('dashboard.stats.registeredUsers') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ adminStats.totalExperts }}</div>
-                <div class="text">入驻专家</div>
+                <div class="text">{{ $t('dashboard.stats.registeredExperts') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ adminStats.totalAppointments }}</div>
-                <div class="text">总预约数</div>
+                <div class="text">{{ $t('dashboard.stats.totalAppointments') }}</div>
               </div>
               <div class="data-item">
                 <div class="num">{{ adminStats.totalTests }}</div>
-                <div class="text">测评完成数</div>
+                <div class="text">{{ $t('dashboard.stats.completedTests') }}</div>
               </div>
             </div>
             </div>
@@ -373,7 +373,7 @@
               <div class="setting-item-right">
                 <div class="theme-options">
                   <button class="theme-option" :class="{ selected: settingsStore.locale === 'zh-CN' }" @click="settingsStore.setLocale('zh-CN')">
-                    <span>中文</span>
+                    <span>{{ $t('dashboard.settings.langZh') }}</span>
                   </button>
                   <button class="theme-option" :class="{ selected: settingsStore.locale === 'en' }" @click="settingsStore.setLocale('en')">
                     <span>English</span>
@@ -386,25 +386,25 @@
 
           <!-- 通知设置 -->
           <div class="settings-group">
-            <div class="settings-group-head"><AppIcon name="bell" :size="15" /><h3>通知设置</h3></div>
+            <div class="settings-group-head"><AppIcon name="bell" :size="15" /><h3>{{ $t('dashboard.settings.notifications') }}</h3></div>
             <div class="settings-group-body">
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>消息提醒</span>
-                <span class="setting-desc">新消息将通过系统通知中心弹出提醒</span>
+                <span>{{ $t('dashboard.settings.messageReminder') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.messageReminderDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <select v-model="settingsStore.notifications" @change="settingsStore.setNotifications(settingsStore.notifications)" class="setting-select">
-                  <option value="all">全部通知</option>
-                  <option value="important">仅重要</option>
-                  <option value="none">关闭通知</option>
+                  <option value="all">{{ $t('dashboard.notification.all') }}</option>
+                  <option value="important">{{ $t('dashboard.notification.importantOnly') }}</option>
+                  <option value="none">{{ $t('dashboard.notification.none') }}</option>
                 </select>
               </div>
             </div>
             <div class="setting-item" @click="settingsStore.toggleSound()">
               <div class="setting-item-left">
-                <span>提示音</span>
-                <span class="setting-desc">{{ settingsStore.soundEnabled ? '已开启' : '已关闭' }}</span>
+                <span>{{ $t('dashboard.settings.sound') }}</span>
+                <span class="setting-desc">{{ settingsStore.soundEnabled ? $t('dashboard.settings.on') : $t('dashboard.settings.off') }}</span>
               </div>
               <div class="setting-item-right">
                 <div class="toggle-switch" :class="{ active: settingsStore.soundEnabled }">
@@ -414,8 +414,8 @@
             </div>
             <div v-if="userStore.userInfo?.role === 3" class="setting-item" @click="sendTestNotification">
               <div class="setting-item-left">
-                <span>测试系统通知</span>
-                <span class="setting-desc">发送一条 Windows 通知中心弹窗验证效果</span>
+                <span>{{ $t('dashboard.settings.testNotification') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.testNotificationDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
@@ -426,18 +426,18 @@
 
           <!-- 窗口行为 -->
           <div class="settings-group">
-            <div class="settings-group-head"><AppIcon name="monitor" :size="15" /><h3>窗口行为</h3></div>
+            <div class="settings-group-head"><AppIcon name="monitor" :size="15" /><h3>{{ $t('dashboard.settings.window') }}</h3></div>
             <div class="settings-group-body">
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>关闭窗口时</span>
-                <span class="setting-desc">点击右上角关闭按钮的行为</span>
+                <span>{{ $t('dashboard.settings.closeAction') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.closeActionDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <select v-model="settingsStore.closeAction" @change="settingsStore.setCloseAction(settingsStore.closeAction)" class="setting-select">
-                  <option value="ask">每次询问</option>
-                  <option value="minimize">最小化到托盘</option>
-                  <option value="exit">直接退出</option>
+                  <option value="ask">{{ $t('dashboard.window.ask') }}</option>
+                  <option value="minimize">{{ $t('dashboard.window.minimize') }}</option>
+                  <option value="exit">{{ $t('dashboard.window.exit') }}</option>
                 </select>
               </div>
             </div>
@@ -446,12 +446,12 @@
 
           <!-- 数据管理 -->
           <div class="settings-group">
-            <div class="settings-group-head"><AppIcon name="fileText" :size="15" /><h3>数据管理</h3></div>
+            <div class="settings-group-head"><AppIcon name="fileText" :size="15" /><h3>{{ $t('dashboard.settings.data') }}</h3></div>
             <div class="settings-group-body">
             <div class="setting-item" @click="exportData">
               <div class="setting-item-left">
-                <span>导出完整数据备份</span>
-                <span class="setting-desc">导出所有聊天记录、测评结果、预约记录和报告</span>
+                <span>{{ $t('dashboard.settings.exportData') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.exportDataDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
@@ -459,8 +459,8 @@
             </div>
             <div class="setting-item" @click="importData">
               <div class="setting-item-left">
-                <span>导入数据备份</span>
-                <span class="setting-desc">从备份文件恢复所有数据</span>
+                <span>{{ $t('dashboard.settings.importData') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.importDataDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
@@ -468,8 +468,8 @@
             </div>
             <div class="setting-item" @click="clearData">
               <div class="setting-item-left">
-                <span>清空本地记录</span>
-                <span class="setting-desc">清空所有对话、测评记录（不可恢复）</span>
+                <span>{{ $t('dashboard.settings.clearData') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.clearDataDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
@@ -477,8 +477,8 @@
             </div>
             <div class="setting-item" @click="settingsStore.toggleAutoBackup()">
               <div class="setting-item-left">
-                <span>自动备份</span>
-                <span class="setting-desc">按所选周期自动生成加密快照（本地设置数据）</span>
+                <span>{{ $t('dashboard.settings.autoBackup') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.autoBackupDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <div class="toggle-switch" :class="{ active: settingsStore.autoBackup }">
@@ -488,16 +488,16 @@
             </div>
             <div class="setting-item" v-if="settingsStore.autoBackup">
               <div class="setting-item-left">
-                <span>备份周期</span>
-                <span class="setting-desc">自动备份的时间间隔</span>
+                <span>{{ $t('dashboard.settings.backupInterval') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.backupIntervalDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <select v-model.number="settingsStore.backupInterval" class="setting-select">
-                  <option :value="1">每天</option>
-                  <option :value="3">每 3 天</option>
-                  <option :value="7">每周</option>
-                  <option :value="14">每两周</option>
-                  <option :value="30">每月</option>
+                  <option :value="1">{{ $t('dashboard.interval.day') }}</option>
+                  <option :value="3">{{ $t('dashboard.interval.days3') }}</option>
+                  <option :value="7">{{ $t('dashboard.interval.week') }}</option>
+                  <option :value="14">{{ $t('dashboard.interval.weeks2') }}</option>
+                  <option :value="30">{{ $t('dashboard.interval.month') }}</option>
                 </select>
               </div>
             </div>
@@ -506,12 +506,12 @@
 
           <!-- 隐私安全 -->
           <div class="settings-group">
-            <div class="settings-group-head"><AppIcon name="shield" :size="15" /><h3>隐私安全</h3></div>
+            <div class="settings-group-head"><AppIcon name="shield" :size="15" /><h3>{{ $t('dashboard.settings.privacy') }}</h3></div>
             <div class="settings-group-body">
             <div class="setting-item" @click="settingsStore.toggleLockOnLeave()">
               <div class="setting-item-left">
-                <span>离开自动锁定</span>
-                <span class="setting-desc">无操作超过设定时长后锁定应用，需密码解锁</span>
+                <span>{{ $t('dashboard.settings.lockOnLeave') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.lockOnLeaveDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <div class="toggle-switch" :class="{ active: settingsStore.lockOnLeave }">
@@ -521,15 +521,15 @@
             </div>
             <div class="setting-item" v-if="settingsStore.lockOnLeave">
               <div class="setting-item-left">
-                <span>锁定时长</span>
-                <span class="setting-desc">无操作多久后自动锁定</span>
+                <span>{{ $t('dashboard.settings.lockTimeout') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.lockTimeoutDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <select v-model.number="settingsStore.lockTimeout" class="setting-select">
-                  <option :value="1">1 分钟</option>
-                  <option :value="5">5 分钟</option>
-                  <option :value="10">10 分钟</option>
-                  <option :value="30">30 分钟</option>
+                  <option :value="1">{{ $t('dashboard.lockTime.m1') }}</option>
+                  <option :value="5">{{ $t('dashboard.lockTime.m5') }}</option>
+                  <option :value="10">{{ $t('dashboard.lockTime.m10') }}</option>
+                  <option :value="30">{{ $t('dashboard.lockTime.m30') }}</option>
                 </select>
               </div>
             </div>
@@ -538,12 +538,12 @@
 
           <!-- 账号安全 -->
           <div class="settings-group">
-            <div class="settings-group-head"><AppIcon name="lock" :size="15" /><h3>账号安全</h3></div>
+            <div class="settings-group-head"><AppIcon name="lock" :size="15" /><h3>{{ $t('dashboard.settings.account') }}</h3></div>
             <div class="settings-group-body">
             <div class="setting-item" @click="showChangePassword">
               <div class="setting-item-left">
-                <span>修改密码</span>
-                <span class="setting-desc">通过邮箱验证码修改密码</span>
+                <span>{{ $t('dashboard.settings.changePassword') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.changePasswordDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
@@ -551,8 +551,8 @@
             </div>
             <div class="setting-item" @click="logout">
               <div class="setting-item-left">
-                <span>退出登录</span>
-                <span class="setting-desc">返回登录页面</span>
+                <span>{{ $t('dashboard.settings.logout') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.logoutDesc') }}</span>
               </div>
               <div class="setting-item-right">
                 <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
@@ -563,11 +563,11 @@
 
           <!-- 关于 -->
           <div class="settings-group">
-            <div class="settings-group-head"><AppIcon name="info" :size="15" /><h3>关于</h3></div>
+            <div class="settings-group-head"><AppIcon name="info" :size="15" /><h3>{{ $t('dashboard.settings.about') }}</h3></div>
             <div class="settings-group-body">
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>版本信息</span>
+                <span>{{ $t('dashboard.settings.version') }}</span>
                 <span class="setting-desc">{{ updateDesc }}</span>
                 <!-- 下载进度条（仅下载中显示） -->
                 <div v-if="updatePhase === 'downloading'" class="update-progress">
@@ -575,7 +575,7 @@
                     <div class="update-progress-fill" :style="{ width: updateProgress.percent + '%' }"></div>
                   </div>
                   <span class="update-progress-text">{{ updateProgressText }}</span>
-                  <button class="btn-cancel-download" @click="onCancelDownload">取消</button>
+                  <button class="btn-cancel-download" @click="onCancelDownload">{{ $t('dashboard.update.cancel') }}</button>
                 </div>
               </div>
               <button
@@ -589,8 +589,8 @@
             </div>
             <div class="setting-item">
               <div class="setting-item-left">
-                <span>全局快捷键</span>
-                <span class="setting-desc">Ctrl + Alt + H 任意界面一键呼出 / 隐藏窗口（含锁屏与托盘后台）</span>
+                <span>{{ $t('dashboard.settings.hotkey') }}</span>
+                <span class="setting-desc">{{ $t('dashboard.settings.hotkeyDesc') }}</span>
               </div>
             </div>
             </div>
@@ -649,6 +649,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed, watch, provide, shallowRef } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { useUserStore } from '@/stores/user'
@@ -681,6 +682,7 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 const currentPage = ref('')
 const currentAppointmentId = ref(0)
 const chatInput = ref('')
@@ -696,9 +698,9 @@ const genSessionId = () => {
   return (crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
 }
 
-const formatSessionTime = (t: string) => {
-  if (!t) return ''
-  const d = new Date(t)
+const formatSessionTime = (time: string) => {
+  if (!time) return ''
+  const d = new Date(time)
   const now = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
   const sameDay = d.toDateString() === now.toDateString()
@@ -710,9 +712,9 @@ const formatSessionTime = (t: string) => {
 }
 
 // 完整时间（悬浮提示用）：含日期与时分秒
-const formatSessionFull = (t: string) => {
-  if (!t) return ''
-  const d = new Date(t)
+const formatSessionFull = (time: string) => {
+  if (!time) return ''
+  const d = new Date(time)
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
@@ -782,7 +784,7 @@ const toggleLock = async (s: any) => {
     // 成功时不弹提醒：锁按钮高亮 + 置顶排序本身就是状态反馈
     await loadChatSessions()
   } catch (e: any) {
-    error(e?.response?.data?.message || '操作失败，请稍后重试')
+    error(e?.response?.data?.message || t('dashboard.errors.operationFailed'))
   }
 }
 
@@ -794,10 +796,10 @@ const maybeSummarize = (sessionId: string) => {
   if (!need) return
   refreshSessionSummary(sessionId)
     .then((res: any) => {
-      const t = res?.data?.title
-      if (t) {
+      const newTitle = res?.data?.title
+      if (newTitle) {
         const cur = chatSessions.value.find((x) => x.session_id === sessionId)
-        if (cur) cur.title = t
+        if (cur) cur.title = newTitle
       }
     })
     .catch(() => {})
@@ -810,7 +812,7 @@ const modelInfo = ref<{ available: string[]; custom: CustomModel[]; selected: st
 })
 const modelSettingsRef = ref<InstanceType<typeof ModelSettingsDialog> | null>(null)
 
-const selectedModelLabel = computed(() => modelInfo.value.selected || '默认模型')
+const selectedModelLabel = computed(() => modelInfo.value.selected || t('dashboard.chat.defaultModel'))
 
 const loadChatModels = async () => {
   try {
@@ -834,10 +836,10 @@ const onModelsChanged = (selected: string | null) => {
 // 删除会话（锁定中的对话不可删除，与后端校验一致）
 const removeSession = async (s: any) => {
   if (Number(s.locked)) {
-    error('对话已锁定，请先解除锁定再删除')
+    error(t('dashboard.session.cannotDeleteLocked'))
     return
   }
-  const ok = await confirm(`确定删除对话「${(s.title || '未命名对话').slice(0, 20)}」吗？其中的全部聊天记录将一并删除，不可恢复。`, '删除对话')
+  const ok = await confirm(t('dashboard.session.deleteConfirm', { title: (s.title || t('dashboard.session.untitled')).slice(0, 20) }), t('dashboard.session.delete'))
   if (!ok) return
   try {
     await deleteChatSession(s.session_id)
@@ -855,13 +857,16 @@ const removeSession = async (s: any) => {
     }
     // 删除成功不弹提醒：列表项消失 + 自动切换会话本身就是反馈
   } catch (e: any) {
-    error(e?.response?.data?.message || '删除失败，请稍后重试')
+    error(e?.response?.data?.message || t('dashboard.errors.deleteFailed'))
   }
 }
 const chatBox = ref<HTMLElement | null>(null)
 const startDate = ref('')
 const endDate = ref('')
-const reportContent = ref('报告内容将在此处展示...')
+// 报告区占位哨兵：仅用于内部状态判断，不会展示给用户
+const REPORT_LOADING = '__REPORT_LOADING__'
+const REPORT_FAILED = '__REPORT_FAILED__'
+const reportContent = ref('')
 const changePasswordRef = ref<InstanceType<typeof ChangePasswordDialog> | null>(null)
 
 // ===== 新增：编辑资料弹窗 =====
@@ -889,9 +894,9 @@ const adminStats = ref({
 // 用户角色文字
 const userRoleText = computed(() => {
   const role = userStore.userInfo?.role
-  if (role === 2) return '认证心理咨询师 · 专家工作台'
-  if (role === 3) return '系统管理员 · 管理后台'
-  return '专属心理陪伴用户 · 本地数据私密保存'
+  if (role === 2) return t('dashboard.role.expert')
+  if (role === 3) return t('dashboard.role.admin')
+  return t('dashboard.role.user')
 })
 
 // 加载专家统计数据
@@ -920,9 +925,9 @@ const reportLoading = ref(false)
 
 // 报告 Markdown → 结构化 HTML（占位文案/加载中的提示文本不参与渲染）
 const reportHtml = computed(() => {
-  const t = reportContent.value
-  if (!t || t === '报告内容将在此处展示...' || t.startsWith('AI正在分析') || t === '报告生成失败，请稍后重试。') return ''
-  return renderReportHtml(t)
+  const text = reportContent.value
+  if (!text || text === REPORT_LOADING || text === REPORT_FAILED) return ''
+  return renderReportHtml(text)
 })
 
 // ===== Socket.IO 全局连接 =====
@@ -1001,7 +1006,7 @@ const setupDashboardListeners = (sock: Socket) => {
 
   // 被强制登出（服务器要求）
   sock.on('force-logout', (data: { message: string }) => {
-    alert(data.message || '您的账号已登出')
+    alert(data.message || t('dashboard.errors.forceLoggedOut'))
     disconnectSocket()
     userStore.logout()
     router.replace('/login')
@@ -1029,7 +1034,7 @@ const disconnectSocket = () => {
 
 // 发送一条真实系统通知，验证通知中心效果
 const sendTestNotification = () => {
-  showToast('心愈提醒', '这是一条测试系统通知——窗口最小化时你也能在通知中心看到它', true)
+  showToast(t('dashboard.notifyTest.title'), t('dashboard.notifyTest.body'), true)
 }
 
 // 显示修改密码弹窗
@@ -1054,7 +1059,7 @@ const exportReport = async () => {
     const plainText = reportToPlainText(reportContent.value)
 
     await navigator.clipboard.writeText(plainText)
-    await success('报告内容已复制到剪贴板', '复制成功')
+    await success(t('dashboard.report.copied'), t('dashboard.report.copySuccessTitle'))
   } catch (e) {
     const textarea = document.createElement('textarea')
     textarea.value = reportToPlainText(reportContent.value)
@@ -1062,14 +1067,14 @@ const exportReport = async () => {
     textarea.select()
     document.execCommand('copy')
     document.body.removeChild(textarea)
-    await success('报告内容已复制到剪贴板', '复制成功')
+    await success(t('dashboard.report.copied'), t('dashboard.report.copySuccessTitle'))
   }
 }
 
 // 导出 HTML 文件
 const downloadReport = () => {
-  if (!reportContent.value || reportContent.value === '报告内容将在此处展示...') {
-    alert('请先生成报告')
+  if (!reportContent.value) {
+    alert(t('dashboard.report.generateFirst'))
     return
   }
 
@@ -1080,7 +1085,7 @@ const downloadReport = () => {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>心理状态分析报告</title>
+  <title>${t('dashboard.report.htmlTitle')}</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; padding: 48px 24px; max-width: 820px; margin: 0 auto; line-height: 1.9; color: #332e27; background: #faf7f2; }
@@ -1103,10 +1108,10 @@ const downloadReport = () => {
 <body>
   <div class="doc">
     <div class="doc-header">
-      <p class="doc-title">心理状态综合分析报告</p>
+      <p class="doc-title">${t('dashboard.report.docTitle')}</p>
       <div class="doc-meta">
-        <span>分析时间段：${startDate.value} 至 ${endDate.value}</span>
-        <span>生成时间：${new Date().toLocaleString('zh-CN')}</span>
+        <span>${t('dashboard.report.period', { start: startDate.value, end: endDate.value })}</span>
+        <span>${t('dashboard.report.generatedAt', { time: new Date().toLocaleString(settingsStore.locale === 'en' ? 'en-US' : 'zh-CN') })}</span>
       </div>
     </div>
     ${bodyHtml}
@@ -1118,7 +1123,7 @@ const downloadReport = () => {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `心理分析报告_${startDate.value}_${endDate.value}.html`
+  a.download = t('dashboard.report.fileName', { start: startDate.value, end: endDate.value })
   document.body.appendChild(a)
   a.click()
   setTimeout(() => {
@@ -1139,20 +1144,20 @@ interface MenuItem {
   icon: string
 }
 
-// 普通用户菜单
+// 普通用户菜单（name 为 i18n key，模板中统一 $t 渲染）
 const baseMenuItems: MenuItem[] = [
-  { id: 'chat', name: 'AI心理倾诉', icon: 'chat' },
-  { id: 'test', name: '心理测评中心', icon: 'clipboard' },
-  { id: 'doctor', name: '专家在线问诊', icon: 'stethoscope' },
-  { id: 'analysis', name: '周期AI分析报告', icon: 'chart' },
-  { id: 'my-appointments', name: '我的预约', icon: 'calendar' },
-  { id: 'user', name: '个人中心', icon: 'user' }
+  { id: 'chat', name: 'dashboard.nav.chat', icon: 'chat' },
+  { id: 'test', name: 'dashboard.nav.test', icon: 'clipboard' },
+  { id: 'doctor', name: 'dashboard.nav.doctor', icon: 'stethoscope' },
+  { id: 'analysis', name: 'dashboard.nav.analysis', icon: 'chart' },
+  { id: 'my-appointments', name: 'dashboard.nav.myAppointments', icon: 'calendar' },
+  { id: 'user', name: 'dashboard.nav.user', icon: 'user' }
 ]
 
 // 管理员菜单项
 const adminMenuItem: MenuItem = {
   id: 'admin',
-  name: '管理后台',
+  name: 'dashboard.nav.admin',
   icon: 'settings'
 }
 
@@ -1161,9 +1166,9 @@ const menuItems = computed<MenuItem[]>(() => {
   // role=2 专家：只显示专家工作台 + 我的名片 + 个人中心
   if (userStore.userInfo?.role === 2) {
     return [
-      { id: 'expert', name: '专家工作台', icon: 'stethoscope' },
-      { id: 'expert-card', name: '我的名片', icon: 'fileText' },
-      { id: 'user', name: '个人中心', icon: 'user' }
+      { id: 'expert', name: 'dashboard.nav.expert', icon: 'stethoscope' },
+      { id: 'expert-card', name: 'dashboard.nav.expertCard', icon: 'fileText' },
+      { id: 'user', name: 'dashboard.nav.user', icon: 'user' }
     ]
   }
 
@@ -1190,24 +1195,26 @@ let unlistenProgress: (() => void) | null = null
 const formatMB = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`
 const updateProgressText = computed(() => {
   const p = updateProgress.value
-  if (p.total > 0) return `${formatMB(p.received)} / ${formatMB(p.total)}（${p.percent}%）`
-  return `已下载 ${formatMB(p.received)}`
+  if (p.total > 0) {
+    return t('dashboard.update.progress', { received: formatMB(p.received), total: formatMB(p.total), percent: p.percent })
+  }
+  return t('dashboard.update.downloaded', { size: formatMB(p.received) })
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.6'
-  const base = `心愈 AI心理系统 v${cur}`
+  const cur = updateInfo.value?.current_version || '0.4.7'
+  const base = t('dashboard.update.appVersion', { version: cur })
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
-    return `发现新版本 v${updateInfo.value.latest_version}（当前 v${cur}）· 点击右侧下载更新`
+    return t('dashboard.update.availableDesc', { latest: updateInfo.value.latest_version, current: cur })
   }
   if (updatePhase.value === 'downloading' && updateInfo.value) {
-    return `正在下载 v${updateInfo.value.latest_version} · 下载完成后可安装`
+    return t('dashboard.update.downloadingDesc', { latest: updateInfo.value.latest_version })
   }
   if (updatePhase.value === 'ready' && updateInfo.value) {
-    return `v${updateInfo.value.latest_version} 安装包已就绪 · 点击右侧立即安装（会关闭程序并启动安装向导）`
+    return t('dashboard.update.readyDesc', { latest: updateInfo.value.latest_version })
   }
   if (updatePhase.value === 'idle' && updateInfo.value && !updateInfo.value.has_update) {
-    return `${base} (Powered by DeepSeek) · 已是最新版本`
+    return `${base} (Powered by DeepSeek) · ${t('dashboard.update.upToDate')}`
   }
   if (updateError.value) {
     return `${base} · ${updateError.value}`
@@ -1217,17 +1224,17 @@ const updateDesc = computed(() => {
 
 const updatePhaseText = computed(() => {
   switch (updatePhase.value) {
-    case 'checking': return '检查中...'
-    case 'available': return '下载更新'
-    case 'downloading': return '下载中...'
-    case 'ready': return '立即安装'
-    default: return '检查更新'
+    case 'checking': return t('dashboard.update.checking')
+    case 'available': return t('dashboard.update.downloadUpdate')
+    case 'downloading': return t('dashboard.update.downloading')
+    case 'ready': return t('dashboard.update.installNow')
+    default: return t('dashboard.update.checkUpdate')
   }
 })
 
 const onUpdateAction = async () => {
   if (!isTauri()) {
-    updateError.value = '浏览器模式暂不支持'
+    updateError.value = t('dashboard.update.browserMode')
     return
   }
   switch (updatePhase.value) {
@@ -1253,14 +1260,14 @@ const doCheck = async () => {
         // 发现新版：不自动下载，交给用户决定
         updatePhase.value = 'available'
       } else {
-        updateError.value = '新版本缺少安装包附件'
+        updateError.value = t('dashboard.update.noAttachment')
         updatePhase.value = 'idle'
       }
     } else {
       updatePhase.value = 'idle'
     }
   } catch (e: any) {
-    updateError.value = (typeof e === 'string' ? e : e?.message) || '检查失败'
+    updateError.value = (typeof e === 'string' ? e : e?.message) || t('dashboard.update.checkFailed')
     updatePhase.value = 'idle'
   }
 }
@@ -1280,7 +1287,7 @@ const startDownload = async () => {
       // 用户取消：删除临时文件后回到「可下载」状态
       updatePhase.value = 'available'
     } else {
-      updateError.value = msg || '下载失败'
+      updateError.value = msg || t('dashboard.update.downloadFailed')
       updatePhase.value = 'available'
     }
   } finally {
@@ -1307,7 +1314,7 @@ const doInstall = async () => {
   try {
     await installUpdate(downloadedPath.value) // 内部会退出程序并唤起安装器
   } catch (e: any) {
-    updateError.value = (typeof e === 'string' ? e : e?.message) || '安装失败'
+    updateError.value = (typeof e === 'string' ? e : e?.message) || t('dashboard.update.installFailed')
     updatePhase.value = 'available'
   }
 }
@@ -1324,7 +1331,7 @@ const silentCheckUpdate = async () => {
       // 但模块级标记保证 toast 不再重复
       if (!hasRemindedUpdate()) {
         markUpdateReminded()
-        await showToast(`发现新版本 v${info.latest_version}，请到 设置-关于 下载更新`, '')
+        await showToast(t('dashboard.update.newVersionToast', { version: info.latest_version }), '')
       }
     }
   } catch {
@@ -1585,7 +1592,7 @@ const sendChat = async () => {
     
     chatMessages.value.push({
       type: 'ai',
-      content: '抱歉，我暂时遇到了一些问题，请稍后再试。'
+      content: t('dashboard.chat.aiErrorMessage')
     })
     scrollToBottom()
   }
@@ -1594,20 +1601,20 @@ const sendChat = async () => {
 const bookDoctor = async (doc: any) => {
   try {
     await createAppointment({ doctorId: doc.id })
-    await success(`已预约${doc.name}，请等待确认`, '预约成功')
+    await success(t('dashboard.doctor.bookSuccess', { name: doc.name }), t('dashboard.doctor.bookSuccessTitle'))
   } catch (e: any) {
-    await error(e.message || '预约失败')
+    await error(e.message || t('dashboard.doctor.bookFailed'))
   }
 }
 
 // ===== AI 生成报告 =====
 const createReport = async () => {
   if (!startDate.value || !endDate.value) {
-    await alert('请选择完整的起止日期！', '日期错误')
+    await alert(t('dashboard.report.dateRequired'), t('dashboard.report.dateError'))
     return
   }
 
-  reportContent.value = 'AI正在分析该时间段内的【对话情绪数据+心理测评数据】，正在生成系统性报告...'
+  reportContent.value = REPORT_LOADING
   reportLoading.value = true
 
   try {
@@ -1643,7 +1650,7 @@ const createReport = async () => {
     const report = res.report
 
     if (!report) {
-      throw new Error('报告生成失败')
+      throw new Error(t('dashboard.report.generateFailed'))
     }
 
     reportContent.value = report
@@ -1656,8 +1663,8 @@ const createReport = async () => {
     await userStore.getStats()
   } catch (e: any) {
     console.error('生成报告失败:', e)
-    reportContent.value = '报告生成失败，请稍后重试。'
-    await error('报告生成失败，请稍后重试')
+    reportContent.value = REPORT_FAILED
+    await error(t('dashboard.report.generateFailed'))
   } finally {
     reportLoading.value = false
   }
@@ -1668,7 +1675,7 @@ const BACKUP_SETTING_KEYS = ['theme', 'notifications', 'soundEnabled', 'closeAct
 
 const exportData = async () => {
   const loadingStore = useLoadingStore()
-  loadingStore.show('正在收集数据...')
+  loadingStore.show(t('dashboard.backup.collecting'))
   try {
     // 并行拉取四类服务端数据（单项失败不阻断整体导出）
     const [chat, tests, appts, reports] = await Promise.all([
@@ -1705,15 +1712,23 @@ const exportData = async () => {
     const a = document.createElement('a')
     const day = new Date().toISOString().slice(0, 10)
     a.href = url
-    a.download = `心愈数据备份_${day}.json`
+    a.download = t('dashboard.backup.fileName', { day })
     a.click()
     URL.revokeObjectURL(url)
 
     const total = data.chatHistory.length + data.testResults.length + data.appointments.length + data.analysisReports.length
-    await success(`已导出 ${data.chatHistory.length} 条聊天、${data.testResults.length} 条测评、${data.appointments.length} 条预约、${data.analysisReports.length} 份报告`, total ? '导出成功' : '当前暂无数据，已导出设置项')
+    await success(
+      t('dashboard.backup.exportedSummary', {
+        chat: data.chatHistory.length,
+        tests: data.testResults.length,
+        appts: data.appointments.length,
+        reports: data.analysisReports.length
+      }),
+      total ? t('dashboard.backup.exportSuccess') : t('dashboard.backup.exportEmpty')
+    )
   } catch (e) {
     console.error('导出失败:', e)
-    await error('导出过程中出现问题，请重试', '导出失败')
+    await error(t('dashboard.backup.exportFailedMsg'), t('dashboard.backup.exportFailedTitle'))
   } finally {
     loadingStore.hide()
   }
@@ -1731,13 +1746,13 @@ const importData = async () => {
     try {
       data = JSON.parse(await file.text())
     } catch {
-      await error('文件不是有效的 JSON 格式', '导入失败')
+      await error(t('dashboard.backup.invalidJson'), t('dashboard.backup.importFailedTitle'))
       return
     }
 
     // 备份文件校验：应用标识 + 聊天记录数组
     if (data?.app !== 'xinyu-backup' || !Array.isArray(data.chatHistory)) {
-      await error('所选文件不是心愈导出的备份文件', '文件格式错误')
+      await error(t('dashboard.backup.notBackupFile'), t('dashboard.backup.formatErrorTitle'))
       return
     }
 
@@ -1747,13 +1762,18 @@ const importData = async () => {
     const apptCount = Array.isArray(data.appointments) ? data.appointments.length : 0
 
     const ok = await confirm(
-      `该备份包含：聊天记录 ${chatCount} 条、测评结果 ${testCount} 条（存档参考）、预约 ${apptCount} 条、报告 ${reportCount} 份（存档参考）。\n\n导入将把聊天记录恢复到当前账户（重复导入会产生重复记录），并应用备份中的本地设置。是否继续？`,
-      '确认导入'
+      t('dashboard.backup.importConfirm', {
+        chat: chatCount,
+        tests: testCount,
+        appts: apptCount,
+        reports: reportCount
+      }),
+      t('dashboard.backup.importConfirmTitle')
     )
     if (!ok) return
 
     const loadingStore = useLoadingStore()
-    loadingStore.show(`正在恢复聊天记录（0/${chatCount}）...`)
+    loadingStore.show(t('dashboard.backup.restoring', { done: 0, total: chatCount }))
     try {
       // 恢复聊天记录到服务端（逐条写入，chat_records 仅存 content/type）
       let done = 0
@@ -1761,7 +1781,7 @@ const importData = async () => {
         if (msg?.content && msg?.type) {
           await saveChat({ content: String(msg.content), type: String(msg.type) })
           done++
-          if (done % 20 === 0) loadingStore.show(`正在恢复聊天记录（${done}/${chatCount}）...`)
+          if (done % 20 === 0) loadingStore.show(t('dashboard.backup.restoring', { done, total: chatCount }))
         }
       }
 
@@ -1790,10 +1810,15 @@ const importData = async () => {
       }
       await userStore.getStats()
 
-      await success(`聊天记录已恢复 ${done} 条${applied ? `，已应用 ${applied} 项本地设置` : ''}`, '导入成功')
+      await success(
+        applied
+          ? t('dashboard.backup.restoredWithSettings', { done, applied })
+          : t('dashboard.backup.restored', { done }),
+        t('dashboard.backup.importSuccessTitle')
+      )
     } catch (err) {
       console.error('导入失败:', err)
-      await error('导入过程中出现问题，已恢复的部分数据仍保留', '导入失败')
+      await error(t('dashboard.backup.importPartialErrorMsg'), t('dashboard.backup.importFailedTitle'))
     } finally {
       loadingStore.hide()
     }
@@ -1802,7 +1827,7 @@ const importData = async () => {
 }
 
 const clearData = async () => {
-  const ok = await confirm('确定要清空所有本地记录吗？此操作不可恢复。', '确认清空')
+  const ok = await confirm(t('dashboard.backup.clearConfirm'), t('dashboard.backup.clearConfirmTitle'))
   if (ok) {
     try {
       await clearAllData()
@@ -1811,9 +1836,9 @@ const clearData = async () => {
       chatSessions.value = []
       activeSessionId.value = genSessionId()
       await userStore.getStats()
-      await success('所有记录已清空', '已清空')
+      await success(t('dashboard.backup.clearedMsg'), t('dashboard.backup.clearedTitle'))
     } catch (e: any) {
-      await error(e?.message || '清空失败', '清空失败')
+      await error(e?.message || t('dashboard.backup.clearFailed'), t('dashboard.backup.clearFailed'))
     }
   }
 }

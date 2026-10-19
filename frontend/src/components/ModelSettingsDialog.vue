@@ -5,33 +5,33 @@
         <div class="dialog-header">
           <h3>
             <AppIcon name="settings" :size="16" />
-            模型配置
+            {{ $t('ui.model.title') }}
           </h3>
-          <button class="btn-close" @click="onClose" title="关闭">
+          <button class="btn-close" @click="onClose" :title="$t('ui.close')">
             <AppIcon name="close" :size="16" />
           </button>
         </div>
 
         <div class="dialog-body">
           <!-- 模型列表 -->
-          <div class="sec-label">模型列表</div>
+          <div class="sec-label">{{ $t('ui.model.listLabel') }}</div>
           <div class="model-list">
             <!-- 默认模型（服务端统一配置，固定不可删） -->
             <div :class="['model-row', { active: !selected }]">
               <div class="mr-main">
                 <div class="mr-name">
-                  默认模型
-                  <span class="mr-tag">服务端</span>
-                  <span v-if="!selected" class="mr-cur">使用中</span>
+                  {{ $t('ui.model.defaultModel') }}
+                  <span class="mr-tag">{{ $t('ui.model.tagServer') }}</span>
+                  <span v-if="!selected" class="mr-cur">{{ $t('ui.model.inUse') }}</span>
                 </div>
-                <div class="mr-sub">服务端统一配置，始终可用</div>
+                <div class="mr-sub">{{ $t('ui.model.defaultDesc') }}</div>
               </div>
               <button
                 v-if="selected"
                 class="mr-use"
                 :disabled="busy"
                 @click="onSelect('')"
-              >使用</button>
+              >{{ $t('ui.model.use') }}</button>
             </div>
             <!-- 自定义模型 -->
             <div
@@ -42,59 +42,59 @@
               <div class="mr-main">
                 <div class="mr-name">
                   {{ m.model }}
-                  <span :class="['mr-tag', { own: !!m.base_url }]">{{ m.base_url ? '自带' : '服务端网关' }}</span>
-                  <span v-if="m.model === selected" class="mr-cur">使用中</span>
+                  <span :class="['mr-tag', { own: !!m.base_url }]">{{ m.base_url ? $t('ui.model.tagOwn') : $t('ui.model.tagGateway') }}</span>
+                  <span v-if="m.model === selected" class="mr-cur">{{ $t('ui.model.inUse') }}</span>
                 </div>
                 <div class="mr-sub">
-                  {{ m.base_url || '走服务端模型网关' }}{{ m.key_hint ? ' · Key ' + m.key_hint : '' }}
+                  {{ m.base_url || $t('ui.model.viaGateway') }}{{ m.key_hint ? ' · Key ' + m.key_hint : '' }}
                 </div>
               </div>
               <div class="mr-acts">
-                <button class="mr-icon" :disabled="testing === m.model" :title="testing === m.model ? '测试中' : '测试连接'" @click="onTestSaved(m)">
+                <button class="mr-icon" :disabled="testing === m.model" :title="testing === m.model ? $t('ui.model.testing') : $t('ui.model.testConnection')" @click="onTestSaved(m)">
                   <AppIcon name="refresh" :size="13" />
                 </button>
-                <button class="mr-icon" title="编辑" @click="startEdit(m)">
+                <button class="mr-icon" :title="$t('ui.model.edit')" @click="startEdit(m)">
                   <AppIcon name="edit" :size="13" />
                 </button>
-                <button class="mr-icon" title="删除" @click="onDelete(m)">
+                <button class="mr-icon" :title="$t('ui.model.delete')" @click="onDelete(m)">
                   <AppIcon name="trash" :size="13" />
                 </button>
-                <button v-if="m.model !== selected" class="mr-use" :disabled="busy" @click="onSelect(m.model)">使用</button>
+                <button v-if="m.model !== selected" class="mr-use" :disabled="busy" @click="onSelect(m.model)">{{ $t('ui.model.use') }}</button>
               </div>
             </div>
             <div v-if="!models.length" class="list-empty">
-              还没有自定义模型，在下方添加（可自带网关地址与 API Key）
+              {{ $t('ui.model.listEmpty') }}
             </div>
           </div>
 
           <!-- 添加 / 编辑表单 -->
-          <div class="sec-label">{{ editMode ? '编辑模型' : '添加模型' }}</div>
+          <div class="sec-label">{{ editMode ? $t('ui.model.editModel') : $t('ui.model.addModel') }}</div>
           <div class="model-form">
             <div class="form-group">
-              <label>模型名称</label>
+              <label>{{ $t('ui.model.nameLabel') }}</label>
               <input
                 v-model="form.model"
                 type="text"
-                placeholder="如 gpt-4o-mini、deepseek-chat"
+                :placeholder="$t('ui.model.namePlaceholder')"
                 :disabled="busy || editMode"
                 maxlength="80"
               />
             </div>
             <div class="form-group">
-              <label>API 地址（可选）</label>
+              <label>{{ $t('ui.model.urlLabel') }}</label>
               <input
                 v-model="form.baseUrl"
                 type="text"
-                placeholder="OpenAI 兼容网关地址，如 https://api.xx.com/v1"
+                :placeholder="$t('ui.model.urlPlaceholder')"
                 :disabled="busy"
               />
             </div>
             <div class="form-group">
-              <label>API 密钥（可选）</label>
+              <label>{{ $t('ui.model.keyLabel') }}</label>
               <input
                 v-model="form.apiKey"
                 type="password"
-                placeholder="与 API 地址成对填写；都留空则走服务端模型网关"
+                :placeholder="$t('ui.model.keyPlaceholder')"
                 autocomplete="off"
                 :disabled="busy"
               />
@@ -108,19 +108,19 @@
             <div class="form-actions">
               <button class="btn-ghost" :disabled="!canTest || testing" @click="onTestForm">
                 <span v-if="testing" class="spinner dark"></span>
-                <span v-else>测试连接</span>
+                <span v-else>{{ $t('ui.model.testConnection') }}</span>
               </button>
-              <button v-if="editMode" class="btn-ghost" :disabled="busy" @click="cancelEdit">取消编辑</button>
+              <button v-if="editMode" class="btn-ghost" :disabled="busy" @click="cancelEdit">{{ $t('ui.model.cancelEdit') }}</button>
               <button class="btn-primary" :disabled="!canSave || busy" @click="onSave">
                 <span v-if="busy" class="spinner"></span>
-                <span v-else>{{ editMode ? '保存修改' : '添加模型' }}</span>
+                <span v-else>{{ editMode ? $t('ui.model.saveChanges') : $t('ui.model.addModel') }}</span>
               </button>
             </div>
           </div>
         </div>
 
         <div class="dialog-footer">
-          <button class="btn-primary" @click="onClose">完成</button>
+          <button class="btn-primary" @click="onClose">{{ $t('ui.model.done') }}</button>
         </div>
       </div>
     </div>
@@ -129,9 +129,12 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getChatModels, addChatModel, deleteChatModel, selectChatModel, testChatModel } from '@/api/user'
 import { success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
+
+const { t } = useI18n()
 
 interface CustomModel { model: string; base_url: string; key_hint: string; selected: boolean }
 
@@ -151,9 +154,9 @@ const form = ref({ model: '', baseUrl: '', apiKey: '' })
 const formHint = computed(() => {
   const hasUrl = !!form.value.baseUrl.trim()
   const hasKey = !!form.value.apiKey.trim()
-  if (hasUrl !== hasKey) return 'API 地址与密钥需成对填写；都留空则走服务端模型网关'
-  if (!hasUrl && !gatewayEnabled.value) return '服务端模型网关未配置：请填写 API 地址与密钥'
-  return 'API 地址与密钥成对填写走自带网关；都留空走服务端模型网关'
+  if (hasUrl !== hasKey) return t('ui.model.hintPair')
+  if (!hasUrl && !gatewayEnabled.value) return t('ui.model.hintNoGateway')
+  return t('ui.model.hintDefault')
 })
 
 const pairValid = computed(() => {
@@ -219,7 +222,7 @@ const onSelect = async (model: string) => {
     emit('changed', selected.value)
     resetForm()
   } catch (e: any) {
-    await error(e?.response?.data?.message || '切换模型失败')
+    await error(e?.response?.data?.message || t('ui.model.switchFailed'))
   } finally {
     busy.value = false
   }
@@ -237,7 +240,7 @@ const onSave = async () => {
     emit('changed', selected.value)
     resetForm()
   } catch (e: any) {
-    await error(e?.response?.data?.message || (editMode.value ? '保存失败' : '添加失败'))
+    await error(e?.response?.data?.message || (editMode.value ? t('ui.model.saveFailed') : t('ui.model.addFailed')))
   } finally {
     busy.value = false
   }
@@ -251,7 +254,7 @@ const onDelete = async (m: CustomModel) => {
     emit('changed', selected.value)
     await load()
   } catch (e: any) {
-    await error(e?.response?.data?.message || '删除失败')
+    await error(e?.response?.data?.message || t('ui.model.deleteFailed'))
   } finally {
     busy.value = false
   }
@@ -269,10 +272,10 @@ const onTestForm = async () => {
     })
     const d = res?.data
     testResult.value = d?.success
-      ? { ok: true, text: `连接成功${d.latency_ms != null ? '（' + d.latency_ms + 'ms）' : ''}` }
-      : { ok: false, text: d?.message || '连接失败' }
+      ? { ok: true, text: d.latency_ms != null ? t('ui.model.testOkMs', { ms: d.latency_ms }) : t('ui.model.testOk') }
+      : { ok: false, text: d?.message || t('ui.model.testFailed') }
   } catch (e: any) {
-    testResult.value = { ok: false, text: e?.response?.data?.message || '连接失败' }
+    testResult.value = { ok: false, text: e?.response?.data?.message || t('ui.model.testFailed') }
   } finally {
     testing.value = false
   }
@@ -285,12 +288,14 @@ const onTestSaved = async (m: CustomModel) => {
     const res: any = await testChatModel({ model: m.model, use_saved: true })
     const d = res?.data
     if (d?.success) {
-      await success(`「${m.model}」连接成功${d.latency_ms != null ? '（' + d.latency_ms + 'ms）' : ''}`)
+      await success(d.latency_ms != null
+        ? t('ui.model.testOkNamedMs', { model: m.model, ms: d.latency_ms })
+        : t('ui.model.testOkNamed', { model: m.model }))
     } else {
-      await error(`「${m.model}」${d?.message || '连接失败'}`)
+      await error(t('ui.model.testFailNamed', { model: m.model, message: d?.message || t('ui.model.testFailed') }))
     }
   } catch (e: any) {
-    await error(e?.response?.data?.message || '连接失败')
+    await error(e?.response?.data?.message || t('ui.model.testFailed'))
   } finally {
     testing.value = ''
   }

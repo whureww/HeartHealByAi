@@ -3,9 +3,9 @@
     <div class="test-header">
       <button class="btn-back" @click="router.back()">
         <AppIcon name="back" :size="15" />
-        返回
+        {{ $t('tests.back') }}
       </button>
-      <h3>AI 智能测评</h3>
+      <h3>{{ $t('tests.aiTitle') }}</h3>
       <span class="progress" v-if="phase === 'answering'">{{ currentIndex + 1 }} / {{ questions.length }}</span>
     </div>
     <div class="progress-track" v-if="phase === 'answering'">
@@ -18,19 +18,19 @@
     <!-- 生成中 -->
     <div v-if="phase === 'generating'" class="status-area">
       <div class="ai-spinner"></div>
-      <p class="status-title">AI 正在为你生成专属问卷...</p>
-      <p class="status-sub">根据常见心理健康维度实时生成，每次内容都不同</p>
+      <p class="status-title">{{ $t('tests.aiGenerating') }}</p>
+      <p class="status-sub">{{ $t('tests.aiGeneratingSub') }}</p>
     </div>
 
     <div v-else-if="phase === 'error'" class="status-area">
-      <p class="status-title">{{ errorMsg || '生成失败' }}</p>
-      <button class="btn-retry" @click="generate">重新生成</button>
+      <p class="status-title">{{ errorMsg || $t('tests.genFailed') }}</p>
+      <button class="btn-retry" @click="generate">{{ $t('tests.reGen') }}</button>
     </div>
 
     <!-- 作答区 -->
     <div class="question-area" v-else-if="phase === 'answering' && currentQuestion">
       <div class="question-card">
-        <div class="question-number">第 {{ currentIndex + 1 }} 题</div>
+        <div class="question-number">{{ $t('tests.questionN', { n: currentIndex + 1 }) }}</div>
         <div class="question-content">{{ currentQuestion.content }}</div>
 
         <div class="options">
@@ -59,7 +59,7 @@
           :disabled="currentIndex === 0"
           @click="prevQuestion"
         >
-          上一题
+          {{ $t('tests.prev') }}
         </button>
         <button
           v-if="currentIndex < questions.length - 1"
@@ -67,7 +67,7 @@
           :disabled="!currentAnswer"
           @click="nextQuestion"
         >
-          下一题
+          {{ $t('tests.next') }}
         </button>
         <button
           v-else
@@ -75,7 +75,7 @@
           :disabled="!currentAnswer || submitting"
           @click="handleSubmit"
         >
-          {{ submitting ? 'AI 分析中...' : '提交' }}
+          {{ submitting ? $t('tests.aiAnalyzing') : $t('tests.submit') }}
         </button>
       </div>
     </div>
@@ -83,20 +83,20 @@
     <!-- AI 评分中 -->
     <div v-else-if="phase === 'scoring'" class="status-area">
       <div class="ai-spinner"></div>
-      <p class="status-title">AI 正在分析你的回答...</p>
-      <p class="status-sub">结合每一题的选择综合评估，请稍候</p>
+      <p class="status-title">{{ $t('tests.aiScoring') }}</p>
+      <p class="status-sub">{{ $t('tests.aiScoringSub') }}</p>
     </div>
 
     <!-- 结果 -->
     <div v-if="phase === 'result'" class="result-modal">
       <div class="result-card">
         <div class="result-icon"><AppIcon name="check" :size="28" /></div>
-        <h3>测评完成</h3>
-        <div class="result-score">综合评分：{{ resultData?.total_score }}</div>
+        <h3>{{ $t('tests.doneTitle') }}</h3>
+        <div class="result-score">{{ $t('tests.totalScore', { n: resultData?.total_score }) }}</div>
         <div class="result-level" :class="resultLevelClass">{{ resultData?.result_level }}</div>
         <p class="result-desc">{{ resultData?.result_desc }}</p>
         <div v-if="resultData?.analysis" class="result-analysis">{{ resultData.analysis }}</div>
-        <button class="btn-close" @click="closeResult">确定</button>
+        <button class="btn-close" @click="closeResult">{{ $t('tests.ok') }}</button>
       </div>
     </div>
   </div>
@@ -106,12 +106,14 @@
 import { generateAiTest, submitAiTest } from '@/api/tests'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { error, success } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
 type Phase = 'generating' | 'answering' | 'scoring' | 'result' | 'error'
 
 const router = useRouter()
+const { t } = useI18n()
 const phase = ref<Phase>('generating')
 const errorMsg = ref('')
 const questions = ref<any[]>([])
@@ -143,7 +145,7 @@ const generate = async () => {
     currentIndex.value = 0
     phase.value = 'answering'
   } catch (e: any) {
-    errorMsg.value = e?.message || 'AI 生成失败，请稍后重试'
+    errorMsg.value = e?.message || t('tests.aiGenFailed')
     phase.value = 'error'
   }
 }
@@ -176,9 +178,9 @@ const handleSubmit = async () => {
     })
     resultData.value = res.data
     phase.value = 'result'
-    success('AI 测评完成')
+    success(t('tests.aiSubmitted'))
   } catch (e: any) {
-    error(e?.message || 'AI 评分失败')
+    error(e?.message || t('tests.aiScoreFailed'))
     phase.value = 'answering'
   } finally {
     submitting.value = false

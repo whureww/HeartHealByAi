@@ -7,13 +7,13 @@
     </div>
     <div class="tp-main">
       <div class="tp-row">
-        <span class="tp-sender">{{ msg?.sender || '新消息' }}</span>
-        <span v-if="msg && msg.unread > 1" class="tp-badge">{{ msg.unread }} 条未读</span>
+        <span class="tp-sender">{{ msg?.sender || $t('ui.tray.newMessage') }}</span>
+        <span v-if="msg && msg.unread > 1" class="tp-badge">{{ $t('ui.tray.unreadCount', { n: msg.unread }) }}</span>
       </div>
-      <div class="tp-content">{{ msg?.content || '点击查看新消息' }}</div>
+      <div class="tp-content">{{ msg?.content || $t('ui.tray.clickToView') }}</div>
       <div class="tp-foot">
-        <span class="tp-hint">点击查看消息</span>
-        <span class="tp-brand">心愈</span>
+        <span class="tp-hint">{{ $t('ui.tray.hint') }}</span>
+        <span class="tp-brand">{{ $t('common.appName') }}</span>
       </div>
     </div>
   </div>
@@ -21,8 +21,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
+
+const { t } = useI18n()
 
 interface TrayMsg {
   sender: string
@@ -39,7 +42,10 @@ const avatarSrc = computed(() => {
   const a = msg.value?.avatar
   return a && !avatarFailed.value ? a : ''
 })
-const avatarChar = computed(() => (msg.value?.sender || '消').trim().charAt(0) || '消')
+const avatarChar = computed(() => {
+  const fallback = t('ui.tray.avatarChar')
+  return (msg.value?.sender || fallback).trim().charAt(0) || fallback
+})
 
 // 主题跟随：本窗口启动时已由 main.ts 按 localStorage 应用明暗主题；
 // 主窗口运行中切换主题后，经 storage 事件同步到本窗口

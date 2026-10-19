@@ -6,8 +6,10 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isTauri } from '@/utils/secureStore'
+import { i18n } from '@/i18n'
 
-const APP_TITLE = '心愈 · 心理系统'
+// 窗口默认标题（i18n：切换语言后还原标题需取最新文案，故用函数包裹）
+const appTitle = () => i18n.global.t('core.tray.appTitle')
 let unreadCount = 0
 let flashing = false
 let lastUnreadChatId: number | null = null
@@ -45,8 +47,12 @@ export async function flashForMessage(sender: string, content: string, appointme
     if (focused && visible) return // 就在前台浏览，不打扰
 
     unreadCount++
-    const text = `${sender}：${String(content || '').replace(/\s+/g, ' ').trim()}`.slice(0, 26)
-    await win.setTitle(`【新消息${unreadCount > 1 ? ' ×' + unreadCount : ''}】${text}`)
+    const text = i18n.global
+      .t('core.tray.titlePreview', { sender, text: String(content || '').replace(/\s+/g, ' ').trim() })
+      .slice(0, 26)
+    await win.setTitle(
+      i18n.global.t('core.tray.newMsgTitle', { count: unreadCount > 1 ? ` ×${unreadCount}` : '', text })
+    )
 
     // 托盘 QQ 式提醒：红色数字角标 + 整图标消失/重现频闪 + tooltip 消息预览
     // （携带预约 id 与发送者头像：托盘悬浮卡片点击直达对应聊天并展示头像）
@@ -82,7 +88,7 @@ export async function clearUnreadFlash() {
   // 托盘恢复常态（角标清零、停止频闪、还原 tooltip）
   invoke('clear_tray_unread').catch(() => {})
   invoke('clear_taskbar_preview').catch(() => {})
-  await getCurrentWindow().setTitle(APP_TITLE).catch(() => {})
+  await getCurrentWindow().setTitle(appTitle()).catch(() => {})
 
   // QQ 式点击直达：回到前台时有未读目标则跳到对应聊天页
   const target = lastUnreadChatId
@@ -133,7 +139,7 @@ export async function notifyIfBackground(sender: string, content: string, appoin
 
     if (appointmentId) lastUnreadChatId = Number(appointmentId)
     const { showToast } = await import('./notify')
-    showToast(`${sender} 发来新消息`, String(content || '').slice(0, 80), true)
+    showToast(i18n.global.t('core.tray.newMsgFrom', { sender }), String(content || '').slice(0, 80), true)
     await flashForMessage(sender, content, appointmentId, avatar)
   } catch (e) {
     console.error('后台消息提醒失败:', e)
@@ -150,7 +156,7 @@ export function bindChatNotification(sock: { on: (event: string, cb: (data: any)
   s.__chatNotifyBound__ = true
   s.on('chat-notification', (data: { senderName?: string; senderAvatar?: string | null; content?: string; appointmentId?: number }) => {
     void notifyIfBackground(
-      String(data?.senderName || '新消息'),
+      String(data?.senderName || i18n.global.t('core.tray.defaultSender')),
       String(data?.content || ''),
       data?.appointmentId,
       data?.senderAvatar

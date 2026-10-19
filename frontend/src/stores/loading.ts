@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { i18n } from '@/i18n'
 
 export const useLoadingStore = defineStore('loading', () => {
   const visible = ref(false)
   const text = ref('')
 
-  function show(msg = '加载中...') {
-    text.value = msg
+  function show(msg?: string) {
+    text.value = msg || i18n.global.t('core.loading')
     visible.value = true
   }
 

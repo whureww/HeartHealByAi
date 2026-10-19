@@ -7,13 +7,13 @@
           <AppIcon name="shield" :size="20" />
         </div>
         <div>
-          <h2>举报管理</h2>
-          <p class="subtitle">聊天举报核查与处置，禁言 / 封禁实时生效</p>
+          <h2>{{ $t('admin.report.title') }}</h2>
+          <p class="subtitle">{{ $t('admin.report.subtitle') }}</p>
         </div>
       </div>
       <button class="btn-refresh" :disabled="loading" @click="load">
         <AppIcon name="refresh" :size="14" :class="{ spinning: loading }" />
-        刷新
+        {{ $t('admin.report.refresh') }}
       </button>
     </div>
 
@@ -31,7 +31,7 @@
         </div>
         <div class="stat-info">
           <b>{{ s.count }}</b>
-          <span>{{ s.label }}</span>
+          <span>{{ $t(s.labelKey) }}</span>
         </div>
       </button>
     </div>
@@ -46,7 +46,7 @@
             :class="['tab-btn', { active: filterStatus === t.value }]"
             @click="switchTab(t.value)"
           >
-            {{ t.label }}
+            {{ $t(t.labelKey) }}
             <span v-if="t.value === '0' && stats.pending > 0" class="tab-badge">{{ stats.pending }}</span>
           </button>
         </div>
@@ -55,24 +55,24 @@
             <AppIcon name="search" :size="14" class="search-icon" />
             <input
               v-model="keyword"
-              placeholder="搜索当事人 / 理由 / 消息内容"
+              :placeholder="$t('admin.report.searchPlaceholder')"
               class="search-input"
             />
           </div>
-          <span class="count-tip">{{ filtered.length }} 条记录</span>
+          <span class="count-tip">{{ $t('admin.report.countTip', { n: filtered.length }) }}</span>
         </div>
       </div>
 
       <table class="data-table">
         <thead>
           <tr>
-            <th style="width: 64px">编号</th>
-            <th>当事双方</th>
-            <th style="width: 110px">理由</th>
-            <th>被举报消息</th>
-            <th style="width: 150px">举报时间</th>
-            <th style="width: 96px">状态</th>
-            <th style="width: 150px">操作</th>
+            <th style="width: 64px">{{ $t('admin.report.th.id') }}</th>
+            <th>{{ $t('admin.report.th.parties') }}</th>
+            <th style="width: 110px">{{ $t('admin.report.th.reason') }}</th>
+            <th>{{ $t('admin.report.th.message') }}</th>
+            <th style="width: 150px">{{ $t('admin.report.th.time') }}</th>
+            <th style="width: 96px">{{ $t('admin.report.th.status') }}</th>
+            <th style="width: 150px">{{ $t('admin.report.th.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -115,19 +115,19 @@
               <td @click.stop>
                 <button v-if="r.status === 0" class="btn-handle" @click="toggleOpen(r)">
                   <AppIcon name="warning" :size="13" />
-                  处置
+                  {{ $t('admin.report.handle') }}
                 </button>
                 <button
                   v-if="r.status !== 0 && isActiveRestricted(r)"
                   class="btn-lift"
-                  title="解除禁言/封禁"
+                  :title="$t('admin.report.liftTitle')"
                   @click="lift(r)"
                 >
                   <AppIcon name="check" :size="13" />
-                  解除限制
+                  {{ $t('admin.report.lift') }}
                 </button>
                 <span v-if="r.status !== 0 && !isActiveRestricted(r)" class="handled-note" :title="r.handle_note">
-                  {{ r.handle_note || '无备注' }}
+                  {{ r.handle_note || $t('admin.report.noNote') }}
                 </span>
               </td>
             </tr>
@@ -140,8 +140,8 @@
                   <div class="evidence-panel">
                     <div class="panel-title">
                       <AppIcon name="chat" :size="14" />
-                      被举报的消息
-                      <span class="panel-sub">发送者 {{ r.reported_name }}，共 {{ r.messages?.length || 0 }} 条</span>
+                      {{ $t('admin.report.reportedMessages') }}
+                      <span class="panel-sub">{{ $t('admin.report.senderInfo', { name: r.reported_name, count: r.messages?.length || 0 }) }}</span>
                     </div>
                     <div class="bubble-list">
                       <div v-for="m in r.messages" :key="m.id" class="bubble-item">
@@ -151,12 +151,12 @@
                           <div class="bubble">{{ m.content }}</div>
                         </div>
                       </div>
-                      <div v-if="!r.messages?.length" class="bubble-empty">消息内容缺失（可能已被删除）</div>
+                      <div v-if="!r.messages?.length" class="bubble-empty">{{ $t('admin.report.msgMissing') }}</div>
                     </div>
                     <div v-if="r.detail" class="detail-block">
                       <div class="detail-label">
                         <AppIcon name="info" :size="13" />
-                        举报人补充说明
+                        {{ $t('admin.report.reporterNote') }}
                       </div>
                       <p class="detail-text">{{ r.detail }}</p>
                     </div>
@@ -167,7 +167,7 @@
                     <template v-if="r.status === 0">
                       <div class="panel-title">
                         <AppIcon name="warning" :size="14" />
-                        处置操作
+                        {{ $t('admin.report.handleAction') }}
                       </div>
                       <div class="action-cards">
                         <button
@@ -177,12 +177,12 @@
                           @click="form.action = a.value"
                         >
                           <AppIcon :name="a.icon" :size="16" />
-                          <b>{{ a.label }}</b>
-                          <span>{{ a.desc }}</span>
+                          <b>{{ $t(a.labelKey) }}</b>
+                          <span>{{ $t(a.descKey) }}</span>
                         </button>
                       </div>
                       <div v-if="form.action !== 'dismiss'" class="duration-block">
-                        <span class="duration-label">限制时长</span>
+                        <span class="duration-label">{{ $t('admin.report.durationLabel') }}</span>
                         <div class="duration-pills">
                           <button
                             v-for="d in DURATIONS"
@@ -190,42 +190,42 @@
                             :class="['duration-pill', { selected: form.duration === d.value }]"
                             @click="form.duration = d.value"
                           >
-                            {{ d.label }}
+                            {{ $t(d.labelKey) }}
                           </button>
                         </div>
                         <p class="duration-tip">
-                          {{ form.action === 'ban' ? '封禁期间该账号无法登录，实时踢下线' : '禁言期间该账号无法发送聊天消息' }}
+                          {{ form.action === 'ban' ? $t('admin.report.tipBan') : $t('admin.report.tipMute') }}
                         </p>
                       </div>
                       <textarea
                         v-model="form.note"
                         class="note-input"
                         rows="2"
-                        :placeholder="form.action === 'dismiss' ? '驳回原因备注（选填）' : '处理备注（选填）'"
+                        :placeholder="form.action === 'dismiss' ? $t('admin.report.phDismissNote') : $t('admin.report.phNote')"
                         maxlength="255"
                       ></textarea>
                       <div class="action-foot">
-                        <button class="btn-ghost" @click="toggleOpen(r)">收起</button>
+                        <button class="btn-ghost" @click="toggleOpen(r)">{{ $t('admin.report.collapse') }}</button>
                         <button class="btn-primary" :disabled="handling" @click="submitHandle(r)">
-                          {{ handling ? '提交中...' : '确认处置' }}
+                          {{ handling ? $t('admin.report.submitting') : $t('admin.report.confirmHandle') }}
                         </button>
                       </div>
                     </template>
                     <template v-else>
                       <div class="panel-title">
                         <AppIcon :name="r.status === 1 ? 'check' : 'close'" :size="14" />
-                        处置结果
+                        {{ $t('admin.report.result') }}
                       </div>
                       <div :class="['result-block', r.status === 1 ? 'result-handled' : 'result-dismiss']">
                         <b>{{ statusText(r.status) }}</b>
-                        <p>{{ r.handle_note || '无处理备注' }}</p>
+                        <p>{{ r.handle_note || $t('admin.report.noHandleNote') }}</p>
                         <span v-if="r.handled_at" class="result-time">{{ formatDate(r.handled_at) }}</span>
                       </div>
                       <div v-if="isActiveRestricted(r)" class="lift-block">
-                        <p class="lift-tip">该账号当前仍处于限制中，可提前解除：</p>
+                        <p class="lift-tip">{{ $t('admin.report.liftTip') }}</p>
                         <button class="btn-lift full" @click="lift(r)">
                           <AppIcon name="check" :size="13" />
-                          解除限制
+                          {{ $t('admin.report.lift') }}
                         </button>
                       </div>
                     </template>
@@ -238,7 +238,7 @@
           <tr v-if="filtered.length === 0">
             <td colspan="7" class="empty-cell">
               <AppIcon name="shield" :size="30" />
-              <p>{{ loading ? '正在加载举报记录...' : keyword ? '没有匹配的举报记录' : '暂无举报记录，聊天环境良好' }}</p>
+              <p>{{ loading ? $t('admin.report.loading') : keyword ? $t('admin.report.emptyFiltered') : $t('admin.report.empty') }}</p>
             </td>
           </tr>
         </tbody>
@@ -249,26 +249,29 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getReports, handleReport, unrestrictUser } from '@/api/admin'
 import { success, error, confirm } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
+
 const TABS = [
-  { label: '待处理', value: '0' },
-  { label: '已处置', value: '1' },
-  { label: '已驳回', value: '2' },
-  { label: '全部', value: '' }
+  { labelKey: 'admin.report.statPending', value: '0' },
+  { labelKey: 'admin.report.statHandled', value: '1' },
+  { labelKey: 'admin.report.statDismissed', value: '2' },
+  { labelKey: 'admin.report.tabAll', value: '' }
 ]
 const ACTIONS = [
-  { label: '禁言', value: 'mute', icon: 'chat', desc: '禁止发送消息' },
-  { label: '封禁', value: 'ban', icon: 'lock', desc: '禁止登录账号' },
-  { label: '驳回', value: 'dismiss', icon: 'close', desc: '举报证据不足' }
+  { labelKey: 'admin.report.actMute', value: 'mute', icon: 'chat', descKey: 'admin.report.actMuteDesc' },
+  { labelKey: 'admin.report.actBan', value: 'ban', icon: 'lock', descKey: 'admin.report.actBanDesc' },
+  { labelKey: 'admin.report.actDismiss', value: 'dismiss', icon: 'close', descKey: 'admin.report.actDismissDesc' }
 ]
 const DURATIONS = [
-  { label: '24 小时', value: '24h' },
-  { label: '72 小时', value: '72h' },
-  { label: '7 天', value: '7d' },
-  { label: '永久', value: 'permanent' }
+  { labelKey: 'admin.report.dur24h', value: '24h' },
+  { labelKey: 'admin.report.dur72h', value: '72h' },
+  { labelKey: 'admin.report.dur7d', value: '7d' },
+  { labelKey: 'admin.report.durPermanent', value: 'permanent' }
 ]
 
 const reports = ref<any[]>([])
@@ -291,10 +294,10 @@ const stats = computed(() => {
 })
 
 const statCards = computed(() => [
-  { key: 'pending', label: '待处理', icon: 'warning', count: stats.value.pending, value: '0' },
-  { key: 'handled', label: '已处置', icon: 'check', count: stats.value.handled, value: '1' },
-  { key: 'dismissed', label: '已驳回', icon: 'close', count: stats.value.dismissed, value: '2' },
-  { key: 'total', label: '累计举报', icon: 'list', count: stats.value.total, value: '' }
+  { key: 'pending', labelKey: 'admin.report.statPending', icon: 'warning', count: stats.value.pending, value: '0' },
+  { key: 'handled', labelKey: 'admin.report.statHandled', icon: 'check', count: stats.value.handled, value: '1' },
+  { key: 'dismissed', labelKey: 'admin.report.statDismissed', icon: 'close', count: stats.value.dismissed, value: '2' },
+  { key: 'total', labelKey: 'admin.report.statTotal', icon: 'list', count: stats.value.total, value: '' }
 ])
 
 const filtered = computed(() => {
@@ -309,7 +312,8 @@ const filtered = computed(() => {
   })
 })
 
-const statusText = (s: number) => ({ 0: '待处理', 1: '已处置', 2: '已驳回' })[Number(s)] || '未知'
+const statusText = (s: number) =>
+  ({ 0: t('admin.report.statPending'), 1: t('admin.report.statHandled'), 2: t('admin.report.statDismissed') } as Record<number, string>)[Number(s)] || t('admin.report.unknown')
 
 // 理由标签按类别着色
 function reasonClass(reason: string): string {
@@ -320,15 +324,19 @@ function reasonClass(reason: string): string {
   return 'reason-default'
 }
 
-// 被举报账号当前限制状态（含到期判断）
-function restrictLabel(r: any): string {
+// 被举报账号当前限制状态（含到期判断）：none 正常 / mute 禁言 / ban 封禁
+function restrictionCode(r: any): 'none' | 'mute' | 'ban' {
   const status = Number(r.reported_status || 0)
-  if (status !== 1 && status !== 2) return '正常'
-  if (r.reported_restricted_until && new Date(r.reported_restricted_until).getTime() <= Date.now()) return '正常'
-  return status === 2 ? '已封禁' : '禁言中'
+  if (status !== 1 && status !== 2) return 'none'
+  if (r.reported_restricted_until && new Date(r.reported_restricted_until).getTime() <= Date.now()) return 'none'
+  return status === 2 ? 'ban' : 'mute'
+}
+function restrictLabel(r: any): string {
+  const code = restrictionCode(r)
+  return code === 'ban' ? t('admin.report.banned') : code === 'mute' ? t('admin.report.muted') : t('admin.report.normal')
 }
 function isActiveRestricted(r: any): boolean {
-  return restrictLabel(r) !== '正常'
+  return restrictionCode(r) !== 'none'
 }
 
 function initial(name: string): string {
@@ -337,10 +345,10 @@ function initial(name: string): string {
 
 function firstContent(r: any): string {
   const m = r.messages?.[0]
-  if (!m) return '（消息内容缺失）'
+  if (!m) return t('admin.report.msgMissingShort')
   const text = String(m.content || '').replace(/\s+/g, ' ').trim()
   const brief = text.length > 36 ? text.slice(0, 36) + '…' : text
-  return (r.messages.length > 1 ? `[${r.messages.length} 条] ` : '') + brief
+  return (r.messages.length > 1 ? t('admin.report.msgCount', { n: r.messages.length }) : '') + brief
 }
 
 function formatDate(d: string): string {
@@ -356,7 +364,7 @@ async function load() {
     const res = await getReports('') as any
     reports.value = res?.data || []
   } catch (e: any) {
-    error(e?.response?.data?.message || '加载举报列表失败')
+    error(e?.response?.data?.message || t('admin.report.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -378,10 +386,13 @@ function toggleOpen(r: any) {
 
 async function submitHandle(r: any) {
   if (handling.value) return
-  const actionLabel = ACTIONS.find((a) => a.value === form.value.action)?.label || ''
+  const actionDef = ACTIONS.find((a) => a.value === form.value.action)
+  const actionLabel = actionDef ? t(actionDef.labelKey) : ''
+  const durRaw = form.value.duration === 'permanent' ? t('admin.report.durPermanent') : form.value.duration
+  const durText = form.value.action === 'dismiss' ? '' : t('admin.report.durSuffix', { dur: durRaw })
   const ok = await confirm(
-    `确定对「${r.reported_name}」执行「${actionLabel}」${form.value.action !== 'dismiss' ? `（${form.value.duration === 'permanent' ? '永久' : form.value.duration}）` : ''}吗？处置实时生效。`,
-    '确认处置'
+    t('admin.report.confirmHandleMsg', { name: r.reported_name, action: actionLabel, duration: durText }),
+    t('admin.report.confirmHandle')
   )
   if (!ok) return
   handling.value = true
@@ -391,25 +402,25 @@ async function submitHandle(r: any) {
       duration: form.value.action === 'dismiss' ? undefined : form.value.duration,
       note: form.value.note
     }) as any
-    success(res?.message || '处置完成')
+    success(res?.message || t('admin.report.handled'))
     openId.value = null
     await load()
   } catch (e: any) {
-    error(e?.response?.data?.message || '处置失败，请稍后重试')
+    error(e?.response?.data?.message || t('admin.report.handleFailed'))
   } finally {
     handling.value = false
   }
 }
 
 async function lift(r: any) {
-  const ok = await confirm(`确定解除「${r.reported_name}」的禁言/封禁限制吗？`, '解除限制')
+  const ok = await confirm(t('admin.report.confirmLift', { name: r.reported_name }), t('admin.report.lift'))
   if (!ok) return
   try {
     await unrestrictUser(r.reported_id)
-    success('已解除该账号的限制')
+    success(t('admin.report.lifted'))
     await load()
   } catch (e: any) {
-    error(e?.response?.data?.message || '解除失败，请稍后重试')
+    error(e?.response?.data?.message || t('admin.report.liftFailed'))
   }
 }
 

@@ -2,8 +2,8 @@
   <div v-if="visible" class="modal-overlay" @click="close">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
-        <h3>编辑资料</h3>
-        <button class="btn-close" @click="close" title="关闭">
+        <h3>{{ $t('ui.profile.title') }}</h3>
+        <button class="btn-close" @click="close" :title="$t('ui.close')">
           <AppIcon name="close" :size="16" />
         </button>
       </div>
@@ -16,25 +16,25 @@
               v-if="userStore.avatarBase64"
               :src="userStore.avatarBase64"
               class="avatar-img"
-              alt="头像"
+              :alt="$t('ui.profile.avatarAlt')"
             />
             <div v-else class="avatar-placeholder">
               {{ userStore.userInfo?.username?.[0]?.toUpperCase() || '?' }}
             </div>
             <div class="avatar-overlay">
               <AppIcon name="camera" :size="14" />
-              <span>更换</span>
+              <span>{{ $t('ui.profile.change') }}</span>
             </div>
           </div>
         </div>
 
         <!-- 昵称 -->
         <div class="form-item">
-          <label>昵称</label>
+          <label>{{ $t('ui.profile.nickname') }}</label>
           <input
             v-model="form.username"
             type="text"
-            placeholder="请输入昵称"
+            :placeholder="$t('ui.profile.nicknamePlaceholder')"
             maxlength="20"
           />
           <span class="char-count">{{ form.username.length }}/20</span>
@@ -42,19 +42,19 @@
 
         <!-- 邮箱（只读） -->
         <div class="form-item">
-          <label>邮箱</label>
+          <label>{{ $t('common.email') }}</label>
           <input :value="userStore.userInfo?.email" disabled type="text" />
         </div>
       </div>
 
       <div class="modal-footer">
-        <button class="btn-cancel" @click="close">取消</button>
+        <button class="btn-cancel" @click="close">{{ $t('ui.dialog.cancel') }}</button>
         <button
           class="btn-confirm"
           @click="save"
           :disabled="saving || !form.username.trim()"
         >
-          {{ saving ? '保存中...' : '保存' }}
+          {{ saving ? $t('ui.profile.saving') : $t('ui.profile.save') }}
         </button>
       </div>
     </div>
@@ -63,9 +63,12 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -98,9 +101,9 @@ const close = () => {
 const changeAvatar = async () => {
   const res = await userStore.selectAndUpdateAvatar()
   if (res.success) {
-    await success('头像更换成功')
+    await success(t('ui.profile.avatarChanged'))
   } else {
-    await error(res.message || '头像更换失败')
+    await error(res.message || t('ui.profile.avatarFailed'))
   }
 }
 
@@ -108,7 +111,7 @@ const changeAvatar = async () => {
 const save = async () => {
   const username = form.value.username.trim()
   if (!username || username.length < 2) {
-    await error('昵称至少需要2个字符')
+    await error(t('ui.profile.nicknameTooShort'))
     return
   }
 
@@ -116,14 +119,14 @@ const save = async () => {
   try {
     const res = await userStore.updateUsername(username)
     if (res.success) {
-      await success('资料更新成功')
+      await success(t('ui.profile.saved'))
       emit('saved')
       close()
     } else {
-      await error(res.message || '更新失败')
+      await error(res.message || t('ui.profile.updateFailed'))
     }
   } catch (e: any) {
-    await error(e.message || '更新失败')
+    await error(e.message || t('ui.profile.updateFailed'))
   } finally {
     saving.value = false
   }

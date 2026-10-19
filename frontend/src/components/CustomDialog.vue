@@ -32,7 +32,10 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import AppIcon from '@/components/AppIcon.vue'
+
+const { t } = useI18n()
 
 interface DialogOptions {
   title?: string
@@ -47,14 +50,14 @@ interface DialogOptions {
 }
 
 const visible = ref(false)
-const title = ref('提示')
+const title = ref(t('ui.dialog.tip'))
 const message = ref('')
 const type = ref('info')
 const icon = ref('')
 const showCancel = ref(false)
 const showConfirm = ref(true)
-const cancelText = ref('取消')
-const confirmText = ref('确定')
+const cancelText = ref(t('ui.dialog.cancel'))
+const confirmText = ref(t('ui.dialog.confirm'))
 const confirmClass = ref('')
 let resolvePromise: ((value: boolean) => void) | null = null
 
@@ -65,14 +68,14 @@ const show = async (options: DialogOptions): Promise<boolean> => {
     await new Promise(resolve => setTimeout(resolve, 200))
   }
 
-  title.value = options.title || '提示'
+  title.value = options.title || t('ui.dialog.tip')
   message.value = options.message
   type.value = options.type || 'info'
   icon.value = options.icon || getIcon(options.type)
   showCancel.value = options.showCancel ?? false
   showConfirm.value = options.showConfirm ?? true
-  cancelText.value = options.cancelText || '取消'
-  confirmText.value = options.confirmText || '确定'
+  cancelText.value = options.cancelText || t('ui.dialog.cancel')
+  confirmText.value = options.confirmText || t('ui.dialog.confirm')
   confirmClass.value = options.confirmClass || ''
 
   await nextTick()

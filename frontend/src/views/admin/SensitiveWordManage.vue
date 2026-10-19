@@ -2,8 +2,8 @@
   <div class="page-container">
     <div class="page-header">
       <div>
-        <h2>敏感词库</h2>
-        <p class="subtitle">聊天内容审核词库，增删后实时生效，无需重启服务</p>
+        <h2>{{ $t('admin.words.title') }}</h2>
+        <p class="subtitle">{{ $t('admin.words.subtitle') }}</p>
       </div>
     </div>
 
@@ -12,66 +12,66 @@
         <input
           v-model="newWord"
           class="word-input"
-          placeholder="输入敏感词，回车快速添加"
+          :placeholder="$t('admin.words.phAdd')"
           maxlength="64"
           @keyup.enter="add"
         />
         <select v-model="newCategory" class="cat-select">
-          <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+          <option v-for="c in categories" :key="c" :value="c">{{ catLabel(c) }}</option>
         </select>
-        <label class="short-check" title="短词仅作为独立词命中，避免英文单词内部误伤">
+        <label class="short-check" :title="$t('admin.words.shortTitle')">
           <input v-model="newShort" type="checkbox" />
-          短词匹配
+          {{ $t('admin.words.shortMatch') }}
         </label>
-        <button class="btn-add" :disabled="adding || !newWord.trim()" @click="add">添加</button>
+        <button class="btn-add" :disabled="adding || !newWord.trim()" @click="add">{{ $t('admin.words.add') }}</button>
       </div>
-      <p class="add-tip">短词匹配：4 位以内的拼音缩写/英文俚语（如 sb、tmd），仅作为独立词出现才命中；普通中文词汇无需勾选。</p>
+      <p class="add-tip">{{ $t('admin.words.shortTip') }}</p>
     </div>
 
     <div class="filter-card">
-      <input v-model="keyword" class="search-input" placeholder="搜索敏感词" />
+      <input v-model="keyword" class="search-input" :placeholder="$t('admin.words.phSearch')" />
       <select v-model="filterCategory" class="cat-select">
-        <option value="">全部分类</option>
-        <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+        <option value="">{{ $t('admin.words.allCategories') }}</option>
+        <option v-for="c in categories" :key="c" :value="c">{{ catLabel(c) }}</option>
       </select>
-      <span class="count-tip">共 {{ filtered.length }} 条</span>
+      <span class="count-tip">{{ $t('admin.words.countTip', { n: filtered.length }) }}</span>
     </div>
 
     <div class="table-card">
       <table class="data-table">
         <thead>
           <tr>
-            <th>敏感词</th>
-            <th>分类</th>
-            <th>匹配方式</th>
-            <th>添加时间</th>
-            <th>操作</th>
+            <th>{{ $t('admin.words.th.word') }}</th>
+            <th>{{ $t('admin.words.th.category') }}</th>
+            <th>{{ $t('admin.words.th.match') }}</th>
+            <th>{{ $t('admin.words.th.createdAt') }}</th>
+            <th>{{ $t('admin.words.th.actions') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="w in paged" :key="w.id">
             <td class="word-cell">{{ w.word }}</td>
             <td>
-              <span :class="['status-tag', catClass(w.category)]">{{ w.category }}</span>
+              <span :class="['status-tag', catClass(w.category)]">{{ catLabel(w.category) }}</span>
             </td>
-            <td>{{ w.is_short ? '短词（独立词）' : '包含匹配' }}</td>
+            <td>{{ w.is_short ? $t('admin.words.matchShort') : $t('admin.words.matchContains') }}</td>
             <td class="date-cell">{{ formatDate(w.created_at) }}</td>
             <td>
-              <button class="btn-reject" @click="remove(w)">删除</button>
+              <button class="btn-reject" @click="remove(w)">{{ $t('admin.words.delete') }}</button>
             </td>
           </tr>
           <tr v-if="filtered.length === 0">
             <td colspan="5" class="empty-cell">
               <AppIcon name="clipboard" :size="28" />
-              <p>{{ loading ? '加载中...' : '暂无匹配的敏感词' }}</p>
+              <p>{{ loading ? $t('admin.words.loading') : $t('admin.words.empty') }}</p>
             </td>
           </tr>
         </tbody>
       </table>
       <div v-if="totalPages > 1" class="pager">
-        <button :disabled="page <= 1" @click="page--">上一页</button>
+        <button :disabled="page <= 1" @click="page--">{{ $t('admin.words.prevPage') }}</button>
         <span>{{ page }} / {{ totalPages }}</span>
-        <button :disabled="page >= totalPages" @click="page++">下一页</button>
+        <button :disabled="page >= totalPages" @click="page++">{{ $t('admin.words.nextPage') }}</button>
       </div>
     </div>
   </div>
@@ -79,9 +79,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getSensitiveWords, addSensitiveWord, deleteSensitiveWord } from '@/api/admin'
 import { success, error, confirm } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
+
+const { t } = useI18n()
+
+// 分类值为后端存储数据（中文原样提交/返回），仅展示时按语言映射
+const CAT_KEYS: Record<string, string> = { '侮辱': 'insult', '色情': 'porn', '违禁': 'banned', '自伤': 'selfHarm', '缩写': 'abbr', '其他': 'other' }
+const catLabel = (c: string) => {
+  const k = CAT_KEYS[c]
+  return k ? t(`admin.words.cat.${k}`) : c
+}
 
 const categories = ['侮辱', '色情', '违禁', '自伤', '缩写', '其他']
 
@@ -122,7 +132,7 @@ const load = async () => {
     const res = await getSensitiveWords() as any
     words.value = res.data || []
   } catch (e: any) {
-    await error(e.message || '加载失败')
+    await error(e.message || t('admin.words.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -134,26 +144,26 @@ const add = async () => {
   adding.value = true
   try {
     const res = await addSensitiveWord({ word: w, category: newCategory.value, is_short: newShort.value }) as any
-    await success(res.message || '已添加并即时生效')
+    await success(res.message || t('admin.words.added'))
     newWord.value = ''
     page.value = 1
     await load()
   } catch (e: any) {
-    await error(e.message || '添加失败')
+    await error(e.message || t('admin.words.addFailed'))
   } finally {
     adding.value = false
   }
 }
 
 const remove = async (w: any) => {
-  const ok = await confirm(`删除敏感词「${w.word}」？删除后该词将不再被词库拦截。`, '删除敏感词')
+  const ok = await confirm(t('admin.words.confirmDelete', { word: w.word }), t('admin.words.deleteTitle'))
   if (!ok) return
   try {
     const res = await deleteSensitiveWord(w.id) as any
-    await success(res.message || '已删除')
+    await success(res.message || t('admin.words.deleted'))
     await load()
   } catch (e: any) {
-    await error(e.message || '删除失败')
+    await error(e.message || t('admin.words.deleteFailed'))
   }
 }
 

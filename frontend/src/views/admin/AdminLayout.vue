@@ -4,8 +4,8 @@
       <div class="logo-box">
         <div class="logo-mark"><AppIcon name="brand" :size="18" /></div>
         <div class="logo-text">
-          <h2>管理后台</h2>
-          <p>心愈 · 管理控制台</p>
+          <h2>{{ $t('admin.nav.title') }}</h2>
+          <p>{{ $t('admin.nav.subtitle') }}</p>
         </div>
       </div>
       <nav>
@@ -16,13 +16,13 @@
           :class="{ active: $route.path.startsWith(item.path) }"
         >
           <AppIcon :name="item.icon" :size="17" />
-          <span class="menu-text">{{ item.name }}</span>
+          <span class="menu-text">{{ $t(item.labelKey) }}</span>
         </router-link>
       </nav>
       <div class="sidebar-footer">
         <button class="btn-back" @click="goBack">
           <AppIcon name="back" :size="15" />
-          返回前台
+          {{ $t('admin.nav.back') }}
         </button>
       </div>
     </aside>
@@ -40,12 +40,12 @@ import AppIcon from '@/components/AppIcon.vue'
 const router = useRouter()
 
 const menuItems = [
-  { path: '/admin/users', name: '用户管理', icon: 'users' },
-  { path: '/admin/tests', name: '问卷管理', icon: 'clipboard' },
-  { path: '/admin/appointments', name: '预约管理', icon: 'calendar' },
-  { path: '/admin/doctor-cards', name: '名片审核', icon: 'stethoscope' },
-  { path: '/admin/reports', name: '举报管理', icon: 'warning' },
-  { path: '/admin/sensitive-words', name: '敏感词库', icon: 'shield' }
+  { path: '/admin/users', labelKey: 'admin.nav.users', icon: 'users' },
+  { path: '/admin/tests', labelKey: 'admin.nav.tests', icon: 'clipboard' },
+  { path: '/admin/appointments', labelKey: 'admin.nav.appointments', icon: 'calendar' },
+  { path: '/admin/doctor-cards', labelKey: 'admin.nav.doctorCards', icon: 'stethoscope' },
+  { path: '/admin/reports', labelKey: 'admin.nav.reports', icon: 'warning' },
+  { path: '/admin/sensitive-words', labelKey: 'admin.nav.words', icon: 'shield' }
 ]
 
 const goBack = () => {

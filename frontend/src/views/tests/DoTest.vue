@@ -3,7 +3,7 @@
     <div class="test-header">
       <button class="btn-back" @click="router.back()">
         <AppIcon name="back" :size="15" />
-        返回
+        {{ $t('tests.back') }}
       </button>
       <h3>{{ testInfo?.name }}</h3>
       <span class="progress">{{ currentIndex + 1 }} / {{ questions.length }}</span>
@@ -17,7 +17,7 @@
 
     <div class="question-area" v-if="currentQuestion">
       <div class="question-card">
-        <div class="question-number">第 {{ currentIndex + 1 }} 题</div>
+        <div class="question-number">{{ $t('tests.questionN', { n: currentIndex + 1 }) }}</div>
         <div class="question-content">{{ currentQuestion.content }}</div>
 
         <div class="options">
@@ -28,7 +28,7 @@
             :class="{ selected: answers[currentIndex] === option.score }"
             @click="selectOption(option.score)"
           >
-            <div class="option-score">{{ option.score }}分</div>
+            <div class="option-score">{{ $t('tests.points', { n: option.score }) }}</div>
             <div class="option-text">{{ option.text }}</div>
             <AppIcon
               v-if="answers[currentIndex] === option.score"
@@ -46,7 +46,7 @@
           :disabled="currentIndex === 0"
           @click="prevQuestion"
         >
-          上一题
+          {{ $t('tests.prev') }}
         </button>
         <button
           v-if="currentIndex < questions.length - 1"
@@ -54,7 +54,7 @@
           :disabled="answers[currentIndex] === undefined"
           @click="nextQuestion"
         >
-          下一题
+          {{ $t('tests.next') }}
         </button>
         <button
           v-else
@@ -62,7 +62,7 @@
           :disabled="answers[currentIndex] === undefined || submitting"
           @click="handleSubmit"
         >
-          {{ submitting ? '提交中...' : '提交' }}
+          {{ submitting ? $t('tests.submitting') : $t('tests.submit') }}
         </button>
       </div>
     </div>
@@ -71,11 +71,11 @@
     <div v-if="showResult" class="result-modal">
       <div class="result-card">
         <div class="result-icon"><AppIcon name="check" :size="28" /></div>
-        <h3>测评完成</h3>
-        <div class="result-score">得分：{{ resultData?.total_score }}</div>
+        <h3>{{ $t('tests.doneTitle') }}</h3>
+        <div class="result-score">{{ $t('tests.score', { n: resultData?.total_score }) }}</div>
         <div class="result-level" :class="resultLevelClass">{{ resultData?.result_level }}</div>
         <p class="result-desc">{{ resultData?.result_desc }}</p>
-        <button class="btn-close" @click="closeResult">确定</button>
+        <button class="btn-close" @click="closeResult">{{ $t('tests.ok') }}</button>
       </div>
     </div>
   </div>
@@ -85,12 +85,14 @@
 import { getTestQuestions, submitTest as submitTestApi } from '@/api/tests'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { error, success } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const testId = parseInt(route.params.id as string)
 const testInfo = ref<any>(null)
 const questions = ref<any[]>([])
@@ -117,7 +119,7 @@ onMounted(async () => {
     questions.value = res.data?.questions || []
     answers.value = new Array(questions.value.length).fill(undefined)
   } catch (e: any) {
-    error(e?.message || '获取题目失败')
+    error(e?.message || t('tests.loadQuestionsFailed'))
     router.back()
   }
 })
@@ -142,7 +144,7 @@ const handleSubmit = async () => {
   const unanswered = answers.value.findIndex(a => a === undefined)
   if (unanswered !== -1) {
     currentIndex.value = unanswered
-    error(`第 ${unanswered + 1} 题未作答`)
+    error(t('tests.unanswered', { n: unanswered + 1 }))
     return
   }
 
@@ -159,9 +161,9 @@ const handleSubmit = async () => {
     const res = await submitTestApi(submitData)
     resultData.value = res.data
     showResult.value = true
-    success('测评提交成功')
+    success(t('tests.submitted'))
   } catch (e: any) {
-    error(e?.message || '提交失败')
+    error(e?.message || t('tests.submitFailed'))
   } finally {
     submitting.value = false
   }

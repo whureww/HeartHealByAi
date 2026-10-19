@@ -1,23 +1,23 @@
 <template>
   <div class="test-list-page">
     <div class="header">
-      <h2>心理测评中心</h2>
-      <p>选择适合您的专业心理测评，了解当下心理状态</p>
+      <h2>{{ $t('tests.center') }}</h2>
+      <p>{{ $t('tests.listSubtitle') }}</p>
     </div>
 
     <div v-if="loading" class="status-msg">
       <div class="loading-spinner"></div>
-      <p>加载中...</p>
+      <p>{{ $t('tests.loading') }}</p>
     </div>
 
     <div v-else-if="errorMsg" class="status-msg error">
       <p>{{ errorMsg }}</p>
-      <button class="btn-retry" @click="loadTests">重新加载</button>
+      <button class="btn-retry" @click="loadTests">{{ $t('tests.retry') }}</button>
     </div>
 
     <div v-else-if="tests.length === 0" class="status-msg empty">
-      <p>暂无可用的测评</p>
-      <button class="btn-retry" @click="loadTests">刷新</button>
+      <p>{{ $t('tests.empty') }}</p>
+      <button class="btn-retry" @click="loadTests">{{ $t('tests.refresh') }}</button>
     </div>
 
     <div v-else class="test-list">
@@ -25,16 +25,16 @@
       <div class="test-row ai-row" @click="onStartAiTest">
         <div class="test-icon ai-icon"><AppIcon name="edit" :size="19" /></div>
         <div class="test-body">
-          <h3>AI 智能测评<span class="ai-badge">AI</span></h3>
-          <p class="desc">由 AI 实时生成专属问卷，并根据你的回答智能评分与解读</p>
+          <h3>{{ $t('tests.aiTitle') }}<span class="ai-badge">AI</span></h3>
+          <p class="desc">{{ $t('tests.aiDesc') }}</p>
           <div class="test-meta">
-            <span class="tag ai-tag">每次内容不同</span>
-            <span class="tag">AI 评分解读</span>
-            <span class="tag ai-tag category">智能生成</span>
+            <span class="tag ai-tag">{{ $t('tests.tagVaries') }}</span>
+            <span class="tag">{{ $t('tests.tagAiScore') }}</span>
+            <span class="tag ai-tag category">{{ $t('tests.tagAiGen') }}</span>
           </div>
         </div>
         <div class="test-actions">
-          <button class="btn-start btn-ai" @click.stop="onStartAiTest">开始测评</button>
+          <button class="btn-start btn-ai" @click.stop="onStartAiTest">{{ $t('tests.start') }}</button>
           <AppIcon name="chevronRight" :size="16" class="row-arrow" />
         </div>
       </div>
@@ -50,20 +50,20 @@
           <h3>{{ test.name }}</h3>
           <p class="desc">{{ test.description }}</p>
           <div class="test-meta">
-            <span class="tag">{{ test.total_questions }}题</span>
-            <span class="tag">约{{ test.estimated_minutes }}分钟</span>
+            <span class="tag">{{ $t('tests.questionsCount', { n: test.total_questions }) }}</span>
+            <span class="tag">{{ $t('tests.aboutMinutes', { n: test.estimated_minutes }) }}</span>
             <span class="tag category">{{ test.category }}</span>
           </div>
         </div>
         <div class="test-actions">
-          <button class="btn-start" @click.stop="onStartTest(test.id)">开始测评</button>
+          <button class="btn-start" @click.stop="onStartTest(test.id)">{{ $t('tests.start') }}</button>
           <AppIcon name="chevronRight" :size="16" class="row-arrow" />
         </div>
       </div>
     </div>
 
     <div class="history-link" @click="onViewHistory">
-      <span>查看测评历史</span>
+      <span>{{ $t('tests.viewHistory') }}</span>
       <AppIcon name="chevronRight" :size="15" />
     </div>
   </div>
@@ -71,9 +71,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getTestList } from '@/api/tests'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const emit = defineEmits(['view-history', 'start-test', 'start-ai-test'])
 
 const tests = ref<any[]>([])
@@ -95,7 +97,7 @@ const loadTests = async () => {
     }
   } catch (e: any) {
     console.error('获取测评列表失败:', e)
-    errorMsg.value = e?.message || '获取失败'
+    errorMsg.value = e?.message || t('tests.loadFailed')
   } finally {
     loading.value = false
   }

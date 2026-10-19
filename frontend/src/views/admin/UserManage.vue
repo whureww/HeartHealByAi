@@ -2,12 +2,12 @@
   <div class="page-container">
     <div class="page-header">
       <div>
-        <h2>用户管理</h2>
-        <p class="subtitle">管理系统用户，分配角色权限</p>
+        <h2>{{ $t('admin.user.title') }}</h2>
+        <p class="subtitle">{{ $t('admin.user.subtitle') }}</p>
       </div>
       <button class="btn-add" @click="openCreate">
         <AppIcon name="plus" :size="15" />
-        新增用户
+        {{ $t('admin.user.addUser') }}
       </button>
     </div>
 
@@ -16,11 +16,11 @@
         <AppIcon name="search" :size="16" class="search-icon" />
         <input
           v-model="searchKeyword"
-          placeholder="搜索用户名 / 邮箱 / 手机号"
+          :placeholder="$t('admin.user.searchPlaceholder')"
           @keyup.enter="loadUsers"
         />
       </div>
-      <button class="btn-search" @click="loadUsers">搜索</button>
+      <button class="btn-search" @click="loadUsers">{{ $t('admin.user.search') }}</button>
     </div>
 
     <div class="table-card">
@@ -28,14 +28,14 @@
         <thead>
           <tr>
             <th>ID</th>
-            <th>用户名</th>
-            <th>邮箱</th>
-            <th>手机号</th>
-            <th>当前角色</th>
-            <th>账号状态</th>
-            <th>注册时间</th>
-            <th>角色调整</th>
-            <th>操作</th>
+            <th>{{ $t('admin.user.th.username') }}</th>
+            <th>{{ $t('admin.user.th.email') }}</th>
+            <th>{{ $t('admin.user.th.phone') }}</th>
+            <th>{{ $t('admin.user.th.role') }}</th>
+            <th>{{ $t('admin.user.th.status') }}</th>
+            <th>{{ $t('admin.user.th.createdAt') }}</th>
+            <th>{{ $t('admin.user.th.roleAdjust') }}</th>
+            <th>{{ $t('admin.user.th.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -58,7 +58,7 @@
               <span v-if="activeRestriction(user)" class="restrict-tag">
                 {{ activeRestriction(user) }}
               </span>
-              <span v-else class="restrict-tag normal">正常</span>
+              <span v-else class="restrict-tag normal">{{ $t('admin.user.normal') }}</span>
             </td>
             <td class="date-cell">{{ formatDate(user.created_at) }}</td>
             <td>
@@ -67,16 +67,16 @@
                 class="role-select"
                 @change="updateRole(user)"
               >
-                <option :value="1">普通用户</option>
-                <option :value="2">专家</option>
-                <option :value="3">管理员</option>
+                <option :value="1">{{ $t('admin.user.roleUser') }}</option>
+                <option :value="2">{{ $t('admin.user.roleExpert') }}</option>
+                <option :value="3">{{ $t('admin.user.roleAdmin') }}</option>
               </select>
             </td>
             <td>
               <button
                 v-if="activeRestriction(user)"
                 class="btn-lift"
-                title="解除禁言/封禁"
+                :title="$t('admin.user.liftTitle')"
                 @click="liftRestriction(user)"
               >
                 <AppIcon name="check" :size="14" />
@@ -84,7 +84,7 @@
               <button
                 class="btn-del"
                 :disabled="user.id === userStore.userInfo?.id"
-                :title="user.id === userStore.userInfo?.id ? '不能删除当前登录账号' : '删除该用户'"
+                :title="user.id === userStore.userInfo?.id ? $t('admin.user.cantDeleteSelf') : $t('admin.user.deleteUser')"
                 @click="removeUser(user)"
               >
                 <AppIcon name="trash" :size="14" />
@@ -94,7 +94,7 @@
           <tr v-if="users.length === 0">
             <td colspan="9" class="empty-cell">
               <AppIcon name="list" :size="28" />
-              <p>暂无用户数据</p>
+              <p>{{ $t('admin.user.empty') }}</p>
             </td>
           </tr>
         </tbody>
@@ -108,7 +108,7 @@
         class="page-btn"
       >
         <AppIcon name="back" :size="14" />
-        上一页
+        {{ $t('admin.user.prevPage') }}
       </button>
       <span class="page-info">{{ page }} / {{ totalPages }}</span>
       <button
@@ -116,7 +116,7 @@
         @click="page++; loadUsers()"
         class="page-btn"
       >
-        下一页
+        {{ $t('admin.user.nextPage') }}
         <AppIcon name="chevronRight" :size="14" />
       </button>
     </div>
@@ -125,41 +125,41 @@
     <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
       <div class="modal-card">
         <div class="modal-head">
-          <h3>新增用户</h3>
+          <h3>{{ $t('admin.user.addUser') }}</h3>
           <button class="modal-close" @click="showCreate = false"><AppIcon name="close" :size="16" /></button>
         </div>
         <div class="modal-body">
           <div class="form-item">
-            <label>用户名 <i>*</i></label>
-            <input v-model="createForm.username" placeholder="2-20 个字符" />
+            <label>{{ $t('admin.user.th.username') }} <i>*</i></label>
+            <input v-model="createForm.username" :placeholder="$t('admin.user.phUsername')" />
           </div>
           <div class="form-item">
-            <label>邮箱 <i>*</i></label>
+            <label>{{ $t('admin.user.th.email') }} <i>*</i></label>
             <input v-model="createForm.email" type="email" placeholder="user@example.com" />
           </div>
           <div class="form-item">
-            <label>初始密码 <i>*</i></label>
-            <input v-model="createForm.password" type="password" placeholder="至少 6 位" />
+            <label>{{ $t('admin.user.fPassword') }} <i>*</i></label>
+            <input v-model="createForm.password" type="password" :placeholder="$t('admin.user.phPassword')" />
           </div>
           <div class="form-row">
             <div class="form-item">
-              <label>角色</label>
+              <label>{{ $t('admin.user.fRole') }}</label>
               <select v-model.number="createForm.role">
-                <option :value="1">普通用户</option>
-                <option :value="2">专家</option>
-                <option :value="3">管理员</option>
+                <option :value="1">{{ $t('admin.user.roleUser') }}</option>
+                <option :value="2">{{ $t('admin.user.roleExpert') }}</option>
+                <option :value="3">{{ $t('admin.user.roleAdmin') }}</option>
               </select>
             </div>
             <div class="form-item">
-              <label>手机号</label>
-              <input v-model="createForm.phone" placeholder="选填" />
+              <label>{{ $t('admin.user.th.phone') }}</label>
+              <input v-model="createForm.phone" :placeholder="$t('admin.user.phOptional')" />
             </div>
           </div>
         </div>
         <div class="modal-foot">
-          <button class="btn-ghost" @click="showCreate = false">取消</button>
+          <button class="btn-ghost" @click="showCreate = false">{{ $t('admin.user.cancel') }}</button>
           <button class="btn-primary" :disabled="creating" @click="submitCreate">
-            {{ creating ? '创建中...' : '创建用户' }}
+            {{ creating ? $t('admin.user.creating') : $t('admin.user.submit') }}
           </button>
         </div>
       </div>
@@ -169,12 +169,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import request from '@/api/request'
 import { createUser, deleteUser, unrestrictUser } from '@/api/admin'
 import { success, error, confirm } from '@/utils/dialog'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const users = ref<any[]>([])
 const page = ref(1)
@@ -194,22 +196,22 @@ const openCreate = () => {
 const submitCreate = async () => {
   const f = createForm.value
   if (!f.username.trim() || !f.email.trim() || !f.password) {
-    await error('请填写用户名、邮箱和初始密码')
+    await error(t('admin.user.errRequired'))
     return
   }
   if (f.password.length < 6) {
-    await error('初始密码至少 6 位')
+    await error(t('admin.user.errPasswordMin'))
     return
   }
   try {
     creating.value = true
     await createUser({ ...f, username: f.username.trim(), email: f.email.trim() })
-    await success('用户创建成功')
+    await success(t('admin.user.created'))
     showCreate.value = false
     page.value = 1
     await loadUsers()
   } catch (e: any) {
-    await error(e.message || '创建失败')
+    await error(e.message || t('admin.user.createFailed'))
   } finally {
     creating.value = false
   }
@@ -217,25 +219,25 @@ const submitCreate = async () => {
 
 const removeUser = async (user: any) => {
   const ok = await confirm(
-    `确定删除用户「${user.username}」吗？其聊天记录、测评结果、预约等关联数据将一并清除，不可恢复。`,
-    '删除用户'
+    t('admin.user.confirmDelete', { name: user.username }),
+    t('admin.user.deleteUserTitle')
   )
   if (!ok) return
   try {
     await deleteUser(user.id)
-    await success('用户已删除')
+    await success(t('admin.user.deleted'))
     if (users.value.length === 1 && page.value > 1) page.value--
     await loadUsers()
   } catch (e: any) {
-    await error(e.message || '删除失败')
+    await error(e.message || t('admin.user.deleteFailed'))
   }
 }
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
 const roleText = (role: number) => {
-  const map: Record<number, string> = { 1: '普通用户', 2: '专家', 3: '管理员' }
-  return map[role] || '未知'
+  const map: Record<number, string> = { 1: t('admin.user.roleUser'), 2: t('admin.user.roleExpert'), 3: t('admin.user.roleAdmin') }
+  return map[role] || t('admin.user.unknown')
 }
 
 // 账号限制状态展示（含到期自动解除判断）
@@ -243,19 +245,19 @@ const activeRestriction = (user: any) => {
   const status = Number(user.status || 0)
   if (status !== 1 && status !== 2) return ''
   if (user.restricted_until && new Date(user.restricted_until).getTime() <= Date.now()) return ''
-  return status === 2 ? '已封禁' : '禁言中'
+  return status === 2 ? t('admin.user.banned') : t('admin.user.muted')
 }
 
 const liftRestriction = async (user: any) => {
-  const ok = await confirm(`确定解除「${user.username}」的禁言/封禁限制吗？`, '解除限制')
+  const ok = await confirm(t('admin.user.confirmLift', { name: user.username }), t('admin.user.liftConfirmTitle'))
   if (!ok) return
   try {
     await unrestrictUser(user.id)
     user.status = 0
     user.restricted_until = null
-    success('已解除该账号的限制')
+    success(t('admin.user.lifted'))
   } catch (e: any) {
-    await error(e?.response?.data?.message || '解除失败，请稍后重试')
+    await error(e?.response?.data?.message || t('admin.user.liftFailed'))
   }
 }
 
@@ -271,7 +273,7 @@ const loadUsers = async () => {
     users.value = res.data.list.map((u: any) => ({ ...u, newRole: u.role }))
     total.value = res.data.total
   } catch (e: any) {
-    await error(e.message || '加载用户列表失败')
+    await error(e.message || t('admin.user.loadFailed'))
   }
 }
 
@@ -281,9 +283,9 @@ const updateRole = async (user: any) => {
   try {
     await request.put(`/admin/users/${user.id}/role`, { role: user.newRole })
     user.role = user.newRole
-    await success('角色修改成功')
+    await success(t('admin.user.roleUpdated'))
   } catch (e: any) {
-    await error(e.message || '修改失败')
+    await error(e.message || t('admin.user.updateFailed'))
     user.newRole = user.role
   }
 }

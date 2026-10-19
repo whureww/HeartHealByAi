@@ -2,12 +2,12 @@
   <div class="page-container">
     <div class="page-header">
       <div>
-        <h2>预约管理</h2>
-        <p class="subtitle">查看和管理所有用户预约</p>
+        <h2>{{ $t('admin.appt.title') }}</h2>
+        <p class="subtitle">{{ $t('admin.appt.subtitle') }}</p>
       </div>
       <button class="btn-add" @click="openCreate">
         <AppIcon name="plus" :size="15" />
-        新增预约
+        {{ $t('admin.appt.add') }}
       </button>
     </div>
 
@@ -16,12 +16,12 @@
         <thead>
           <tr>
             <th>ID</th>
-            <th>用户</th>
-            <th>专家</th>
-            <th>职称</th>
-            <th>状态</th>
-            <th>预约时间</th>
-            <th>操作</th>
+            <th>{{ $t('admin.appt.th.user') }}</th>
+            <th>{{ $t('admin.appt.th.doctor') }}</th>
+            <th>{{ $t('admin.appt.th.title') }}</th>
+            <th>{{ $t('admin.appt.th.status') }}</th>
+            <th>{{ $t('admin.appt.th.time') }}</th>
+            <th>{{ $t('admin.appt.th.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -42,7 +42,7 @@
             </td>
             <td class="date-cell">{{ formatDate(apt.created_at) }}</td>
             <td>
-              <button class="btn-del" title="删除该预约" @click="removeAppointment(apt)">
+              <button class="btn-del" :title="$t('admin.appt.deleteTitle')" @click="removeAppointment(apt)">
                 <AppIcon name="trash" :size="14" />
               </button>
             </td>
@@ -50,7 +50,7 @@
           <tr v-if="appointments.length === 0">
             <td colspan="7" class="empty-cell">
               <AppIcon name="list" :size="28" />
-              <p>暂无预约数据</p>
+              <p>{{ $t('admin.appt.empty') }}</p>
             </td>
           </tr>
         </tbody>
@@ -61,42 +61,42 @@
     <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
       <div class="modal-card">
         <div class="modal-head">
-          <h3>新增预约</h3>
+          <h3>{{ $t('admin.appt.add') }}</h3>
           <button class="modal-close" @click="showCreate = false"><AppIcon name="close" :size="16" /></button>
         </div>
         <div class="modal-body">
           <div class="form-item">
-            <label>用户 <i>*</i></label>
+            <label>{{ $t('admin.appt.th.user') }} <i>*</i></label>
             <select v-model.number="createForm.user_id">
-              <option :value="0" disabled>选择用户</option>
+              <option :value="0" disabled>{{ $t('admin.appt.pickUser') }}</option>
               <option v-for="u in userOptions" :key="u.id" :value="u.id">
-                {{ u.username }}（{{ u.email }}）
+                {{ $t('admin.appt.userOption', { name: u.username, email: u.email }) }}
               </option>
             </select>
           </div>
           <div class="form-item">
-            <label>专家 <i>*</i></label>
+            <label>{{ $t('admin.appt.th.doctor') }} <i>*</i></label>
             <select v-model.number="createForm.doctor_id">
-              <option :value="0" disabled>选择专家</option>
+              <option :value="0" disabled>{{ $t('admin.appt.pickDoctor') }}</option>
               <option v-for="d in doctorOptions" :key="d.id" :value="d.id">
-                {{ d.name }}｜{{ d.title }}
+                {{ $t('admin.appt.doctorOption', { name: d.name, title: d.title }) }}
               </option>
             </select>
           </div>
           <div class="form-item">
-            <label>初始状态</label>
+            <label>{{ $t('admin.appt.fStatus') }}</label>
             <select v-model="createForm.status">
-              <option value="pending">待确认</option>
-              <option value="confirmed">已确认</option>
-              <option value="completed">已完成</option>
-              <option value="cancelled">已取消</option>
+              <option value="pending">{{ $t('admin.appt.stPending') }}</option>
+              <option value="confirmed">{{ $t('admin.appt.stConfirmed') }}</option>
+              <option value="completed">{{ $t('admin.appt.stCompleted') }}</option>
+              <option value="cancelled">{{ $t('admin.appt.stCancelled') }}</option>
             </select>
           </div>
         </div>
         <div class="modal-foot">
-          <button class="btn-ghost" @click="showCreate = false">取消</button>
+          <button class="btn-ghost" @click="showCreate = false">{{ $t('admin.appt.cancel') }}</button>
           <button class="btn-primary" :disabled="creating" @click="submitCreate">
-            {{ creating ? '创建中...' : '创建预约' }}
+            {{ creating ? $t('admin.appt.creating') : $t('admin.appt.create') }}
           </button>
         </div>
       </div>
@@ -106,11 +106,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getAllAppointments, createAppointment, deleteAppointment, getUserList } from '@/api/admin'
 import { getDoctors } from '@/api/user'
 import { success, error, confirm } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const appointments = ref<any[]>([])
 const userOptions = ref<any[]>([])
 const doctorOptions = ref<any[]>([])
@@ -138,17 +140,17 @@ const openCreate = async () => {
 
 const submitCreate = async () => {
   if (!createForm.value.user_id || !createForm.value.doctor_id) {
-    await error('请选择用户和专家')
+    await error(t('admin.appt.errPick'))
     return
   }
   try {
     creating.value = true
     await createAppointment(createForm.value)
-    await success('预约创建成功')
+    await success(t('admin.appt.created'))
     showCreate.value = false
     await loadAppointments()
   } catch (e: any) {
-    await error(e.message || '创建失败')
+    await error(e.message || t('admin.appt.createFailed'))
   } finally {
     creating.value = false
   }
@@ -156,26 +158,26 @@ const submitCreate = async () => {
 
 const removeAppointment = async (apt: any) => {
   const ok = await confirm(
-    `确定删除预约 #${apt.id}（${apt.user_name} → ${apt.doctor_name}）吗？删除后不可恢复。`,
-    '删除预约'
+    t('admin.appt.confirmDelete', { id: apt.id, user: apt.user_name, doctor: apt.doctor_name }),
+    t('admin.appt.confirmDeleteTitle')
   )
   if (!ok) return
   try {
     await deleteAppointment(apt.id)
-    await success('预约已删除')
+    await success(t('admin.appt.deleted'))
     await loadAppointments()
   } catch (e: any) {
-    await error(e.message || '删除失败')
+    await error(e.message || t('admin.appt.deleteFailed'))
   }
 }
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '待确认',
-    confirmed: '已确认',
-    completed: '已完成',
-    cancelled: '已取消',
-    rejected: '已拒绝'
+    pending: t('admin.appt.stPending'),
+    confirmed: t('admin.appt.stConfirmed'),
+    completed: t('admin.appt.stCompleted'),
+    cancelled: t('admin.appt.stCancelled'),
+    rejected: t('admin.appt.stRejected')
   }
   return map[status] || status
 }

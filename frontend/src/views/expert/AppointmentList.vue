@@ -3,37 +3,37 @@
     <div class="list-header">
       <h3>
         <AppIcon name="clipboard" :size="17" />
-        预约管理
+        {{ $t('expert.appt.title') }}
       </h3>
       <div class="header-actions">
         <span class="online-indicator" :class="{ online: isSocketConnected }">
           <span class="status-dot" :class="{ online: isSocketConnected }"></span>
-          {{ isSocketConnected ? '实时连接' : '离线' }}
+          {{ isSocketConnected ? $t('expert.appt.online') : $t('expert.appt.offline') }}
         </span>
         <button class="btn-refresh" @click="loadAppointments" :disabled="loading">
           <AppIcon name="refresh" :size="14" />
-          {{ loading ? '刷新中...' : '刷新' }}
+          {{ loading ? $t('expert.appt.refreshing') : $t('expert.appt.refresh') }}
         </button>
       </div>
     </div>
 
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
-      <span>加载中...</span>
+      <span>{{ $t('expert.appt.loading') }}</span>
     </div>
 
     <div v-else-if="appointments.length === 0" class="empty-state">
       <AppIcon name="list" :size="28" />
-      <p>暂无预约记录</p>
+      <p>{{ $t('expert.appt.empty') }}</p>
     </div>
 
     <div v-else class="appointment-table">
       <div class="table-header">
-        <span>预约人</span>
-        <span>联系方式</span>
-        <span>预约时间</span>
-        <span>状态</span>
-        <span>操作</span>
+        <span>{{ $t('expert.appt.colUser') }}</span>
+        <span>{{ $t('expert.appt.colContact') }}</span>
+        <span>{{ $t('expert.appt.colTime') }}</span>
+        <span>{{ $t('expert.appt.colStatus') }}</span>
+        <span>{{ $t('expert.appt.colAction') }}</span>
       </div>
 
       <div
@@ -48,7 +48,7 @@
         </div>
 
         <div class="cell contact">
-          <span>{{ item.user_phone || '未填写' }}</span>
+          <span>{{ item.user_phone || $t('expert.appt.notFilled') }}</span>
         </div>
 
         <div class="cell time">
@@ -65,16 +65,16 @@
           <button
             v-if="item.status === 'pending'"
             class="btn-action confirm"
-            @click.stop="handleUpdate(item.id, 'confirmed', '预约已确认')"
+            @click.stop="handleUpdate(item.id, 'confirmed', 'expert.appt.confirmedMsg')"
           >
-            确认
+            {{ $t('expert.appt.confirm') }}
           </button>
           <button
             v-if="item.status === 'pending'"
             class="btn-action reject"
-            @click.stop="handleUpdate(item.id, 'rejected', '已拒绝该预约')"
+            @click.stop="handleUpdate(item.id, 'rejected', 'expert.appt.rejectedMsg')"
           >
-            拒绝
+            {{ $t('expert.appt.reject') }}
           </button>
           <button
             v-if="item.status === 'confirmed'"
@@ -82,21 +82,21 @@
             @click.stop="emit('view-detail', item.id)"
           >
             <AppIcon name="chat" :size="13" />
-            进入聊天
+            {{ $t('expert.appt.enterChat') }}
           </button>
           <button
             v-if="item.status === 'confirmed'"
             class="btn-action reject"
-            @click.stop="handleUpdate(item.id, 'cancelled', '预约已取消')"
+            @click.stop="handleUpdate(item.id, 'cancelled', 'expert.appt.cancelledMsg')"
           >
-            取消
+            {{ $t('expert.appt.cancel') }}
           </button>
           <button
             v-if="item.status === 'completed'"
             class="btn-action view"
             @click.stop="emit('view-detail', item.id)"
           >
-            查看
+            {{ $t('expert.appt.view') }}
           </button>
           <span v-if="item.status === 'cancelled' || item.status === 'rejected'" class="status-tip">—</span>
         </div>
@@ -107,6 +107,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getExpertAppointments, updateAppointmentStatus } from '@/api/expert'
@@ -120,6 +121,8 @@ const emit = defineEmits<{
   (e: 'view-detail', id: number): void
 }>()
 
+const { t } = useI18n()
+
 const userStore = useUserStore()
 const appointments = ref<any[]>([])
 const loading = ref(false)
@@ -129,11 +132,11 @@ const recentlyUpdated = ref<Set<number>>(new Set())
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '待确认',
-    confirmed: '已确认',
-    completed: '已完成',
-    cancelled: '已取消',
-    rejected: '已拒绝'
+    pending: t('expert.appt.statusPending'),
+    confirmed: t('expert.appt.statusConfirmed'),
+    completed: t('expert.appt.statusCompleted'),
+    cancelled: t('expert.appt.statusCancelled'),
+    rejected: t('expert.appt.statusRejected')
   }
   return map[status] || status
 }
@@ -164,17 +167,17 @@ const loadAppointments = async () => {
 const handleUpdate = async (id: number, status: string, successMsg: string) => {
   if (status === 'cancelled' || status === 'rejected') {
     const ok = await confirm(
-      status === 'rejected' ? '确定拒绝该预约吗？用户端将看到「已拒绝」。' : '确定取消该预约吗？用户端会同步收到通知。',
-      status === 'rejected' ? '拒绝预约' : '取消预约'
+      status === 'rejected' ? t('expert.appt.confirmReject') : t('expert.appt.confirmCancel'),
+      status === 'rejected' ? t('expert.appt.titleReject') : t('expert.appt.titleCancel')
     )
     if (!ok) return
   }
   try {
     await updateAppointmentStatus(id, status)
-    await success(successMsg)
+    await success(t(successMsg))
     updateLocalStatus(id, status)
   } catch (e: any) {
-    await error(e.message || '操作失败')
+    await error(e.message || t('expert.appt.opFailed'))
   }
 }
 
@@ -236,7 +239,7 @@ const setupListeners = (sock: Socket) => {
     console.log('收到预约更新:', data)
     if (data.updaterId !== userStore.userInfo?.id) {
       loadAppointments()
-      showToast('预约状态更新', `预约 #${data.appointmentId} 状态变更为「${data.status}」`, true)
+      showToast(t('expert.appt.toastTitle'), t('expert.appt.toastStatusChanged', { id: data.appointmentId, status: data.status }), true)
     } else {
       updateLocalStatus(data.appointmentId, data.status)
     }

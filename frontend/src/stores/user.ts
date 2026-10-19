@@ -6,6 +6,7 @@ import {
 } from '@/api/user'
 import { setAuthToken, clearAuthToken } from '@/api/request'
 import { secureSet, secureRemove } from '@/utils/secureStore'
+import { i18n } from '@/i18n'
 
 // 会话写入本地加密文件（重启后免登录）
 function persistSession(store: { token: string; onlyId: string; fixedId?: string; userInfo: unknown }) {
@@ -183,13 +184,13 @@ export const useUserStore = defineStore('user', {
         input.onchange = async (e) => {
           const file = (e.target as HTMLInputElement).files?.[0]
           if (!file) {
-            resolve({ success: false, message: '未选择文件' })
+            resolve({ success: false, message: i18n.global.t('core.store.noFileSelected') })
             return
           }
 
           // 限制原始文件 10MB（压缩后远小于此，仅拦截异常大文件）
           if (file.size > 10 * 1024 * 1024) {
-            resolve({ success: false, message: '图片大小不能超过10MB' })
+            resolve({ success: false, message: i18n.global.t('core.store.imageTooLarge') })
             return
           }
 
@@ -200,7 +201,7 @@ export const useUserStore = defineStore('user', {
             const res = await this.updateAvatar(base64)
             resolve(res)
           } catch (err: any) {
-            resolve({ success: false, message: err?.message || '头像更新失败' })
+            resolve({ success: false, message: err?.message || i18n.global.t('core.store.avatarUpdateFailed') })
           }
         }
 
@@ -293,10 +294,10 @@ export const useUserStore = defineStore('user', {
 function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.onerror = () => reject(new Error(i18n.global.t('core.store.imageReadFailed')))
     reader.onload = () => {
       const img = new Image()
-      img.onerror = () => reject(new Error('图片解析失败'))
+      img.onerror = () => reject(new Error(i18n.global.t('core.store.imageParseFailed')))
       img.onload = () => {
         const MAX = 256
         const scale = Math.min(1, MAX / Math.max(img.width, img.height))
@@ -308,7 +309,7 @@ function compressImage(file: File): Promise<string> {
         canvas.height = h
         const ctx = canvas.getContext('2d')
         if (!ctx) {
-          reject(new Error('画布不可用'))
+          reject(new Error(i18n.global.t('core.store.canvasUnavailable')))
           return
         }
         ctx.drawImage(img, 0, 0, w, h)

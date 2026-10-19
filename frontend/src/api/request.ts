@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { API_BASE } from '@/config'
 import { secureRemove } from '@/utils/secureStore'
+import { i18n } from '@/i18n'
 
 const request = axios.create({
   baseURL: API_BASE,
@@ -52,20 +53,20 @@ request.interceptors.response.use(
   response => {
     const res = response.data
     if (!res || typeof res !== 'object') {
-      return Promise.reject(new Error('服务器返回格式错误'))
+      return Promise.reject(new Error(i18n.global.t('core.api.badResponse')))
     }
 
     if (!res.success) {
       if (res.code === 'SESSION_EXPIRED') {
         void handleSessionExpired()
       }
-      return Promise.reject(new Error(res.message || '请求失败'))
+      return Promise.reject(new Error(res.message || i18n.global.t('core.api.requestFailed')))
     }
-    return res  
+    return res
   },
   async err => {
     const status = err.response?.status
-    const message = err.response?.data?.message || err.message || '请求失败'
+    const message = err.response?.data?.message || err.message || i18n.global.t('core.api.requestFailed')
 
     if (status === 401) {
       // 认证类接口自身的 401（如登录时密码错误）是业务结果，不是会话过期：
@@ -75,11 +76,14 @@ request.interceptors.response.use(
         return Promise.reject(new Error(message))
       }
       void handleSessionExpired()
-      return Promise.reject(new Error('登录已过期'))
+      // authExpired 为机读标记：路由守卫凭它判定会话过期，不依赖文案语言
+      const e: any = new Error(i18n.global.t('core.api.sessionExpired'))
+      e.authExpired = true
+      return Promise.reject(e)
     }
 
     if (status === 429) {
-      return Promise.reject(new Error('请求过于频繁，请稍后再试'))
+      return Promise.reject(new Error(i18n.global.t('core.api.tooManyRequests')))
     }
 
     return Promise.reject(new Error(message))

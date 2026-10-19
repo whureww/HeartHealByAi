@@ -5,9 +5,9 @@
         <div class="dialog-header">
           <h3>
             <AppIcon name="lock" :size="16" />
-            修改密码
+            {{ $t('ui.changePwd.title') }}
           </h3>
-          <button class="btn-close" @click="onCancel" title="关闭">
+          <button class="btn-close" @click="onCancel" :title="$t('ui.close')">
             <AppIcon name="close" :size="16" />
           </button>
         </div>
@@ -16,21 +16,21 @@
           <!-- 步骤1：验证邮箱 -->
           <div v-if="step === 1" class="step-content">
             <div class="form-group">
-              <label>邮箱地址</label>
+              <label>{{ $t('ui.changePwd.emailLabel') }}</label>
               <input
                 v-model="form.email"
                 type="email"
-                placeholder="请输入注册邮箱"
+                :placeholder="$t('ui.changePwd.emailPlaceholder')"
                 :disabled="isLoading"
               />
             </div>
             <div class="form-group">
-              <label>验证码</label>
+              <label>{{ $t('common.code') }}</label>
               <div class="code-row">
                 <input
                   v-model="form.code"
                   type="text"
-                  placeholder="请输入验证码"
+                  :placeholder="$t('ui.changePwd.codePlaceholder')"
                   maxlength="6"
                   :disabled="isLoading"
                 />
@@ -39,25 +39,25 @@
                   :disabled="codeCountdown > 0 || isLoading || !form.email"
                   @click="sendCode"
                 >
-                  {{ codeCountdown > 0 ? `${codeCountdown}s后重发` : '获取验证码' }}
+                  {{ codeCountdown > 0 ? $t('common.resendIn', { sec: codeCountdown }) : $t('ui.changePwd.getCode') }}
                 </button>
               </div>
             </div>
             <div class="form-group">
-              <label>新密码</label>
+              <label>{{ $t('ui.changePwd.newPwdLabel') }}</label>
               <input
                 v-model="form.newPassword"
                 type="password"
-                placeholder="请输入新密码（至少6位）"
+                :placeholder="$t('ui.changePwd.newPwdPlaceholder')"
                 :disabled="isLoading"
               />
             </div>
             <div class="form-group">
-              <label>确认新密码</label>
+              <label>{{ $t('ui.changePwd.confirmPwdLabel') }}</label>
               <input
                 v-model="form.confirmPassword"
                 type="password"
-                placeholder="请再次输入新密码"
+                :placeholder="$t('ui.changePwd.confirmPwdPlaceholder')"
                 :disabled="isLoading"
               />
             </div>
@@ -68,14 +68,14 @@
             <div class="success-icon">
               <AppIcon name="check" :size="44" :stroke="1.8" />
             </div>
-            <h4>密码修改成功</h4>
-            <p>请使用新密码重新登录</p>
+            <h4>{{ $t('ui.changePwd.successTitle') }}</h4>
+            <p>{{ $t('ui.changePwd.successMsg') }}</p>
           </div>
         </div>
 
         <div class="dialog-footer">
           <button v-if="step === 1" class="btn-cancel" @click="onCancel" :disabled="isLoading">
-            取消
+            {{ $t('ui.dialog.cancel') }}
           </button>
           <button
             v-if="step === 1"
@@ -84,10 +84,10 @@
             @click="onSubmit"
           >
             <span v-if="isLoading" class="spinner"></span>
-            <span v-else>确认修改</span>
+            <span v-else>{{ $t('ui.changePwd.submit') }}</span>
           </button>
           <button v-else class="btn-confirm" @click="onFinish">
-            确定
+            {{ $t('ui.dialog.confirm') }}
           </button>
         </div>
       </div>
@@ -97,9 +97,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { sendResetCode, resetPassword } from '@/api/user'
 import { alert, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
+
+const { t } = useI18n()
 
 const visible = ref(false)
 const step = ref(1)
@@ -146,20 +149,20 @@ const hide = () => {
 
 const sendCode = async () => {
   if (!form.value.email) {
-    await alert('请输入邮箱地址')
+    await alert(t('ui.changePwd.emailRequired'))
     return
   }
 
   const emailRegex = /^[^\\s@]+@[^\\s@]+\.[^\\s@]+$/
   if (!emailRegex.test(form.value.email)) {
-    await alert('请输入有效的邮箱地址')
+    await alert(t('ui.changePwd.emailInvalid'))
     return
   }
 
   isLoading.value = true
   try {
     await sendResetCode({ email: form.value.email })
-    await success('验证码已发送，请查收邮件')
+    await success(t('ui.changePwd.codeSent'))
     codeCountdown.value = 60
     countdownTimer = setInterval(() => {
       codeCountdown.value--
@@ -169,7 +172,7 @@ const sendCode = async () => {
       }
     }, 1000)
   } catch (e: any) {
-    await error(e?.response?.data?.message || '发送验证码失败')
+    await error(e?.response?.data?.message || t('ui.changePwd.sendCodeFailed'))
   } finally {
     isLoading.value = false
   }
@@ -179,7 +182,7 @@ const onSubmit = async () => {
   if (!canSubmit.value) return
 
   if (form.value.newPassword !== form.value.confirmPassword) {
-    await alert('两次输入的密码不一致')
+    await alert(t('ui.changePwd.pwdMismatch'))
     return
   }
 
@@ -192,7 +195,7 @@ const onSubmit = async () => {
     })
     step.value = 2
   } catch (e: any) {
-    await error(e?.response?.data?.message || '密码修改失败')
+    await error(e?.response?.data?.message || t('ui.changePwd.failed'))
   } finally {
     isLoading.value = false
   }

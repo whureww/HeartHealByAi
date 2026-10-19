@@ -1,4 +1,5 @@
 import { type ComponentPublicInstance } from 'vue'
+import { i18n } from '@/i18n'
 
 let dialogInstance: ComponentPublicInstance | null = null
 let callCount = 0
@@ -25,8 +26,8 @@ export async function showDialog(options: {
 
   const safeOptions = {
     ...options,
-    title: String(options?.title || '提示'),
-    message: String(options?.message || '未知错误')
+    title: String(options?.title || i18n.global.t('core.dialog.info')),
+    message: String(options?.message || i18n.global.t('core.dialog.unknownError'))
   }
 
   callCount++
@@ -49,17 +50,17 @@ export async function showDialog(options: {
 }
 
 export const alert = (message: string, title?: string) => {
-  return showDialog({ title: title || '提示', message: String(message || ''), type: 'info' })
+  return showDialog({ title: title || i18n.global.t('core.dialog.info'), message: String(message || ''), type: 'info' })
 }
 
 export const confirm = (message: string, title?: string) => {
-  return showDialog({ title: title || '确认', message: String(message || ''), type: 'warning', showCancel: true })
+  return showDialog({ title: title || i18n.global.t('core.dialog.confirm'), message: String(message || ''), type: 'warning', showCancel: true })
 }
 
 export const success = (message: string, title?: string) => {
-  return showDialog({ title: title || '成功', message: String(message || ''), type: 'success' })
+  return showDialog({ title: title || i18n.global.t('core.dialog.success'), message: String(message || ''), type: 'success' })
 }
 
 export const error = (message: string, title?: string) => {
-  return showDialog({ title: title || '错误', message: String(message || '未知错误'), type: 'error' })
+  return showDialog({ title: title || i18n.global.t('core.dialog.error'), message: String(message || i18n.global.t('core.dialog.unknownError')), type: 'error' })
 }

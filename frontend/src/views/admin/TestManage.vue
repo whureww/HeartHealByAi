@@ -2,12 +2,12 @@
   <div class="page-container">
     <div class="page-header">
       <div>
-        <h2>问卷管理</h2>
-        <p class="subtitle">管理系统心理测评问卷</p>
+        <h2>{{ $t('admin.test.title') }}</h2>
+        <p class="subtitle">{{ $t('admin.test.subtitle') }}</p>
       </div>
       <button class="btn-primary" @click="$router.push('/admin/tests/edit')">
         <AppIcon name="plus" :size="15" />
-        新建问卷
+        {{ $t('admin.test.create') }}
       </button>
     </div>
 
@@ -18,7 +18,7 @@
         :class="{ active: currentStatus === tab.value }"
         @click="currentStatus = tab.value; loadTests()"
       >
-        {{ tab.label }}
+        {{ $t(tab.labelKey) }}
       </button>
     </div>
 
@@ -27,12 +27,12 @@
         <thead>
           <tr>
             <th>ID</th>
-            <th>问卷名称</th>
-            <th>分类</th>
-            <th>题目数</th>
-            <th>状态</th>
-            <th>创建时间</th>
-            <th>操作</th>
+            <th>{{ $t('admin.test.th.name') }}</th>
+            <th>{{ $t('admin.test.th.category') }}</th>
+            <th>{{ $t('admin.test.th.questions') }}</th>
+            <th>{{ $t('admin.test.th.status') }}</th>
+            <th>{{ $t('admin.test.th.createdAt') }}</th>
+            <th>{{ $t('admin.test.th.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -47,7 +47,7 @@
             <td>
               <span class="category-tag">{{ categoryText(test.category) }}</span>
             </td>
-            <td class="num-cell">{{ test.total_questions }} 题</td>
+            <td class="num-cell">{{ $t('admin.test.questionCount', { n: test.total_questions }) }}</td>
             <td>
               <span :class="['status-tag', `status-${test.status}`]">
                 {{ statusText(test.status) }}
@@ -62,7 +62,7 @@
                   @click="updateStatus(test.id, 1)"
                 >
                   <AppIcon name="upload" :size="13" />
-                  上架
+                  {{ $t('admin.test.publish') }}
                 </button>
                 <button
                   v-if="test.status === 1"
@@ -70,7 +70,7 @@
                   @click="updateStatus(test.id, 2)"
                 >
                   <AppIcon name="download" :size="13" />
-                  下架
+                  {{ $t('admin.test.unpublish') }}
                 </button>
                 <button
                   v-if="test.status === 2"
@@ -78,21 +78,21 @@
                   @click="updateStatus(test.id, 1)"
                 >
                   <AppIcon name="refresh" :size="13" />
-                  重新上架
+                  {{ $t('admin.test.republish') }}
                 </button>
                 <button
                   class="btn-action"
                   @click="$router.push(`/admin/tests/edit/${test.id}`)"
                 >
                   <AppIcon name="edit" :size="13" />
-                  编辑
+                  {{ $t('admin.test.editBtn') }}
                 </button>
                 <button
                   class="btn-action btn-action-danger"
                   @click="deleteTest(test.id)"
                 >
                   <AppIcon name="trash" :size="13" />
-                  删除
+                  {{ $t('admin.test.delete') }}
                 </button>
               </div>
             </td>
@@ -100,7 +100,7 @@
           <tr v-if="tests.length === 0">
             <td colspan="7" class="empty-cell">
               <AppIcon name="list" :size="28" />
-              <p>暂无问卷数据</p>
+              <p>{{ $t('admin.test.empty') }}</p>
             </td>
           </tr>
         </tbody>
@@ -111,31 +111,33 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import request from '@/api/request'
 import { confirm, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const tests = ref<any[]>([])
 const currentStatus = ref<number | undefined>(undefined)
 
 const tabs = [
-  { label: '全部', value: undefined },
-  { label: '待审核', value: 0 },
-  { label: '已上架', value: 1 },
-  { label: '已下架', value: 2 }
+  { labelKey: 'admin.test.tabAll', value: undefined },
+  { labelKey: 'admin.test.stPending', value: 0 },
+  { labelKey: 'admin.test.stOn', value: 1 },
+  { labelKey: 'admin.test.stOff', value: 2 }
 ]
 
 const statusText = (status: number) => {
-  const map: Record<number, string> = { 0: '待审核', 1: '已上架', 2: '已下架' }
-  return map[status] || '未知'
+  const map: Record<number, string> = { 0: t('admin.test.stPending'), 1: t('admin.test.stOn'), 2: t('admin.test.stOff') }
+  return map[status] || t('admin.test.unknown')
 }
 
 const categoryText = (cat: string) => {
   const map: Record<string, string> = {
-    emotion: '情绪测评',
-    stress: '压力测评',
-    personality: '人格测评',
-    cognitive: '认知测评'
+    emotion: t('admin.test.catEmotion'),
+    stress: t('admin.test.catStress'),
+    personality: t('admin.test.catPersonality'),
+    cognitive: t('admin.test.catCognitive')
   }
   return map[cat] || cat
 }
@@ -152,30 +154,30 @@ const loadTests = async () => {
     const res = await request.get('/admin/tests', { params }) as any
     tests.value = res.data
   } catch (e: any) {
-    await error(e.message || '加载问卷列表失败')
+    await error(e.message || t('admin.test.loadFailed'))
   }
 }
 
 const updateStatus = async (id: number, status: number) => {
   try {
     await request.put(`/admin/tests/${id}/status`, { status })
-    await success('状态更新成功')
+    await success(t('admin.test.statusUpdated'))
     loadTests()
   } catch (e: any) {
-    await error(e.message || '更新失败')
+    await error(e.message || t('admin.test.updateFailed'))
   }
 }
 
 const deleteTest = async (id: number) => {
-  const ok = await confirm('确定删除该问卷？此操作不可恢复。', '确认删除')
+  const ok = await confirm(t('admin.test.confirmDelete'), t('admin.test.confirmDeleteTitle'))
   if (!ok) return
 
   try {
     await request.delete(`/admin/tests/${id}`)
-    await success('删除成功')
+    await success(t('admin.test.deleted'))
     loadTests()
   } catch (e: any) {
-    await error(e.message || '删除失败')
+    await error(e.message || t('admin.test.deleteFailed'))
   }
 }
 

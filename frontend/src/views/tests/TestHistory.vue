@@ -3,9 +3,9 @@
     <div class="header">
       <button class="btn-back" @click="onGoBack">
         <AppIcon name="back" :size="15" />
-        返回
+        {{ $t('tests.back') }}
       </button>
-      <h2>测评历史</h2>
+      <h2>{{ $t('tests.history') }}</h2>
     </div>
 
     <div class="history-list" v-if="history.length > 0">
@@ -20,7 +20,7 @@
           <span class="time">{{ formatTime(item.completed_at) }}</span>
         </div>
         <div class="history-result">
-          <span class="score">{{ item.total_score }}分</span>
+          <span class="score">{{ $t('tests.points', { n: item.total_score }) }}</span>
           <span class="level" :class="getLevelClass(item.result_level)">
             {{ item.result_level }}
           </span>
@@ -30,18 +30,20 @@
     </div>
 
     <div v-else class="empty">
-      <p>暂无测评记录</p>
-      <button class="btn-go" @click="onGoBack">去测评</button>
+      <p>{{ $t('tests.noHistory') }}</p>
+      <button class="btn-go" @click="onGoBack">{{ $t('tests.goTest') }}</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getTestHistory } from '@/api/tests'
 import { error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
+const { t } = useI18n()
 const emit = defineEmits(['go-back', 'view-detail'])
 
 const history = ref<any[]>([])
@@ -51,7 +53,7 @@ onMounted(async () => {
     const res = await getTestHistory()
     history.value = res.data || []
   } catch (e: any) {
-    error(e?.message || '获取历史记录失败')
+    error(e?.message || t('tests.loadHistoryFailed'))
   }
 })
 

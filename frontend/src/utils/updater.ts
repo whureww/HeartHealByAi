@@ -7,6 +7,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { isTauri } from '@/utils/secureStore'
+import { i18n } from '@/i18n'
 
 export interface UpdateInfo {
   has_update: boolean
@@ -31,7 +32,7 @@ export type UpdatePhase =
 
 /** 检查更新：返回最新版本信息（无网络/解析失败时抛错） */
 export function checkUpdate(): Promise<UpdateInfo> {
-  if (!isTauri()) return Promise.reject(new Error('仅桌面端支持检查更新'))
+  if (!isTauri()) return Promise.reject(new Error(i18n.global.t('core.update.desktopOnly')))
   return invoke<UpdateInfo>('check_update')
 }
 

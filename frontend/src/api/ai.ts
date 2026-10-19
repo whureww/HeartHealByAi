@@ -1,5 +1,6 @@
 import request from './request'
 import { API_BASE, getAuthToken } from '@/config'
+import { i18n } from '@/i18n'
 
 export interface AIChatResponse {
   success: boolean
@@ -38,12 +39,12 @@ export const chatWithAIStream = (
     body: JSON.stringify({ messages, context })
   }).then(response => {
     if (!response.ok) {
-      throw new Error('网络请求失败')
+      throw new Error(i18n.global.t('core.api.networkFailed'))
     }
 
     const reader = response.body?.getReader()
     if (!reader) {
-      throw new Error('无法读取响应流')
+      throw new Error(i18n.global.t('core.api.streamUnavailable'))
     }
 
     const decoder = new TextDecoder()

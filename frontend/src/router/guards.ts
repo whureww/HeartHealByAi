@@ -14,7 +14,9 @@ export function setupGuards(router: Router) {
       // 按错误类型分流：会话过期（拦截器抛出）立即登出；
       // 仅真网络抖动（如 "Network Error"）时静默重试一次，避免偶发断网直接踢回登录页
       const fetchInfo = () => userStore.getInfo()
-      const isAuthError = (e: unknown) => /过期|401/.test(String((e as Error)?.message || ''))
+      // 会话过期判定：优先凭拦截器打的 authExpired 机读标记（与语言无关），
+      // 兼容旧路径：错误文案含"过期/401"（服务器下发的中文文案）也视为认证错误
+      const isAuthError = (e: unknown) => (e as any)?.authExpired === true || /过期|401/.test(String((e as Error)?.message || ''))
       try {
         await fetchInfo()
       } catch (e) {

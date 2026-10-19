@@ -2,45 +2,45 @@
   <div class="page-container">
     <div class="page-header">
       <div>
-        <h2>我的名片</h2>
-        <p class="subtitle">编辑你的专家名片，提交后由管理员审核决定是否显示在专家列表</p>
+        <h2>{{ $t('expert.card.title') }}</h2>
+        <p class="subtitle">{{ $t('expert.card.subtitle') }}</p>
       </div>
       <span :class="['status-tag', statusClass]">{{ statusText }}</span>
     </div>
 
     <div class="card-panel">
       <div class="form-item">
-        <label>专家姓名 <i>*</i></label>
-        <input v-model="form.name" maxlength="50" placeholder="展示给用户的名字" />
+        <label>{{ $t('expert.card.name') }} <i>*</i></label>
+        <input v-model="form.name" maxlength="50" :placeholder="$t('expert.card.namePh')" />
       </div>
       <div class="form-item">
-        <label>职称</label>
-        <input v-model="form.title" maxlength="50" placeholder="如：国家二级心理咨询师" />
+        <label>{{ $t('expert.card.jobTitle') }}</label>
+        <input v-model="form.title" maxlength="50" :placeholder="$t('expert.card.jobTitlePh')" />
       </div>
       <div class="form-item">
-        <label>专长领域</label>
-        <input v-model="form.specialty" maxlength="200" placeholder="如：情绪困扰 / 亲密关系 / 学业压力" />
+        <label>{{ $t('expert.card.specialty') }}</label>
+        <input v-model="form.specialty" maxlength="200" :placeholder="$t('expert.card.specialtyPh')" />
       </div>
       <div class="form-item">
-        <label>个人简介</label>
-        <textarea v-model="form.intro" rows="5" maxlength="500" placeholder="向用户介绍你的咨询风格与经验（500 字以内）"></textarea>
+        <label>{{ $t('expert.card.intro') }}</label>
+        <textarea v-model="form.intro" rows="5" maxlength="500" :placeholder="$t('expert.card.introPh')"></textarea>
         <span class="char-count">{{ (form.intro || '').length }}/500</span>
       </div>
 
       <div class="form-actions">
         <button class="btn-primary" :disabled="saving" @click="submit">
-          {{ saving ? '提交中...' : (card?.status === 2 ? '重新提交审核' : '保存并提交审核') }}
+          {{ saving ? $t('expert.card.submitting') : (card?.status === 2 ? $t('expert.card.resubmit') : $t('expert.card.saveSubmit')) }}
         </button>
       </div>
 
       <p v-if="card?.status === 1" class="status-hint ok">
-        名片已上架。修改任何内容后将重新进入审核，期间从专家列表暂时下架。
+        {{ $t('expert.card.hintOn') }}
       </p>
       <p v-else-if="card?.status === 2" class="status-hint pending">
-        名片正在审核中，通过后将显示在专家列表。
+        {{ $t('expert.card.hintReview') }}
       </p>
       <p v-else class="status-hint off">
-        名片当前未上架，完善信息并提交审核后即可展示。
+        {{ $t('expert.card.hintOff') }}
       </p>
     </div>
   </div>
@@ -48,16 +48,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getMyCard, saveMyCard } from '@/api/expert'
 import { success, error } from '@/utils/dialog'
+
+const { t } = useI18n()
 
 const card = ref<any>(null)
 const form = ref({ name: '', title: '', specialty: '', intro: '' })
 const saving = ref(false)
 
 const statusText = computed(() => {
-  if (!card.value) return '未创建'
-  return ({ 0: '未上架', 1: '已上架', 2: '审核中' } as Record<number, string>)[card.value.status] ?? '未知'
+  if (!card.value) return t('expert.card.stNotCreated')
+  return ({ 0: t('expert.card.stOff'), 1: t('expert.card.stOn'), 2: t('expert.card.stReview') } as Record<number, string>)[card.value.status] ?? t('expert.card.stUnknown')
 })
 const statusClass = computed(() => {
   if (!card.value) return 'st-off'
@@ -77,22 +80,22 @@ const load = async () => {
       }
     }
   } catch (e: any) {
-    await error(e.message || '名片加载失败')
+    await error(e.message || t('expert.card.loadFailed'))
   }
 }
 
 const submit = async () => {
   if (!form.value.name.trim()) {
-    await error('请填写专家姓名')
+    await error(t('expert.card.nameRequired'))
     return
   }
   saving.value = true
   try {
     const res = await saveMyCard(form.value) as any
-    await success(res.message || '已提交审核')
+    await success(res.message || t('expert.card.submitted'))
     await load()
   } catch (e: any) {
-    await error(e.message || '提交失败')
+    await error(e.message || t('expert.card.submitFailed'))
   } finally {
     saving.value = false
   }

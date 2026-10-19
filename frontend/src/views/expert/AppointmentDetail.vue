@@ -5,22 +5,22 @@
       <div class="panel-card">
         <h3>
           <AppIcon name="user" :size="16" />
-          预约人信息
+          {{ $t('expert.detail.ownerInfo') }}
         </h3>
         <div class="info-item">
-          <span class="label">姓名：</span>
+          <span class="label">{{ $t('expert.detail.name') }}</span>
           <span>{{ appointment.user_name }}</span>
         </div>
         <div class="info-item">
-          <span class="label">邮箱：</span>
+          <span class="label">{{ $t('expert.detail.email') }}</span>
           <span>{{ appointment.user_email }}</span>
         </div>
         <div class="info-item">
-          <span class="label">手机：</span>
+          <span class="label">{{ $t('expert.detail.phone') }}</span>
           <span>{{ appointment.user_phone || '-' }}</span>
         </div>
         <div class="info-item">
-          <span class="label">状态：</span>
+          <span class="label">{{ $t('expert.detail.status') }}</span>
           <span :class="['status-tag', `status-${appointment.status}`]">
             {{ statusText(appointment.status) }}
           </span>
@@ -32,7 +32,7 @@
             @click="updateStatus('confirmed')"
           >
             <AppIcon name="check" :size="14" />
-            确认预约
+            {{ $t('expert.detail.confirmBtn') }}
           </button>
           <button
             v-if="appointment.status === 'confirmed'"
@@ -40,7 +40,7 @@
             @click="updateStatus('completed')"
           >
             <AppIcon name="check" :size="14" />
-            标记完成
+            {{ $t('expert.detail.completeBtn') }}
           </button>
         </div>
       </div>
@@ -48,18 +48,18 @@
       <div class="panel-card" v-if="testResults.length > 0">
         <h3>
           <AppIcon name="clipboard" :size="16" />
-          问卷结果
+          {{ $t('expert.detail.testResults') }}
         </h3>
         <div v-for="result in testResults" :key="result.id" class="result-item">
           <div class="result-header">
             <span class="test-name">{{ result.test_name }}</span>
-            <span class="test-score">{{ result.total_score }}分</span>
+            <span class="test-score">{{ $t('expert.detail.scoreVal', { n: result.total_score }) }}</span>
           </div>
           <div class="result-level">{{ result.result_level }}</div>
           <p class="result-desc">{{ result.result_desc }}</p>
           <button class="btn-view-detail" @click="openDetailModal(result)">
             <AppIcon name="search" :size="14" />
-            查看详细答案
+            {{ $t('expert.detail.viewAnswers') }}
           </button>
         </div>
       </div>
@@ -80,7 +80,7 @@
             @click="toggleReportMode"
           >
             <AppIcon name="warning" :size="13" />
-            {{ reportMode ? '退出举报' : '举报' }}
+            {{ reportMode ? $t('expert.detail.reportExit') : $t('expert.detail.report') }}
           </button>
           <div class="connection-status" :class="{ online: isOtherOnline, closed: isChatClosed }">
             <span v-if="isChatClosed" class="status-dot"></span>
@@ -116,22 +116,22 @@
           </div>
         </div>
         <div v-if="messages.length === 0" class="empty-chat">
-          暂无消息，开始聊天吧
+          {{ $t('expert.detail.emptyChat') }}
         </div>
       </div>
       <!-- 举报选择模式：底部操作条 -->
       <div v-if="reportMode" class="report-bar">
-        <span class="report-hint">点击对方的消息进行勾选（已选 {{ selectedIds.length }} 条）</span>
+        <span class="report-hint">{{ $t('expert.detail.reportHint', { n: selectedIds.length }) }}</span>
         <div class="report-actions">
-          <button class="report-cancel" @click="toggleReportMode">取消</button>
+          <button class="report-cancel" @click="toggleReportMode">{{ $t('expert.detail.cancel') }}</button>
           <button class="report-submit" :disabled="selectedIds.length === 0" @click="showReportPanel = true">
-            提交举报
+            {{ $t('expert.detail.submitReport') }}
           </button>
         </div>
       </div>
       <!-- 举报信息填写面板 -->
       <div v-if="showReportPanel" class="report-panel">
-        <div class="report-panel-title">举报对方的消息（{{ selectedIds.length }} 条）</div>
+        <div class="report-panel-title">{{ $t('expert.detail.reportPanelTitle', { n: selectedIds.length }) }}</div>
         <div class="report-reasons">
           <label v-for="r in REPORT_REASONS" :key="r" class="report-reason">
             <input type="radio" :value="r" v-model="reportReason" name="report-reason" />
@@ -143,19 +143,19 @@
           class="report-detail"
           rows="2"
           maxlength="500"
-          placeholder="补充说明（选填，可描述具体情况）"
+          :placeholder="$t('expert.detail.reportDetailPh')"
         ></textarea>
         <div class="report-panel-actions">
-          <button class="report-cancel" @click="closeReportPanel">返回</button>
+          <button class="report-cancel" @click="closeReportPanel">{{ $t('expert.detail.back') }}</button>
           <button class="report-submit" :disabled="reportSubmitting" @click="submitReport">
-            {{ reportSubmitting ? '提交中...' : '确认提交' }}
+            {{ reportSubmitting ? $t('expert.detail.submitting') : $t('expert.detail.confirmSubmit') }}
           </button>
         </div>
       </div>
       <!-- 已完成或已取消：显示禁止输入提示 -->
       <div v-if="isChatClosed" class="chat-closed-tip">
         <AppIcon name="lock" :size="14" />
-        <span>本次咨询已结束，无法继续发送消息</span>
+        <span>{{ $t('expert.detail.chatClosedTip') }}</span>
       </div>
       <!-- 被禁言：禁止输入提示（管理员处置实时生效） -->
       <div v-else-if="mutedInfo" class="chat-closed-tip muted-tip">
@@ -173,12 +173,12 @@
           v-model="newMessage"
           @keyup.enter="sendMessage"
           @input="precheckWarning = ''"
-          placeholder="输入消息..."
+          :placeholder="$t('expert.detail.inputPh')"
           :disabled="!isSelfConnected"
         />
         <button @click="sendMessage" :disabled="!isSelfConnected || !newMessage.trim()">
           <AppIcon name="send" :size="14" />
-          发送
+          {{ $t('expert.detail.send') }}
         </button>
       </div>
     </div>
@@ -189,15 +189,15 @@
         <div class="modal-header">
           <h3>
             <AppIcon name="clipboard" :size="16" />
-            {{ currentResult?.test_name }} - 详细答案
+            {{ currentResult?.test_name }} - {{ $t('expert.detail.answersTitle') }}
           </h3>
-          <button class="btn-close" @click="closeDetailModal" title="关闭">
+          <button class="btn-close" @click="closeDetailModal" :title="$t('expert.detail.close')">
             <AppIcon name="close" :size="16" />
           </button>
         </div>
         <div class="modal-body">
           <div class="result-summary">
-            <span class="score-badge">总分：{{ currentResult?.total_score }}分</span>
+            <span class="score-badge">{{ $t('expert.detail.totalScore', { n: currentResult?.total_score }) }}</span>
             <span class="level-badge" :class="`level-${getLevelType(currentResult?.result_level)}`">
               {{ currentResult?.result_level }}
             </span>
@@ -210,9 +210,9 @@
               class="question-card"
             >
               <div class="question-header">
-                <span class="q-num">第 {{ answer.no }} 题</span>
+                <span class="q-num">{{ $t('expert.detail.questionNo', { n: answer.no }) }}</span>
                 <span class="q-score" :class="{ 'high-score': answer.score >= 3 }">
-                  得分：{{ answer.score }}
+                  {{ $t('expert.detail.scoreIs', { n: answer.score }) }}
                 </span>
               </div>
 
@@ -232,19 +232,19 @@
                   </span>
                   <span class="opt-label">{{ opt.label }}</span>
                   <span class="opt-text">{{ opt.text }}</span>
-                  <span class="opt-score">{{ opt.score }}分</span>
+                  <span class="opt-score">{{ $t('expert.detail.scoreVal', { n: opt.score }) }}</span>
                 </div>
               </div>
 
               <div class="user-answer">
-                <span class="ua-label">用户选择：</span>
+                <span class="ua-label">{{ $t('expert.detail.userPick') }}</span>
                 <span class="ua-value">{{ getSelectedText(answer) }}</span>
               </div>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-close-modal" @click="closeDetailModal">关闭</button>
+          <button class="btn-close-modal" @click="closeDetailModal">{{ $t('expert.detail.close') }}</button>
         </div>
       </div>
     </div>
@@ -253,6 +253,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed, watch, shallowRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getAppointmentDetail, updateAppointmentStatus, getChatMessages } from '@/api/expert'
@@ -276,6 +277,7 @@ const emit = defineEmits<{
 }>()
 
 const userStore = useUserStore()
+const { t } = useI18n()
 const appointmentId = props.id
 const currentUserId = computed(() => userStore.userInfo?.id || 0)
 
@@ -287,9 +289,9 @@ const isUserView = computed(() => {
 // 聊天标题
 const chatTitle = computed(() => {
   if (isUserView.value) {
-    return `与 ${appointment.value.doctor_name || '专家'} 的会话`
+    return t('expert.detail.chatWithExpert', { name: appointment.value.doctor_name || t('expert.appt.fallbackExpert') })
   }
-  return `与 ${appointment.value.user_name || '用户'} 的会话`
+  return t('expert.detail.chatWithUser', { name: appointment.value.user_name || t('expert.appt.fallbackExpert') })
 })
 
 const otherUserId = ref<number>(0)
@@ -301,11 +303,17 @@ const newMessage = ref('')
 const precheckWarning = ref('')
 
 // ===== 聊天举报：选中对方消息 → 填写理由 → 提交管理员处置 =====
-const REPORT_REASONS = ['辱骂攻击', '骚扰', '广告推销', '色情低俗', '其他违规']
+const REPORT_REASONS = computed(() => [
+  t('expert.detail.reasonAbuse'),
+  t('expert.detail.reasonHarass'),
+  t('expert.detail.reasonAd'),
+  t('expert.detail.reasonPorn'),
+  t('expert.detail.reasonOther')
+])
 const reportMode = ref(false)
 const selectedIds = ref<number[]>([])
 const showReportPanel = ref(false)
-const reportReason = ref(REPORT_REASONS[0])
+const reportReason = ref('')
 const reportDetail = ref('')
 const reportSubmitting = ref(false)
 
@@ -322,6 +330,7 @@ function toggleReportMode() {
   reportMode.value = !reportMode.value
   selectedIds.value = []
   showReportPanel.value = false
+  reportReason.value = REPORT_REASONS.value[0]
 }
 function closeReportPanel() {
   showReportPanel.value = false
@@ -336,11 +345,11 @@ async function submitReport() {
       reason: reportReason.value,
       detail: reportDetail.value
     })
-    success('举报已提交，管理员会尽快核实处理')
+    success(t('expert.detail.reportSubmitted'))
     toggleReportMode()
     reportDetail.value = ''
   } catch (e: any) {
-    error(e?.message || '举报提交失败，请稍后重试')
+    error(e?.message || t('expert.detail.reportFailed'))
   } finally {
     reportSubmitting.value = false
   }
@@ -361,19 +370,19 @@ const isChatClosed = computed(() => {
 })
 
 const connectionStatusText = computed(() => {
-  if (isChatClosed.value) return '会话已结束'
-  if (!isSelfConnected.value) return '连接中...'
-  if (isOtherOnline.value) return '在线'
-  return '离线'
+  if (isChatClosed.value) return t('expert.detail.connClosed')
+  if (!isSelfConnected.value) return t('expert.detail.connConnecting')
+  if (isOtherOnline.value) return t('expert.detail.connOnline')
+  return t('expert.detail.connOffline')
 })
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '待确认',
-    confirmed: '已确认',
-    completed: '已完成',
-    cancelled: '已取消',
-    rejected: '已拒绝'
+    pending: t('expert.appt.statusPending'),
+    confirmed: t('expert.appt.statusConfirmed'),
+    completed: t('expert.appt.statusCompleted'),
+    cancelled: t('expert.appt.statusCancelled'),
+    rejected: t('expert.appt.statusRejected')
   }
   return map[status] || status
 }
@@ -455,7 +464,7 @@ const parseAnswers = (result: any) => {
 
       return {
         no: index + 1,
-        question: question?.content || item.content || `问题 ${item.question_id}`,
+        question: question?.content || item.content || t('expert.detail.questionFallback', { n: item.question_id }),
         questionId: item.question_id,
         options: options,
         hasOptions,
@@ -474,13 +483,13 @@ const parseAnswers = (result: any) => {
 const getSelectedText = (answer: any): string => {
   // AI 问卷等无题库选项的场景：直接展示存储的用户所选文字
   if (answer.selectedText) {
-    return `${answer.selectedText} (${answer.score}分)`
+    return `${answer.selectedText} ${t('expert.detail.scoreParen', { n: answer.score })}`
   }
   const opt = answer.options.find((o: any) => Number(o.id) === Number(answer.selected))
   if (opt) {
-    return `${opt.label}. ${opt.text} (${opt.score}分)`
+    return `${opt.label}. ${opt.text} ${t('expert.detail.scoreParen', { n: opt.score })}`
   }
-  return `选项${answer.selected} (${answer.score}分)`
+  return `${t('expert.detail.optFallback', { n: answer.selected })} ${t('expert.detail.scoreParen', { n: answer.score })}`
 }
 
 // 获取等级类型
@@ -512,7 +521,7 @@ const loadDetail = async () => {
       otherUserId.value = appointment.value.user_id
     }
   } catch (e: any) {
-    await error(e.message || '加载详情失败')
+    await error(e.message || t('expert.detail.loadFailed'))
   }
 }
 
@@ -530,7 +539,7 @@ const loadMessages = async () => {
 const updateStatus = async (status: string) => {
   try {
     await updateAppointmentStatus(appointmentId, status)
-    await success('状态更新成功')
+    await success(t('expert.detail.statusUpdated'))
     appointment.value.status = status
     loadDetail()
 
@@ -538,7 +547,7 @@ const updateStatus = async (status: string) => {
     emit('status-updated')
     console.log('【AppointmentDetail】状态更新已通知父组件')
   } catch (e: any) {
-    await error(e.message || '更新失败')
+    await error(e.message || t('expert.detail.updateFailed'))
   }
 }
 
@@ -610,7 +619,7 @@ const setupSocketListeners = (sock: Socket) => {
   })
 
   sock.on('force-logout', (data: { message: string }) => {
-    dialogAlert(data.message || '您的账号已登出', '提示').then(() => {
+    dialogAlert(data.message || t('expert.detail.loggedOut'), t('expert.detail.alertTitle')).then(() => {
       userStore.logout()
       // 复用 HTTP 侧的会话过期处理：先清凭据（含加密会话文件）再跳转，
       // 避免脏 token 残留导致登录页会话恢复失败多绕一圈
@@ -625,13 +634,13 @@ const setupSocketListeners = (sock: Socket) => {
     // 已在本聊天页，不传 appointmentId 避免回前台重复跳转）
     const senderId = msg.sender_id ?? msg.senderId
     if (senderId !== userStore.userInfo?.id) {
-      void notifyIfBackground(String(msg.sender_name || '新消息'), String(msg.content || ''), undefined, msg.sender_avatar)
+      void notifyIfBackground(String(msg.sender_name || t('expert.detail.newMessage')), String(msg.content || ''), undefined, msg.sender_avatar)
     }
   })
 
   // 内容审核：被服务端拦截的消息不入库，恢复输入框内容便于修改后重发
   sock.on('message-blocked', (data: { content?: string; reason?: string }) => {
-    showToast('发送被拦截', data?.reason || '消息包含不文明或违规内容，已被拦截', false)
+    showToast(t('expert.detail.blockedTitle'), data?.reason || t('expert.detail.blockedMsg'), false)
     if (data?.content) {
       newMessage.value = data.content
     }
@@ -640,13 +649,13 @@ const setupSocketListeners = (sock: Socket) => {
   // 管理员处置实时生效：禁言期间无法发言；封禁由服务端直接断开连接（走重连/登录拦截）
   sock.on('account-restricted', (data: { type?: string; message?: string }) => {
     if (data?.type === 'muted') {
-      mutedInfo.value = data.message || '您的账号已被管理员禁言，期间无法发送消息'
+      mutedInfo.value = data.message || t('expert.detail.mutedDefault')
     }
-    showToast('账号受限', data?.message || '您的账号已被管理员限制', false)
+    showToast(t('expert.detail.restrictedTitle'), data?.message || t('expert.detail.restrictedMsg'), false)
   })
   sock.on('restriction-lifted', (data: { message?: string }) => {
     mutedInfo.value = ''
-    showToast('限制解除', data?.message || '您的账号限制已解除', true)
+    showToast(t('expert.detail.liftedTitle'), data?.message || t('expert.detail.liftedMsg'), true)
   })
 
   sock.on('error', (err: any) => {
@@ -663,7 +672,7 @@ const sendMessage = async () => {
 
   // 连接断开时明确提示，避免消息静默滞留输入框让用户误以为已发出
   if (!socket.value || !isSelfConnected.value) {
-    showToast('发送失败', '网络连接已断开，请稍后重试', false)
+    showToast(t('expert.detail.sendFailedTitle'), t('expert.detail.sendFailedMsg'), false)
     return
   }
 
@@ -672,7 +681,7 @@ const sendMessage = async () => {
   try {
     const res = await precheckContent(content) as any
     if (res?.data && res.data.ok === false) {
-      precheckWarning.value = `消息包含违禁内容（${res.data.hit || '敏感词'}），请修改后重新发送`
+      precheckWarning.value = t('expert.detail.precheckHit', { hit: res.data.hit || t('expert.detail.precheckHitFallback') })
       return
     }
   } catch {

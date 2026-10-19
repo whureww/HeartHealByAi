@@ -4,8 +4,8 @@
       <div class="logo-box">
         <div class="logo-mark"><AppIcon name="brand" :size="18" /></div>
         <div class="logo-text">
-          <h2>专家工作台</h2>
-          <p>心愈 · 咨询师端</p>
+          <h2>{{ $t('expert.nav.workspace') }}</h2>
+          <p>{{ $t('expert.nav.brand') }}</p>
         </div>
       </div>
       <nav>
@@ -14,14 +14,14 @@
           :class="{ active: $route.path.startsWith('/expert/appointments') }"
         >
           <AppIcon name="clipboard" :size="17" />
-          <span class="menu-text">预约管理</span>
+          <span class="menu-text">{{ $t('expert.nav.appointments') }}</span>
         </router-link>
         <router-link
           to="/expert/my-card"
           :class="{ active: $route.path === '/expert/my-card' }"
         >
           <AppIcon name="stethoscope" :size="17" />
-          <span class="menu-text">我的名片</span>
+          <span class="menu-text">{{ $t('expert.nav.myCard') }}</span>
         </router-link>
         <a
           :class="{ active: $route.path === '/dashboard' }"
@@ -29,7 +29,7 @@
           style="cursor: pointer;"
         >
           <AppIcon name="user" :size="17" />
-          <span class="menu-text">个人中心</span>
+          <span class="menu-text">{{ $t('expert.nav.userCenter') }}</span>
         </a>
       </nav>
     </aside>

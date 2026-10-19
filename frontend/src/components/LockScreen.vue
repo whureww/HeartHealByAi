@@ -2,33 +2,36 @@
   <div class="lock-mask">
     <div class="lock-card">
       <div class="lock-logo"><AppIcon name="brand" :size="26" /></div>
-      <h3>心愈已锁定</h3>
-      <p class="lock-tip">你离开了 {{ timeoutText }}，为保护隐私请重新验证</p>
-      <div class="lock-user">{{ userStore.userInfo?.username || '用户' }}</div>
+      <h3>{{ $t('ui.lock.title') }}</h3>
+      <p class="lock-tip">{{ $t('ui.lock.awayTip', { duration: timeoutText }) }}</p>
+      <div class="lock-user">{{ userStore.userInfo?.username || $t('ui.lock.defaultUser') }}</div>
       <input
         v-model="password"
         type="password"
         class="lock-input"
-        placeholder="请输入登录密码"
+        :placeholder="$t('ui.lock.passwordPlaceholder')"
         autocomplete="current-password"
         @keyup.enter="unlock"
       />
       <p v-if="errorText" class="lock-error">{{ errorText }}</p>
       <button class="lock-btn" :disabled="verifying || !password" @click="unlock">
-        {{ verifying ? '验证中...' : '解锁' }}
+        {{ verifying ? $t('ui.lock.verifying') : $t('ui.lock.unlock') }}
       </button>
-      <button class="lock-switch" :disabled="verifying" @click="switchAccount">切换账户重新登录</button>
-      <p class="lock-foot">锁定期间会话已注销，解锁将换取新登录凭据</p>
+      <button class="lock-switch" :disabled="verifying" @click="switchAccount">{{ $t('ui.lock.switchAccount') }}</button>
+      <p class="lock-foot">{{ $t('ui.lock.foot') }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { API_BASE } from '@/config'
 import AppIcon from './AppIcon.vue'
+
+const { t } = useI18n()
 
 const emit = defineEmits<{ (e: 'unlock'): void }>()
 
@@ -56,7 +59,7 @@ const errorText = ref('')
 
 const timeoutText = computed(() => {
   const m = props.timeoutMinutes
-  return m >= 60 ? `${Math.round(m / 60)} 小时` : `${m} 分钟`
+  return m >= 60 ? t('ui.lock.hours', { n: Math.round(m / 60) }) : t('ui.lock.minutes', { n: m })
 })
 
 // 锁屏标记：锁定状态持久化到 localStorage，程序重启后仍进入锁屏而非静默登出
@@ -83,7 +86,7 @@ const unlock = async () => {
     if (!email) {
       // 兜底：账户标识丢失时不再死路（万能钥匙也依赖邮箱定位账户），
       // 自动清场转到登录页重新登录
-      errorText.value = '无法识别当前账户，正在转到登录页...'
+      errorText.value = t('ui.lock.accountMissing')
       verifying.value = false
       await switchAccount()
       return
@@ -115,9 +118,11 @@ const unlock = async () => {
       return
     }
 
-    errorText.value = `密码不正确，请输入当前账户「${userStore.userInfo?.username || localStorage.getItem('accountEmail') || '当前用户'}」的登录密码或管理员密码`
+    errorText.value = t('ui.lock.wrongPassword', {
+      account: userStore.userInfo?.username || localStorage.getItem('accountEmail') || t('ui.lock.currentUser')
+    })
   } catch {
-    errorText.value = '网络异常，请检查网络连接后重试'
+    errorText.value = t('ui.lock.networkError')
   } finally {
     verifying.value = false
   }

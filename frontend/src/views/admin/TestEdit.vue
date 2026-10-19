@@ -1,141 +1,141 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>{{ isEdit ? '编辑问卷' : '新建问卷' }}</h2>
+      <h2>{{ isEdit ? $t('admin.test.edit') : $t('admin.test.create') }}</h2>
     </div>
 
     <div class="form-section">
-      <h3>基本信息</h3>
+      <h3>{{ $t('admin.test.basicInfo') }}</h3>
       <div class="form-grid">
         <div class="form-group">
-          <label>问卷编码 <span class="required">*</span></label>
-          <input v-model="form.code" placeholder="如：anxiety" :disabled="isEdit" />
+          <label>{{ $t('admin.test.fCode') }} <span class="required">*</span></label>
+          <input v-model="form.code" :placeholder="$t('admin.test.phCode')" :disabled="isEdit" />
         </div>
         <div class="form-group">
-          <label>问卷名称 <span class="required">*</span></label>
-          <input v-model="form.name" placeholder="如：焦虑自评量表 (SAS)" />
+          <label>{{ $t('admin.test.fName') }} <span class="required">*</span></label>
+          <input v-model="form.name" :placeholder="$t('admin.test.phName')" />
         </div>
         <div class="form-group">
-          <label>分类 <span class="required">*</span></label>
+          <label>{{ $t('admin.test.fCategory') }} <span class="required">*</span></label>
           <select v-model="form.category">
-            <option value="emotion">情绪测评</option>
-            <option value="stress">压力测评</option>
-            <option value="personality">人格测评</option>
-            <option value="cognitive">认知测评</option>
+            <option value="emotion">{{ $t('admin.test.catEmotion') }}</option>
+            <option value="stress">{{ $t('admin.test.catStress') }}</option>
+            <option value="personality">{{ $t('admin.test.catPersonality') }}</option>
+            <option value="cognitive">{{ $t('admin.test.catCognitive') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>题目数量</label>
+          <label>{{ $t('admin.test.fCount') }}</label>
           <input v-model.number="form.total_questions" type="number" placeholder="20" />
         </div>
         <div class="form-group">
-          <label>预计时长（分钟）</label>
+          <label>{{ $t('admin.test.fMinutes') }}</label>
           <input v-model.number="form.estimated_minutes" type="number" placeholder="5" />
         </div>
         <div class="form-group">
-          <label>计分方式</label>
+          <label>{{ $t('admin.test.fScoring') }}</label>
           <select v-model="form.scoring_method">
-            <option value="sum">求和</option>
-            <option value="average">平均</option>
-            <option value="weighted">加权</option>
+            <option value="sum">{{ $t('admin.test.scoringSum') }}</option>
+            <option value="average">{{ $t('admin.test.scoringAvg') }}</option>
+            <option value="weighted">{{ $t('admin.test.scoringWeighted') }}</option>
           </select>
         </div>
       </div>
       <div class="form-group full-width">
-        <label>问卷描述</label>
-        <textarea v-model="form.description" rows="3" placeholder="描述该问卷的用途和适用人群"></textarea>
+        <label>{{ $t('admin.test.fDesc') }}</label>
+        <textarea v-model="form.description" rows="3" :placeholder="$t('admin.test.phDesc')"></textarea>
       </div>
     </div>
 
     <!-- 结果等级设置 -->
     <div class="form-section">
-      <h3>结果等级设置</h3>
+      <h3>{{ $t('admin.test.levelSection') }}</h3>
       <div v-for="(level, index) in form.result_levels" :key="index" class="level-card">
         <div class="level-header">
-          <span>等级 {{ index + 1 }}</span>
-          <button class="btn-icon" @click="removeLevel(index)" title="删除该等级">
+          <span>{{ $t('admin.test.levelIndex', { n: index + 1 }) }}</span>
+          <button class="btn-icon" @click="removeLevel(index)" :title="$t('admin.test.delLevel')">
             <AppIcon name="close" :size="14" />
           </button>
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label>最低分</label>
+            <label>{{ $t('admin.test.fMin') }}</label>
             <input v-model.number="level.min" type="number" placeholder="0" />
           </div>
           <div class="form-group">
-            <label>最高分</label>
+            <label>{{ $t('admin.test.fMax') }}</label>
             <input v-model.number="level.max" type="number" placeholder="100" />
           </div>
           <div class="form-group">
-            <label>等级名称</label>
-            <input v-model="level.level" placeholder="如：轻度焦虑" />
+            <label>{{ $t('admin.test.fLevelName') }}</label>
+            <input v-model="level.level" :placeholder="$t('admin.test.phLevelName')" />
           </div>
         </div>
         <div class="form-group full-width">
-          <label>结果描述</label>
-          <textarea v-model="level.desc" rows="2" placeholder="该等级的结果描述和建议"></textarea>
+          <label>{{ $t('admin.test.fLevelDesc') }}</label>
+          <textarea v-model="level.desc" rows="2" :placeholder="$t('admin.test.phLevelDesc')"></textarea>
         </div>
       </div>
       <button class="btn-add" @click="addLevel">
         <AppIcon name="plus" :size="14" />
-        添加等级
+        {{ $t('admin.test.addLevel') }}
       </button>
     </div>
 
     <!-- 题目设置 -->
     <div class="form-section">
-      <h3>题目设置</h3>
+      <h3>{{ $t('admin.test.questionSection') }}</h3>
       <div v-for="(question, qIndex) in form.questions" :key="qIndex" class="question-card">
         <div class="question-header">
-          <span>第 {{ qIndex + 1 }} 题</span>
-          <button class="btn-icon" @click="removeQuestion(qIndex)" title="删除该题">
+          <span>{{ $t('admin.test.questionIndex', { n: qIndex + 1 }) }}</span>
+          <button class="btn-icon" @click="removeQuestion(qIndex)" :title="$t('admin.test.delQuestion')">
             <AppIcon name="close" :size="14" />
           </button>
         </div>
         <div class="form-group full-width">
-          <label>题目内容 <span class="required">*</span></label>
-          <input v-model="question.content" placeholder="请输入题目内容" />
+          <label>{{ $t('admin.test.fContent') }} <span class="required">*</span></label>
+          <input v-model="question.content" :placeholder="$t('admin.test.phContent')" />
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label>维度</label>
-            <input v-model="question.dimension" placeholder="如：精神性焦虑" />
+            <label>{{ $t('admin.test.fDimension') }}</label>
+            <input v-model="question.dimension" :placeholder="$t('admin.test.phDimension')" />
           </div>
           <div class="form-group checkbox-group">
             <label>
               <input v-model="question.reverse_scoring" type="checkbox" />
-              反向计分
+              {{ $t('admin.test.reverseScoring') }}
             </label>
           </div>
         </div>
 
         <!-- 选项设置 -->
         <div class="options-section">
-          <label>选项设置</label>
+          <label>{{ $t('admin.test.optionsSection') }}</label>
           <div v-for="(option, oIndex) in question.options" :key="oIndex" class="option-row">
-            <input v-model.number="option.score" type="number" placeholder="分值" class="score-input" />
-            <input v-model="option.text" placeholder="选项文字" class="text-input" />
-            <button class="btn-icon" @click="removeOption(qIndex, oIndex)" title="删除该选项">
+            <input v-model.number="option.score" type="number" :placeholder="$t('admin.test.phScore')" class="score-input" />
+            <input v-model="option.text" :placeholder="$t('admin.test.phOptionText')" class="text-input" />
+            <button class="btn-icon" @click="removeOption(qIndex, oIndex)" :title="$t('admin.test.delOption')">
               <AppIcon name="close" :size="14" />
             </button>
           </div>
           <button class="btn-add-small" @click="addOption(qIndex)">
             <AppIcon name="plus" :size="13" />
-            添加选项
+            {{ $t('admin.test.addOption') }}
           </button>
         </div>
       </div>
       <button class="btn-add" @click="addQuestion">
         <AppIcon name="plus" :size="14" />
-        添加题目
+        {{ $t('admin.test.addQuestion') }}
       </button>
     </div>
 
     <div class="form-actions">
-      <button class="btn-cancel" @click="$router.back()">取消</button>
+      <button class="btn-cancel" @click="$router.back()">{{ $t('admin.test.cancel') }}</button>
       <button class="btn-submit" :disabled="isSubmitting" @click="submit">
-        <span v-if="isSubmitting">保存中...</span>
-        <span v-else>保存问卷</span>
+        <span v-if="isSubmitting">{{ $t('admin.test.saving') }}</span>
+        <span v-else>{{ $t('admin.test.save') }}</span>
       </button>
     </div>
   </div>
@@ -144,9 +144,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { createTest } from '@/api/admin'
 import { alert, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
+
+const { t } = useI18n()
 
 interface QuestionOption {
   score: number
@@ -241,21 +244,21 @@ const removeOption = (qIndex: number, oIndex: number) => {
 
 const submit = async () => {
   if (!form.value.code || !form.value.name) {
-    await alert('请填写问卷编码和名称')
+    await alert(t('admin.test.errCodeName'))
     return
   }
   if (form.value.questions.length === 0) {
-    await alert('请至少添加一道题目')
+    await alert(t('admin.test.errNeedQuestion'))
     return
   }
 
   isSubmitting.value = true
   try {
     await createTest(form.value)
-    await success('问卷创建成功，等待审核')
+    await success(t('admin.test.created'))
     router.push('/admin/tests')
   } catch (e: any) {
-    await error(e.message || '保存失败')
+    await error(e.message || t('admin.test.saveFailed'))
   } finally {
     isSubmitting.value = false
   }

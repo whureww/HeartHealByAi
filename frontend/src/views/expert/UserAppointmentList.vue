@@ -3,28 +3,28 @@
     <div class="list-header">
       <h3>
         <AppIcon name="calendar" :size="17" />
-        我的预约
+        {{ $t('expert.appt.mineTitle') }}
       </h3>
       <div class="header-actions">
         <span class="online-indicator" :class="{ online: isSocketConnected }">
           <span class="status-dot" :class="{ online: isSocketConnected }"></span>
-          {{ isSocketConnected ? '实时连接' : '离线' }}
+          {{ isSocketConnected ? $t('expert.appt.online') : $t('expert.appt.offline') }}
         </span>
         <button class="btn-refresh" @click="loadAppointments" :disabled="loading">
           <AppIcon name="refresh" :size="14" />
-          {{ loading ? '刷新中...' : '刷新' }}
+          {{ loading ? $t('expert.appt.refreshing') : $t('expert.appt.refresh') }}
         </button>
       </div>
     </div>
 
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
-      <span>加载中...</span>
+      <span>{{ $t('expert.appt.loading') }}</span>
     </div>
 
     <div v-else-if="appointments.length === 0" class="empty-state">
       <AppIcon name="list" :size="28" />
-      <p>暂无预约记录，快去预约专家吧</p>
+      <p>{{ $t('expert.appt.emptyUser') }}</p>
     </div>
 
     <div v-else class="appointment-cards">
@@ -37,8 +37,8 @@
       >
         <div class="card-header">
           <div class="expert-info">
-            <span class="expert-name">{{ item.expert_name || '专家' }}</span>
-            <span class="expert-title">{{ item.expert_title || '心理咨询师' }}</span>
+            <span class="expert-name">{{ item.expert_name || $t('expert.appt.fallbackExpert') }}</span>
+            <span class="expert-title">{{ item.expert_title || $t('expert.appt.fallbackTitle') }}</span>
           </div>
           <span :class="['status-badge', `status-${item.status}`]">
             {{ statusText(item.status) }}
@@ -47,11 +47,11 @@
 
         <div class="card-body">
           <div class="info-row">
-            <span class="label">预约时间：</span>
+            <span class="label">{{ $t('expert.appt.timeLabel') }}</span>
             <span class="time-value">{{ formatDate(item.created_at) }}</span>
           </div>
           <div class="info-row">
-            <span class="label">当前状态：</span>
+            <span class="label">{{ $t('expert.appt.statusLabel') }}</span>
             <span class="status-desc">{{ statusDesc(item.status) }}</span>
           </div>
         </div>
@@ -62,7 +62,7 @@
             class="btn-chat"
           >
             <AppIcon name="chat" :size="14" />
-            进入聊天
+            {{ $t('expert.appt.enterChat') }}
           </button>
           <span v-else class="status-tip">
             {{ statusTip(item.status) }}
@@ -73,7 +73,7 @@
             :disabled="canceling === item.id"
             @click.stop="handleCancel(item)"
           >
-            {{ canceling === item.id ? '取消中...' : '取消预约' }}
+            {{ canceling === item.id ? $t('expert.appt.canceling') : $t('expert.appt.cancel') }}
           </button>
         </div>
       </div>
@@ -83,6 +83,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getUserAppointments, cancelAppointment } from '@/api/user'
@@ -96,6 +97,8 @@ const emit = defineEmits<{
   (e: 'view-detail', id: number): void
 }>()
 
+const { t } = useI18n()
+
 const userStore = useUserStore()
 const appointments = ref<any[]>([])
 const loading = ref(false)
@@ -105,32 +108,32 @@ const recentlyUpdated = ref<Set<number>>(new Set())
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '待确认',
-    confirmed: '已确认',
-    completed: '已完成',
-    cancelled: '已取消',
-    rejected: '已拒绝'
+    pending: t('expert.appt.statusPending'),
+    confirmed: t('expert.appt.statusConfirmed'),
+    completed: t('expert.appt.statusCompleted'),
+    cancelled: t('expert.appt.statusCancelled'),
+    rejected: t('expert.appt.statusRejected')
   }
   return map[status] || status
 }
 
 const statusDesc = (status: string) => {
   const map: Record<string, string> = {
-    pending: '专家正在处理您的预约',
-    confirmed: '专家已确认，可以开始聊天',
-    completed: '本次咨询已完成',
-    cancelled: '预约已取消',
-    rejected: '专家拒绝了本次预约'
+    pending: t('expert.appt.descPending'),
+    confirmed: t('expert.appt.descConfirmed'),
+    completed: t('expert.appt.descCompleted'),
+    cancelled: t('expert.appt.descCancelled'),
+    rejected: t('expert.appt.descRejected')
   }
   return map[status] || ''
 }
 
 const statusTip = (status: string) => {
   const map: Record<string, string> = {
-    pending: '请耐心等待专家确认...',
-    completed: '咨询已完成，感谢使用',
-    cancelled: '如有需要请重新预约',
-    rejected: '如有需要可选择其他专家重新预约'
+    pending: t('expert.appt.tipPending'),
+    completed: t('expert.appt.tipCompleted'),
+    cancelled: t('expert.appt.tipCancelled'),
+    rejected: t('expert.appt.tipRejected')
   }
   return map[status] || ''
 }
@@ -168,17 +171,17 @@ const canceling = ref<number | null>(null)
 
 const handleCancel = async (item: any) => {
   const ok = await confirm(
-    `确定取消与「${item.expert_name || '专家'}」的预约吗？取消后不可恢复。`,
-    '取消预约'
+    t('expert.appt.cancelWithExpert', { name: item.expert_name || t('expert.appt.fallbackExpert') }),
+    t('expert.appt.titleCancel')
   )
   if (!ok) return
   canceling.value = item.id
   try {
     await cancelAppointment(item.id)
-    await success('预约已取消')
+    await success(t('expert.appt.cancelledMsg'))
     await loadAppointments()
   } catch (e: any) {
-    await error(e?.message || '取消失败，请稍后再试')
+    await error(e?.message || t('expert.appt.cancelFailed'))
   } finally {
     canceling.value = null
   }
@@ -244,7 +247,7 @@ const setupListeners = (sock: Socket) => {
     // 只处理自己的预约
     if (data.userId === userStore.userInfo?.id) {
       updateLocalStatus(data.appointmentId, data.status)
-      showToast('预约状态更新', `你的预约状态变更为「${data.status}」`, true)
+      showToast(t('expert.appt.toastTitle'), t('expert.appt.yourStatusChanged', { status: data.status }), true)
     }
   })
 
@@ -256,7 +259,7 @@ const setupListeners = (sock: Socket) => {
   }) => {
     if (data.updaterId !== userStore.userInfo?.id) {
       updateLocalStatus(data.appointmentId, data.status)
-      showToast('预约状态更新', `预约 #${data.appointmentId} 状态变更为「${data.status}」`, true)
+      showToast(t('expert.appt.toastTitle'), t('expert.appt.toastStatusChanged', { id: data.appointmentId, status: data.status }), true)
     }
   })
 }
