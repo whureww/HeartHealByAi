@@ -16,7 +16,7 @@ export interface AIReportResponse {
 
 // 普通 AI 聊天
 export const chatWithAI = (messages: {role: string, content: string}[], context?: any): Promise<AIChatResponse> => {
-  return request.post('/ai/chat', { messages, context }) as Promise<AIChatResponse>
+  return request.post('/ai/chat', { messages, context, locale: i18n.global.locale.value }) as Promise<AIChatResponse>
 }
 
 // 流式 AI 聊天
@@ -36,7 +36,8 @@ export const chatWithAIStream = (
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ messages, context })
+    // 携带界面语言：英文界面下要求 AI 用英文回复
+    body: JSON.stringify({ messages, context, locale: i18n.global.locale.value })
   }).then(response => {
     if (!response.ok) {
       throw new Error(i18n.global.t('core.api.networkFailed'))

@@ -28,7 +28,9 @@ export default {
       send: '发送',
       defaultModel: '默认模型',
       modelConfigTip: '模型配置（添加/编辑/删除/测试连接/切换模型）',
-      aiErrorMessage: '抱歉，我暂时遇到了一些问题，请稍后再试。'
+      aiErrorMessage: '抱歉，我暂时遇到了一些问题，请稍后再试。',
+      loadMore: '加载更早的消息',
+      loadingMore: '加载中...'
     },
     session: {
       history: '对话记录',

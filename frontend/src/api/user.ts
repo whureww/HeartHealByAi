@@ -55,8 +55,17 @@ export const getUserStats = () => {
 
 // ========== 聊天记录 ==========
 // 不带 sessionId 返回全部会话消息（导出 / 报告分析），带则返回指定会话
-export const getChatHistory = (sessionId?: string) => {
-  return request.get('/users/chat-history', sessionId ? { params: { session_id: sessionId } } : undefined)
+// 打开长会话建议传 { limit, offset } 分页取（limit<=200），响应含 total/hasMore
+export const getChatHistory = (
+  sessionId?: string,
+  page?: { limit: number; offset?: number }
+) => {
+  const params: Record<string, any> = sessionId ? { session_id: sessionId } : {}
+  if (page) {
+    params.limit = page.limit
+    if (page.offset) params.offset = page.offset
+  }
+  return request.get('/users/chat-history', Object.keys(params).length ? { params } : undefined)
 }
 
 export const saveChat = (data: { content: string; type: string; session_id?: string }) => {
@@ -94,7 +103,7 @@ export const getChatModels = () => {
 }
 
 // 添加 / 更新自定义模型（base_url+api_key 自带网关配置；都留空走服务端网关）
-export const addChatModel = (data: { model: string; base_url?: string; api_key?: string }) => {
+export const addChatModel = (data: { model: string; base_url?: string; api_key?: string; old_model?: string }) => {
   return request.post('/users/chat-models', data)
 }
 

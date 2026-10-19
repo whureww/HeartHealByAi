@@ -583,10 +583,37 @@ router.get('/stats', authenticate, asyncHandler(async (req: Request, res: Respon
 router.get('/chat-history', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const sessionId = String(req.query.session_id || '').trim();
+    // 分页：limit/offset，默认返回最近 50 条；不传 limit 时保持旧全量行为（导出/报告分析依赖全量）
+    const limitRaw = req.query.limit === undefined ? NaN : parseInt(String(req.query.limit), 10);
+    const offsetRaw = req.query.offset === undefined ? 0 : parseInt(String(req.query.offset), 10);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : NaN;
+    const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
+    const paginated = Number.isFinite(limit);
 
     // id 次级排序：created_at 为秒级精度，同秒入库（如用户消息与 AI 回复）需按自增 id 稳定排序
     let rows: any[];
     if (sessionId && /^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+        if (paginated) {
+            // 先取符合条件的总数与「本次窗口之前」的数量（判断是否还有更早消息）
+            const [[cnt]]: any[] = await pool.execute(
+                'SELECT COUNT(*) AS total FROM chat_records WHERE user_id = ? AND session_id = ?',
+                [userId, sessionId]
+            );
+            // limit/offset 已经过 parseInt + 范围校验，是纯整数（无注入面），
+            // 直接内插规避 mysql2 预处理对 LIMIT ? 占位符的兼容坑
+            [rows] = (await pool.execute(
+                `SELECT id, content, type, created_at FROM chat_records WHERE user_id = ? AND session_id = ? ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`,
+                [userId, sessionId]
+            )) as any[];
+            rows.reverse();
+            res.json({
+                success: true,
+                data: rows,
+                total: cnt.total,
+                hasMore: offset + rows.length < cnt.total
+            });
+            return;
+        }
         [rows] = (await pool.execute(
             'SELECT id, content, type, created_at FROM chat_records WHERE user_id = ? AND session_id = ? ORDER BY created_at ASC, id ASC',
             [userId, sessionId]
@@ -700,12 +727,15 @@ router.post('/chat-sessions/:sessionId/summary', authenticate, asyncHandler(asyn
         return;
     }
 
-    const [msgs]: any[] = await pool.execute(
+    // 取最近 12 条消息（倒序取再正序拼），让标题能跟上对话主题的转移，
+    // 而不是永远反映会话开头的内容
+    const [msgsDesc]: any[] = await pool.execute(
         `SELECT type, content FROM chat_records
          WHERE user_id = ? AND session_id = ?
-         ORDER BY created_at ASC, id ASC LIMIT 12`,
+         ORDER BY created_at DESC, id DESC LIMIT 12`,
         [userId, sessionId]
     );
+    const msgs = [...msgsDesc].reverse();
 
     if (!msgs.length) {
         res.json({ success: true, data: { title: '新对话' } });
@@ -867,6 +897,8 @@ router.post('/chat-models', authenticate, asyncHandler(async (req: Request, res:
     const model = String(req.body?.model || '').trim();
     const baseUrl = String(req.body?.base_url || '').trim().replace(/\/+$/, '');
     const apiKey = String(req.body?.api_key || '').trim();
+    // old_model：编辑时允许重命名模型（保留原行的加密 key 与网关配置整体迁移到新名字）
+    const oldModel = String(req.body?.old_model || '').trim();
 
     if (!MODEL_RE.test(model)) {
         res.status(400).json({ success: false, message: '模型名不合法（限字母数字._-/，80 字符内）' });
@@ -889,10 +921,42 @@ router.post('/chat-models', authenticate, asyncHandler(async (req: Request, res:
         return;
     }
 
+    // 重命名路径：old_model 存在且不等于新名字时，把原行整体改名（含加密 key）；
+    // 若新名字已存在则拒绝，避免覆盖另一条配置
+    if (oldModel && MODEL_RE.test(oldModel) && oldModel !== model) {
+        const [dup] = (await pool.execute(
+            'SELECT id FROM user_chat_models WHERE user_id = ? AND model = ?',
+            [userId, model]
+        )) as any[];
+        if (dup.length) {
+            res.status(400).json({ success: false, message: '新模型名已存在，请换一个名字' });
+            return;
+        }
+        await pool.execute(
+            'UPDATE user_chat_models SET model = ? WHERE user_id = ? AND model = ?',
+            [model, userId, oldModel]
+        );
+        // 名字变了，地址/Key 也按本次提交更新（key 留空沿用已加密值）
+        if (apiKey) {
+            await pool.execute(
+                'UPDATE user_chat_models SET base_url = ?, api_key = ? WHERE user_id = ? AND model = ?',
+                [baseUrl, encryptSecret(apiKey), userId, model]
+            );
+        } else if (baseUrl) {
+            await pool.execute(
+                'UPDATE user_chat_models SET base_url = ? WHERE user_id = ? AND model = ?',
+                [baseUrl, userId, model]
+            );
+        }
+        res.json({ success: true, message: '模型已更新' });
+        return;
+    }
+
     const encrypted = apiKey ? encryptSecret(apiKey) : null;
+    // 编辑已有模型且 key 留空时沿用已存加密值（不能写 null 覆盖掉原 key）
     await pool.execute(
         `INSERT INTO user_chat_models (user_id, model, base_url, api_key) VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE base_url = VALUES(base_url), api_key = VALUES(api_key)`,
+         ON DUPLICATE KEY UPDATE base_url = VALUES(base_url)${apiKey ? ', api_key = VALUES(api_key)' : ''}`,
         [userId, model, baseUrl, encrypted]
     );
     res.json({ success: true, message: baseUrl ? '模型已保存（自带网关配置）' : '模型已添加（走服务端网关）' });

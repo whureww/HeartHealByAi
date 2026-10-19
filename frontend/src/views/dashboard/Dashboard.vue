@@ -122,6 +122,12 @@
               </div>
             </div>
             <div class="chat-box" ref="chatBox">
+              <button
+                v-if="hasMoreMsgs && !sessionLoading"
+                class="load-more-btn"
+                :disabled="loadingMore"
+                @click="loadMoreMessages"
+              >{{ loadingMore ? $t('dashboard.chat.loadingMore') : $t('dashboard.chat.loadMore') }}</button>
               <div class="msg-item">
                 <div class="msg-ai selectable-text">{{ $t('dashboard.chat.greeting') }}</div>
               </div>
@@ -692,6 +698,8 @@ const chatSessions = ref<any[]>([])
 const activeSessionId = ref('')
 const sessionCollapsed = ref(false)
 const sessionLoading = ref(false)
+// 当前会话是否还有更早消息未加载（分页用）
+const hasMoreMsgs = ref(false)
 
 const genSessionId = () => {
   // 去掉连字符外的特殊字符不必要，uuid 本身满足 [a-zA-Z0-9-]
@@ -731,24 +739,52 @@ const loadChatSessions = async (): Promise<string> => {
   return chatSessions.value[0]?.session_id || ''
 }
 
-// 打开指定会话，加载其消息
+// 打开指定会话，加载其消息（分页：先取最近 50 条，更早的点「加载更多」向上追加）
 const openSession = async (sessionId: string) => {
   if (!sessionId || sessionId === activeSessionId.value) return
   activeSessionId.value = sessionId
   sessionLoading.value = true
   try {
-    const res = await getChatHistory(sessionId) as any
+    const res = await getChatHistory(sessionId, { limit: 50 }) as any
     chatMessages.value = (res?.data || []).map((msg: any) => ({
       type: msg.type,
       content: msg.content
     }))
+    hasMoreMsgs.value = !!res?.hasMore
   } catch (e) {
     console.error('获取会话消息失败:', e)
     chatMessages.value = []
+    hasMoreMsgs.value = false
   } finally {
     sessionLoading.value = false
   }
   scrollToBottom()
+}
+
+// 向上加载更早的消息：追加到头部并保持当前滚动位置（不跳底）
+const loadingMore = ref(false)
+const loadMoreMessages = async () => {
+  if (!activeSessionId.value || loadingMore.value || !hasMoreMsgs.value) return
+  loadingMore.value = true
+  try {
+    const box = chatBox.value
+    const prevHeight = box?.scrollHeight || 0
+    const prevTop = box?.scrollTop || 0
+    const res = await getChatHistory(activeSessionId.value, {
+      limit: 50,
+      offset: chatMessages.value.length
+    }) as any
+    const older = (res?.data || []).map((msg: any) => ({ type: msg.type, content: msg.content }))
+    if (older.length) chatMessages.value = [...older, ...chatMessages.value]
+    hasMoreMsgs.value = !!res?.hasMore
+    nextTick(() => {
+      if (box) box.scrollTop = box.scrollHeight - prevHeight + prevTop
+    })
+  } catch (e) {
+    console.error('加载更早消息失败:', e)
+  } finally {
+    loadingMore.value = false
+  }
 }
 
 // 新建对话：立即创建会话记录（服务端返回会话 id），空对话也会出现在侧栏列表；
@@ -774,6 +810,7 @@ const startNewSession = async () => {
     activeSessionId.value = genSessionId()
   }
   chatMessages.value = []
+  hasMoreMsgs.value = false
   chatInput.value = ''
 }
 
@@ -1202,7 +1239,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.7'
+  const cur = updateInfo.value?.current_version || '0.4.8'
   const base = t('dashboard.update.appVersion', { version: cur })
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return t('dashboard.update.availableDesc', { latest: updateInfo.value.latest_version, current: cur })
@@ -1214,12 +1251,12 @@ const updateDesc = computed(() => {
     return t('dashboard.update.readyDesc', { latest: updateInfo.value.latest_version })
   }
   if (updatePhase.value === 'idle' && updateInfo.value && !updateInfo.value.has_update) {
-    return `${base} (Powered by DeepSeek) · ${t('dashboard.update.upToDate')}`
+    return `${base} · ${t('dashboard.update.upToDate')}`
   }
   if (updateError.value) {
     return `${base} · ${updateError.value}`
   }
-  return `${base} (Powered by DeepSeek)`
+  return base
 })
 
 const updatePhaseText = computed(() => {
@@ -1531,8 +1568,8 @@ const sendChat = async () => {
     console.error('保存用户消息失败:', e)
   }
 
-  // 2. 构建消息历史
-  const messageHistory = chatMessages.value.map(msg => ({
+  // 2. 构建消息历史：只传最近 30 条（后端还有同规格窗口兜底，减少传输体积）
+  const messageHistory = chatMessages.value.slice(-30).map(msg => ({
     role: msg.type === 'user' ? 'user' : 'assistant',
     content: msg.content
   }))
@@ -1552,15 +1589,28 @@ const sendChat = async () => {
       },
       (err: string) => {
         console.error('流式输出错误:', err)
+        // 流中断保留半截内容：已接收部分上屏并落库，不再「说一半就消失」
+        if (streamingContent.value) {
+          const partial = streamingContent.value
+          chatMessages.value.push({ type: 'ai', content: partial })
+          streamingContent.value = ''
+          void saveChat({ content: partial, type: 'ai', session_id: sessionId })
+            .then(() => loadChatSessions())
+            .catch(() => {})
+          maybeSummarize(sessionId)
+        }
         isStreaming.value = false
         aiLoading.value = false
+        // 失败回填：把本轮用户消息放回输入框，修改后即可直接重发
+        chatInput.value = val
+        scrollToBottom()
       },
       () => {
         // 流式输出完成
         console.log('流式输出完成')
         isStreaming.value = false
         aiLoading.value = false
-        
+
         // 把流式内容保存到消息列表
         if (streamingContent.value) {
           const finalContent = streamingContent.value
@@ -1575,7 +1625,7 @@ const sendChat = async () => {
           // 首轮回复后 / 每 6 条消息：让 AI 总结更新对话标题
           maybeSummarize(sessionId)
         }
-        
+
         scrollToBottom()
       },
       {
@@ -1589,11 +1639,13 @@ const sendChat = async () => {
     isStreaming.value = false
     aiLoading.value = false
     streamingContent.value = ''
-    
+
     chatMessages.value.push({
       type: 'ai',
       content: t('dashboard.chat.aiErrorMessage')
     })
+    // 请求层失败（未收到任何流内容）：同样回填输入框方便重发
+    chatInput.value = val
     scrollToBottom()
   }
 }
@@ -2474,6 +2526,30 @@ const scrollToBottom = () => {
   margin-bottom: 12px;
   min-height: 0;
   box-sizing: border-box;
+}
+
+/* 顶部「加载更早的消息」按钮 */
+.load-more-btn {
+  display: block;
+  margin: 0 auto 12px;
+  padding: 5px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.load-more-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .msg-item {

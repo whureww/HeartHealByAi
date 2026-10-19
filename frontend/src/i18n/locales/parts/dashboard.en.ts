@@ -28,7 +28,9 @@ export default {
       send: 'Send',
       defaultModel: 'Default model',
       modelConfigTip: 'Model settings (add/edit/delete/test connection/switch)',
-      aiErrorMessage: 'Sorry, something went wrong on my end. Please try again later.'
+      aiErrorMessage: 'Sorry, something went wrong on my end. Please try again later.',
+      loadMore: 'Load earlier messages',
+      loadingMore: 'Loading...'
     },
     session: {
       history: 'Conversations',

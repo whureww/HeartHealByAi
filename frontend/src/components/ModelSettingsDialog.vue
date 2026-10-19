@@ -76,7 +76,7 @@
                 v-model="form.model"
                 type="text"
                 :placeholder="$t('ui.model.namePlaceholder')"
-                :disabled="busy || editMode"
+                :disabled="busy"
                 maxlength="80"
               />
             </div>
@@ -147,6 +147,8 @@ const models = ref<CustomModel[]>([])
 const selected = ref<string | null>(null)
 const gatewayEnabled = ref(true)
 const editMode = ref(false)
+// 编辑中的原模型名：改名保存时作为 old_model 传给服务端做整体重命名
+const editModel = ref('')
 const testResult = ref<{ ok: boolean; text: string } | null>(null)
 
 const form = ref({ model: '', baseUrl: '', apiKey: '' })
@@ -200,12 +202,14 @@ const onClose = () => {
 
 const resetForm = () => {
   editMode.value = false
+  editModel.value = ''
   form.value = { model: '', baseUrl: '', apiKey: '' }
   testResult.value = null
 }
 
 const startEdit = (m: CustomModel) => {
   editMode.value = true
+  editModel.value = m.model
   form.value.model = m.model
   form.value.baseUrl = m.base_url || ''
   form.value.apiKey = ''
@@ -234,7 +238,11 @@ const onSave = async () => {
     await addChatModel({
       model: form.value.model.trim(),
       base_url: form.value.baseUrl.trim(),
-      api_key: form.value.apiKey.trim()
+      api_key: form.value.apiKey.trim(),
+      // 编辑模式下改了模型名时携带原名字，服务端做整体重命名（含加密 key 迁移）
+      old_model: editMode.value && editModel.value && editModel.value !== form.value.model.trim()
+        ? editModel.value
+        : undefined
     })
     await load()
     emit('changed', selected.value)

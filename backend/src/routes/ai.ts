@@ -55,10 +55,23 @@ const SYSTEM_PROMPT = '你是一位专业且温暖的心理咨询师，名叫心
 
 const REPORT_PROMPT = '你是一位资深心理数据分析师，擅长整合多维度心理数据进行系统性分析。分析维度包括：1.情绪趋势：从聊天记录中提取情绪波动规律 2.测评解读：结合心理测评量表结果进行专业解读 3.风险评估：识别潜在的心理健康风险信号 4.改善建议：提供个性化、可执行的心理调节方案。输出格式要求：使用Markdown格式；分章节清晰呈现；语言专业但易懂；总字数控制在800-1200字';
 
-function buildChatMessages(messages: any[], context: any): { role: string; content: string }[] {
-    const chatMessages = [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...messages.map((msg: any) => ({
+// 上下文窗口上限：只把最近 30 条消息发给 AI（每条 user/ai 各算一条），
+// 避免超长会话 token 成本线性膨胀与上游上下文超限报错
+const CONTEXT_WINDOW = 30;
+
+function buildChatMessages(messages: any[], context: any, locale?: string): { role: string; content: string }[] {
+    // 只保留最近 CONTEXT_WINDOW 条对话消息
+    const windowed = Array.isArray(messages) && messages.length > CONTEXT_WINDOW
+        ? messages.slice(-CONTEXT_WINDOW)
+        : (messages || []);
+    let system = SYSTEM_PROMPT;
+    // 语言跟随：前端携带用户界面语言，非中文界面要求 AI 用对应语言回复
+    if (locale === 'en') {
+        system += ' Always respond in English regardless of the language the user writes in.';
+    }
+    const chatMessages: { role: string; content: string }[] = [
+        { role: 'system', content: system },
+        ...windowed.map((msg: any) => ({
             role: msg.role,
             content: msg.content
         }))
@@ -73,14 +86,14 @@ function buildChatMessages(messages: any[], context: any): { role: string; conte
 // ===== 普通 AI 聊天接口（非流式）=====
 router.post('/chat', authenticate, async (req: Request, res: Response) => {
   try {
-    const { messages, context } = req.body;
+    const { messages, context, locale } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'messages 不能为空' });
       return;
     }
 
-    const chatMessages = buildChatMessages(messages, context);
+    const chatMessages = buildChatMessages(messages, context, locale);
     const opts = { temperature: 0.7, maxTokens: 800, timeout: 30000 };
 
     // 用户级模型路由：所选模型走副厂网关，失败自动回落默认主厂
@@ -112,14 +125,14 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
 // ===== 流式 AI 聊天接口（SSE）=====
 router.post('/chat-stream', authenticate, async (req: Request, res: Response) => {
   try {
-    const { messages, context } = req.body;
+    const { messages, context, locale } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'messages 不能为空' });
       return;
     }
 
-    const chatMessages = buildChatMessages(messages, context);
+    const chatMessages = buildChatMessages(messages, context, locale);
 
     // 设置 SSE 响应头
     res.setHeader('Content-Type', 'text/event-stream');

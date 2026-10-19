@@ -34,6 +34,36 @@ export default {
       sessionExpired: 'Session expired',
       tooManyRequests: 'Too many requests, please try again later'
     },
+    // Server message mappings (matched exactly by serverMsg.ts, translated before display)
+    server: {
+      sessionLocked: 'This conversation is locked. Unlock it before deleting.',
+      sessionNotFound: 'Conversation not found',
+      sessionInvalid: 'Invalid session identifier',
+      sessionDeleted: 'Conversation deleted',
+      modelInvalid: 'Invalid model name (letters, digits, ._-/ only, max 80 characters)',
+      modelInvalidShort: 'Invalid model name',
+      baseUrlInvalid: 'Invalid gateway URL (must start with http/https)',
+      keyLenInvalid: 'API Key must be between 8 and 200 characters',
+      pairRequired: 'Gateway URL and API Key must be provided together (leave both empty to use the server gateway)',
+      gatewayMissing: 'Server model gateway is not configured. Please provide your own gateway URL and API Key',
+      modelNameTaken: 'The new model name already exists. Please choose another one',
+      modelNotFound: 'Model configuration not found',
+      keyDecryptFailed: 'Failed to decrypt the API key. Please edit and re-save this model configuration',
+      noGatewayAndConfig: 'This model has no gateway configuration and the server gateway is not configured',
+      modelSwitched: 'Model switched',
+      modelReset: 'Reset to default model',
+      modelUpdated: 'Model updated',
+      modelDeleted: 'Model deleted',
+      loggedInElsewhere: 'Your account has been logged in on another device',
+      apptSuccess: 'Appointment booked',
+      apptCancelled: 'Appointment cancelled',
+      reportSubmitted: 'Report submitted. Administrators will review it soon',
+      dataCleared: 'All data has been cleared',
+      profileUpdated: 'Profile updated',
+      avatarUpdated: 'Avatar updated',
+      registered: 'Registration successful',
+      passwordReset: 'Password reset. Please log in with your new password'
+    },
     loading: 'Loading...'
   }
 }

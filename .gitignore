@@ -17,3 +17,6 @@ src-tauri/gen/
 *.log
 .DS_Store
 Thumbs.db
+
+# 本地文档（不入库）
+docs/

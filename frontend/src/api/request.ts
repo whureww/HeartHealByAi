@@ -2,6 +2,7 @@ import axios from 'axios'
 import { API_BASE } from '@/config'
 import { secureRemove } from '@/utils/secureStore'
 import { i18n } from '@/i18n'
+import { tServer } from '@/utils/serverMsg'
 
 const request = axios.create({
   baseURL: API_BASE,
@@ -60,13 +61,14 @@ request.interceptors.response.use(
       if (res.code === 'SESSION_EXPIRED') {
         void handleSessionExpired()
       }
-      return Promise.reject(new Error(res.message || i18n.global.t('core.api.requestFailed')))
+      // 服务器 message 先过映射层：已知文案按当前语言展示，未收录透传原文
+      return Promise.reject(new Error(tServer(res.message) || i18n.global.t('core.api.requestFailed')))
     }
     return res
   },
   async err => {
     const status = err.response?.status
-    const message = err.response?.data?.message || err.message || i18n.global.t('core.api.requestFailed')
+    const message = tServer(err.response?.data?.message) || err.message || i18n.global.t('core.api.requestFailed')
 
     if (status === 401) {
       // 认证类接口自身的 401（如登录时密码错误）是业务结果，不是会话过期：
