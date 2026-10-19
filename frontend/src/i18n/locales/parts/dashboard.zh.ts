@@ -148,7 +148,20 @@ export default {
       about: '关于',
       version: '版本信息',
       hotkey: '全局快捷键',
-      hotkeyDesc: 'Ctrl + Alt + H 任意界面一键呼出 / 隐藏窗口（含锁屏与托盘后台）'
+      hotkeyDesc: 'Ctrl + Alt + H 任意界面一键呼出 / 隐藏窗口（含锁屏与托盘后台）',
+      aiMemory: 'AI 记忆',
+      aiMemoryDisabled: '服务端未配置向量检索服务（EMBED_API_KEY），记忆功能未启用',
+      memoryEmpty: '暂无记忆。随着对话进行，AI 会自动积累对你的了解',
+      memoryDelete: '删除这条记忆',
+      memoryDeleteConfirm: '删除这条记忆？删除后 AI 将不再记住该内容',
+      memoryDeleteConfirmTitle: '删除记忆',
+      memoryDeleted: '该条记忆已删除',
+      memoryDeleteFailed: '记忆删除失败',
+      memoryClear: '清空全部记忆',
+      memoryClearDesc: '删除 AI 记住的所有信息（不可恢复）',
+      memoryClearConfirm: '确定清空全部 AI 记忆？此操作不可恢复',
+      memoryClearConfirmTitle: '清空记忆',
+      memoryCleared: 'AI 记忆已清空'
     },
     notification: {
       all: '全部通知',

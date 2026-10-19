@@ -97,15 +97,31 @@ CREATE TABLE IF NOT EXISTS ai_test_papers (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ========== AI 聊天记录表 ==========
+-- embedding 列：RAG 历史检索用的向量 JSON（由服务端异步写入，NULL=未嵌入）
 CREATE TABLE IF NOT EXISTS chat_records (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NOT NULL,
     content TEXT NOT NULL,
     type VARCHAR(20) NOT NULL DEFAULT 'user' COMMENT 'user/ai',
     session_id VARCHAR(40) NOT NULL DEFAULT 'default' COMMENT '会话分组 id',
+    embedding LONGTEXT NULL COMMENT '向量 JSON 数组（RAG 历史检索用）',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     KEY idx_chat_user (user_id),
     KEY idx_chat_session (user_id, session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========== 用户长期记忆表（RAG） ==========
+-- AI 从对话中自动抽取的持久事实（偏好/重要事件/情绪模式等），向量化后按相似度检索注入后续对话；
+-- 服务启动/首次使用时由 ensureRagSchema() 兜底建表，此处供全新部署直接就绪
+CREATE TABLE IF NOT EXISTS user_memories (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    content VARCHAR(500) NOT NULL COMMENT '记忆内容（第三人称事实陈述）',
+    embedding LONGTEXT NULL COMMENT '向量 JSON 数组',
+    source_session_id VARCHAR(40) DEFAULT NULL COMMENT '来源会话',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_memory_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ========== AI 对话会话表 ==========

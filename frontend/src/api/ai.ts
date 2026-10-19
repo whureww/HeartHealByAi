@@ -14,9 +14,9 @@ export interface AIReportResponse {
   usage?: any
 }
 
-// 普通 AI 聊天
-export const chatWithAI = (messages: {role: string, content: string}[], context?: any): Promise<AIChatResponse> => {
-  return request.post('/ai/chat', { messages, context, locale: i18n.global.locale.value }) as Promise<AIChatResponse>
+// 普通 AI 聊天（session_id 可选：供服务端记忆抽取标记来源会话）
+export const chatWithAI = (messages: {role: string, content: string}[], context?: any, sessionId?: string): Promise<AIChatResponse> => {
+  return request.post('/ai/chat', { messages, context, locale: i18n.global.locale.value, session_id: sessionId }) as Promise<AIChatResponse>
 }
 
 // 流式 AI 聊天
@@ -25,7 +25,8 @@ export const chatWithAIStream = (
   onMessage: (content: string) => void,
   onError?: (error: string) => void,
   onComplete?: () => void,
-  context?: any
+  context?: any,
+  sessionId?: string
 ) => {
 // 由于 EventSource 不支持 POST，我们用 fetch + ReadableStream
   const token = getAuthToken()
@@ -36,8 +37,8 @@ export const chatWithAIStream = (
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    // 携带界面语言：英文界面下要求 AI 用英文回复
-    body: JSON.stringify({ messages, context, locale: i18n.global.locale.value })
+    // 携带界面语言：英文界面下要求 AI 用英文回复；session_id 供服务端记忆抽取标记来源
+    body: JSON.stringify({ messages, context, locale: i18n.global.locale.value, session_id: sessionId })
   }).then(response => {
     if (!response.ok) {
       throw new Error(i18n.global.t('core.api.networkFailed'))

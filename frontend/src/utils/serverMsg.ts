@@ -35,7 +35,13 @@ const SERVER_MSG_KEYS: Record<string, string> = {
   '个人信息更新成功': 'core.server.profileUpdated',
   '头像修改成功': 'core.server.avatarUpdated',
   '注册成功': 'core.server.registered',
-  '密码重置成功，请使用新密码重新登录': 'core.server.passwordReset'
+  '密码重置成功，请使用新密码重新登录': 'core.server.passwordReset',
+  // AI 记忆（RAG）
+  '记忆查询失败': 'core.server.memoryQueryFailed',
+  '记忆 id 不合法': 'core.server.memoryIdInvalid',
+  '记忆不存在或已删除': 'core.server.memoryNotFound',
+  '记忆删除失败': 'core.server.memoryDeleteFailed',
+  '记忆清空失败': 'core.server.memoryClearFailed'
 }
 
 /** 翻译服务端消息：命中映射表按当前语言返回，否则透传原文 */

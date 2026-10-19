@@ -67,7 +67,12 @@ export default {
       profileUpdated: 'Profile updated',
       avatarUpdated: 'Avatar updated',
       registered: 'Registration successful',
-      passwordReset: 'Password reset. Please log in with your new password'
+      passwordReset: 'Password reset. Please log in with your new password',
+      memoryQueryFailed: 'Failed to load memories',
+      memoryIdInvalid: 'Invalid memory id',
+      memoryNotFound: 'Memory not found or already deleted',
+      memoryDeleteFailed: 'Failed to delete memory',
+      memoryClearFailed: 'Failed to clear memories'
     },
     loading: 'Loading...'
   }

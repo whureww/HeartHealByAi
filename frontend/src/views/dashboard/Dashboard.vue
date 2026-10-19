@@ -521,6 +521,47 @@
             </div>
           </div>
 
+          <!-- AI 记忆 -->
+          <div class="settings-group">
+            <div class="settings-group-head"><AppIcon name="spark" :size="15" /><h3>{{ $t('dashboard.settings.aiMemory') }}</h3></div>
+            <div class="settings-group-body">
+            <div class="setting-item" v-if="memoryStatus && !memoryStatus.enabled">
+              <div class="setting-item-left">
+                <span>{{ $t('dashboard.settings.aiMemoryDisabled') }}</span>
+              </div>
+            </div>
+            <template v-else>
+              <div class="setting-item" v-if="memoryLoading">
+                <div class="setting-item-left">
+                  <span class="setting-desc">{{ $t('dashboard.common.loading') }}</span>
+                </div>
+              </div>
+              <div class="setting-item" v-else-if="memoryList.length === 0">
+                <div class="setting-item-left">
+                  <span class="setting-desc">{{ $t('dashboard.settings.memoryEmpty') }}</span>
+                </div>
+              </div>
+              <div v-else class="memory-list">
+                <div class="memory-item" v-for="m in memoryList" :key="m.id">
+                  <div class="memory-content">{{ m.content }}</div>
+                  <button class="memory-delete" :disabled="memoryDeleting" @click="onDeleteMemory(m.id)" :title="$t('dashboard.settings.memoryDelete')">
+                    <AppIcon name="trash" :size="14" />
+                  </button>
+                </div>
+              </div>
+              <div class="setting-item" v-if="memoryList.length > 0" @click="onClearMemories">
+                <div class="setting-item-left">
+                  <span>{{ $t('dashboard.settings.memoryClear') }}</span>
+                  <span class="setting-desc">{{ $t('dashboard.settings.memoryClearDesc') }}</span>
+                </div>
+                <div class="setting-item-right">
+                  <span class="arrow"><AppIcon name="chevronRight" :size="15" /></span>
+                </div>
+              </div>
+            </template>
+            </div>
+          </div>
+
           <!-- 隐私安全 -->
           <div class="settings-group">
             <div class="settings-group-head"><AppIcon name="shield" :size="15" /><h3>{{ $t('dashboard.settings.privacy') }}</h3></div>
@@ -674,6 +715,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, createChatSession, lockChatSession, refreshSessionSummary, deleteChatSession, getChatModels, getUserAppointments, getAnalysisReports } from '@/api/user'
 import { useLoadingStore } from '@/stores/loading'
 import { chatWithAIStream, generateReport } from '@/api/ai'
+import { getMemoryStatus, listMemories, deleteMemory, clearMemories, type MemoryItem } from '@/api/memory'
 import { getTestHistory } from '@/api/tests'
 import { alert, success, confirm, error } from '@/utils/dialog'
 import TestList from './TestList.vue'
@@ -1292,7 +1334,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.4.9'
+  const cur = updateInfo.value?.current_version || '0.5.0'
   const base = t('dashboard.update.appVersion', { version: cur })
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return t('dashboard.update.availableDesc', { latest: updateInfo.value.latest_version, current: cur })
@@ -1524,6 +1566,7 @@ const switchPage = async (pageId: string) => {
 
   // ===== 修复：切换到个人中心时，根据角色重新加载统计数据 =====
   if (pageId === 'user') {
+    void loadMemoryData()
     loading.value.stats = true
     try {
       if (userStore.userInfo?.role === 2) {
@@ -1684,7 +1727,8 @@ const sendChat = async () => {
       {
         testCount: userStore.stats?.testCount || 0,
         username: userStore.userInfo?.username
-      }
+      },
+      sessionId
     )
 
   } catch (e: any) {
@@ -1946,6 +1990,59 @@ const clearData = async () => {
     } catch (e: any) {
       await error(e?.message || t('dashboard.backup.clearFailed'), t('dashboard.backup.clearFailed'))
     }
+  }
+}
+
+// ===== AI 记忆管理（个人中心）：查看 / 删除 / 清空 AI 自动抽取的长期记忆 =====
+const memoryStatus = ref<{ enabled: boolean } | null>(null)
+const memoryList = ref<MemoryItem[]>([])
+const memoryLoading = ref(false)
+const memoryDeleting = ref(false)
+
+const loadMemoryData = async () => {
+  memoryLoading.value = true
+  try {
+    const status = await getMemoryStatus() as any
+    memoryStatus.value = status?.data || { enabled: false }
+    if (memoryStatus.value.enabled) {
+      const res = await listMemories() as any
+      memoryList.value = res?.data || []
+    }
+  } catch (e) {
+    console.error('加载 AI 记忆失败:', e)
+    memoryStatus.value = { enabled: false }
+  } finally {
+    memoryLoading.value = false
+  }
+}
+
+const onDeleteMemory = async (id: number) => {
+  const ok = await confirm(t('dashboard.settings.memoryDeleteConfirm'), t('dashboard.settings.memoryDeleteConfirmTitle'))
+  if (!ok) return
+  memoryDeleting.value = true
+  try {
+    await deleteMemory(id)
+    memoryList.value = memoryList.value.filter(m => m.id !== id)
+    await success(t('dashboard.settings.memoryDeleted'), t('dashboard.settings.aiMemory'))
+  } catch (e: any) {
+    await error(e?.message || t('dashboard.settings.memoryDeleteFailed'), t('dashboard.settings.aiMemory'))
+  } finally {
+    memoryDeleting.value = false
+  }
+}
+
+const onClearMemories = async () => {
+  const ok = await confirm(t('dashboard.settings.memoryClearConfirm'), t('dashboard.settings.memoryClearConfirmTitle'))
+  if (!ok) return
+  memoryDeleting.value = true
+  try {
+    await clearMemories()
+    memoryList.value = []
+    await success(t('dashboard.settings.memoryCleared'), t('dashboard.settings.aiMemory'))
+  } catch (e: any) {
+    await error(e?.message || t('dashboard.settings.memoryDeleteFailed'), t('dashboard.settings.aiMemory'))
+  } finally {
+    memoryDeleting.value = false
   }
 }
 
@@ -3228,6 +3325,58 @@ const scrollToBottom = () => {
   border-bottom: 1px solid var(--border-color);
   cursor: pointer;
   transition: background-color 0.15s var(--ease-out);
+}
+
+/* AI 记忆列表：条目化展示 + 右侧删除，跟随设置面板黑白极简风格 */
+.memory-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.memory-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.memory-item:last-child {
+  border-bottom: none;
+}
+
+.memory-content {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.memory-delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out);
+}
+
+.memory-delete:hover {
+  background: var(--border-color);
+  color: var(--danger);
+}
+
+.memory-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .setting-item:last-child {

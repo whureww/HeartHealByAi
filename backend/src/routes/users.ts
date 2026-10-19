@@ -13,6 +13,7 @@ import { TokenManager } from '../utils/tokenManager';
 import { getActiveRestriction } from '../utils/restrict';
 import { callAI, getFallbackConfig } from '../utils/aiClient';
 import { ensureDoctorEnColumns } from '../utils/doctorCols';
+import { embedChatMessage } from '../utils/memory';
 import { encryptSecret, decryptSecret, maskSecret } from '../utils/secretBox';
 
 const router = Router();
@@ -1105,6 +1106,9 @@ router.post('/chat', authenticate, asyncHandler(async (req: Request, res: Respon
         [userId, content, type, sessionId]
     );
 
+    // RAG：消息异步向量化供历史检索（fire-and-forget，不阻塞落库响应）
+    void embedChatMessage((result as any).insertId, String(content || ''));
+
     // 消息入库的同时确保会话行存在并刷新活跃时间（兜底：未经 POST /chat-sessions 创建的会话）
     await pool.execute(
         'INSERT IGNORE INTO chat_sessions (user_id, session_id) VALUES (?, ?)',
@@ -1207,6 +1211,7 @@ router.post('/clear-all', authenticate, asyncHandler(async (req: Request, res: R
     await pool.execute('DELETE FROM test_results WHERE user_id = ?', [userId]);
     await pool.execute('DELETE FROM analysis_reports WHERE user_id = ?', [userId]);
     await pool.execute('DELETE FROM appointment_records WHERE user_id = ?', [userId]);
+    await pool.execute('DELETE FROM user_memories WHERE user_id = ?', [userId]);
 
     res.json({
         success: true,

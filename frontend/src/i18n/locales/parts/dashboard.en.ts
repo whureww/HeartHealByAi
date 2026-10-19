@@ -148,7 +148,20 @@ export default {
       about: 'About',
       version: 'Version',
       hotkey: 'Global shortcut',
-      hotkeyDesc: 'Ctrl + Alt + H shows or hides the window from anywhere (including lock screen and tray)'
+      hotkeyDesc: 'Ctrl + Alt + H shows or hides the window from anywhere (including lock screen and tray)',
+      aiMemory: 'AI Memory',
+      aiMemoryDisabled: 'Vector service not configured on the server (EMBED_API_KEY); memory is disabled',
+      memoryEmpty: 'No memories yet. The AI builds its understanding as you chat',
+      memoryDelete: 'Delete this memory',
+      memoryDeleteConfirm: 'Delete this memory? The AI will no longer remember it',
+      memoryDeleteConfirmTitle: 'Delete memory',
+      memoryDeleted: 'Memory deleted',
+      memoryDeleteFailed: 'Failed to delete memory',
+      memoryClear: 'Clear all memories',
+      memoryClearDesc: 'Delete everything the AI remembers (irreversible)',
+      memoryClearConfirm: 'Clear all AI memories? This cannot be undone',
+      memoryClearConfirmTitle: 'Clear memories',
+      memoryCleared: 'AI memories cleared'
     },
     notification: {
       all: 'All notifications',

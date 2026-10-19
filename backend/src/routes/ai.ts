@@ -7,6 +7,7 @@ import {
 } from '../utils/aiClient';
 import { decryptSecret } from '../utils/secretBox';
 import { pool } from '../db/mysql';
+import { retrieveRagContext, extractAndStoreMemories, backfillChatEmbeddings } from '../utils/memory';
 
 const router = Router();
 
@@ -59,15 +60,47 @@ const REPORT_PROMPT = '你是一位资深心理数据分析师，擅长整合多
 // 避免超长会话 token 成本线性膨胀与上游上下文超限报错
 const CONTEXT_WINDOW = 30;
 
-function buildChatMessages(messages: any[], context: any, locale?: string): { role: string; content: string }[] {
+// RAG 注入格式（语言跟随界面语言，非中文界面用英文标签）
+function buildRagPrompt(rag: { memories: string[]; history: { type: string; content: string; created_at: string }[] }, isEn: boolean): string {
+    const parts: string[] = [];
+    if (rag.memories.length > 0) {
+        parts.push(isEn
+            ? '【Long-term memory】Facts about this user from previous conversations. Weave them in naturally; never recite them mechanically or mention this list:\n- ' + rag.memories.join('\n- ')
+            : '【长期记忆】以下是关于该用户的过往记忆，请自然融入回复，不要机械复述或刻意提及：\n- ' + rag.memories.join('\n- '));
+    }
+    if (rag.history.length > 0) {
+        const lines = rag.history.map((h) => {
+            const role = h.type === 'user' ? (isEn ? 'User' : '用户') : (isEn ? 'AI' : 'AI');
+            const time = h.created_at ? String(h.created_at).slice(0, 16).replace('T', ' ') : '';
+            return `[${time}] ${role}: ${h.content}`;
+        });
+        parts.push(isEn
+            ? '【Relevant past conversations】Related excerpts from earlier chats:\n' + lines.join('\n')
+            : '【相关历史对话】过往聊天中与此相关的片段：\n' + lines.join('\n'));
+    }
+    return parts.join('\n\n');
+}
+
+function buildChatMessages(
+    messages: any[],
+    context: any,
+    locale?: string,
+    rag?: { memories: string[]; history: { type: string; content: string; created_at: string }[] } | null
+): { role: string; content: string }[] {
     // 只保留最近 CONTEXT_WINDOW 条对话消息
     const windowed = Array.isArray(messages) && messages.length > CONTEXT_WINDOW
         ? messages.slice(-CONTEXT_WINDOW)
         : (messages || []);
     let system = SYSTEM_PROMPT;
     // 语言跟随：前端携带用户界面语言，非中文界面要求 AI 用对应语言回复
-    if (locale === 'en') {
+    const isEn = locale === 'en';
+    if (isEn) {
         system += ' Always respond in English regardless of the language the user writes in.';
+    }
+    // RAG 上下文注入：长期记忆 + 相关历史对话（检索失败时为空，直接跳过）
+    const ragPrompt = rag ? buildRagPrompt(rag, isEn) : '';
+    if (ragPrompt) {
+        system += '\n\n' + ragPrompt;
     }
     const chatMessages: { role: string; content: string }[] = [
         { role: 'system', content: system },
@@ -83,17 +116,43 @@ function buildChatMessages(messages: any[], context: any, locale?: string): { ro
     return chatMessages;
 }
 
+/**
+ * RAG 前置检索：以最后一条用户消息为查询，拉取记忆 + 历史片段。
+ * 检索内部 fail-open（失败返回空），这里再兜一层 try 保证对话绝不因 RAG 中断。
+ * 同时顺手触发历史消息一次性补嵌（老数据）。
+ */
+async function retrieveContextSafe(userId: number, messages: any[]) {
+    try {
+        const lastUser = [...(messages || [])].reverse().find((m) => m.role === 'user');
+        const query = String(lastUser?.content || '').trim();
+        if (!query) return null;
+        const rag = await retrieveRagContext(userId, query);
+        void backfillChatEmbeddings(userId);
+        return rag;
+    } catch (e: any) {
+        console.error('[ai] RAG 上下文检索异常（跳过注入）:', e.message);
+        return null;
+    }
+}
+
+/** 对话结束后异步抽取记忆（fire-and-forget，不阻塞响应） */
+function scheduleMemoryExtraction(userId: number, sessionId: string, userMsg: string, aiReply: string) {
+    void extractAndStoreMemories(userId, sessionId, userMsg, aiReply);
+}
+
 // ===== 普通 AI 聊天接口（非流式）=====
 router.post('/chat', authenticate, async (req: Request, res: Response) => {
   try {
-    const { messages, context, locale } = req.body;
+    const { messages, context, locale, session_id } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'messages 不能为空' });
       return;
     }
 
-    const chatMessages = buildChatMessages(messages, context, locale);
+    // RAG：检索记忆与相关历史注入系统提示词（失败自动降级为无 RAG 对话）
+    const rag = await retrieveContextSafe(req.user!.id, messages);
+    const chatMessages = buildChatMessages(messages, context, locale, rag);
     const opts = { temperature: 0.7, maxTokens: 800, timeout: 30000 };
 
     // 用户级模型路由：所选模型走副厂网关，失败自动回落默认主厂
@@ -108,9 +167,21 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
       content = await callAIWithConfig(secondary, chatMessages, opts);
     }
 
+    // 回复完成后异步抽取长期记忆（fire-and-forget，不阻塞响应）
+    const lastUser = [...messages].reverse().find((m: any) => m.role === 'user');
+    if (content) {
+      scheduleMemoryExtraction(
+        req.user!.id,
+        String(session_id || 'default'),
+        String(lastUser?.content || ''),
+        content
+      );
+    }
+
     res.json({
       success: true,
-      content: content || '抱歉，我暂时无法回复，请稍后再试。'
+      // 兜底回复语言跟随界面语言，避免英文界面冒出中文残留
+      content: content || (locale === 'en' ? "Sorry, I can't reply right now. Please try again later." : '抱歉，我暂时无法回复，请稍后再试。')
     });
 
   } catch (error: any) {
@@ -125,14 +196,16 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
 // ===== 流式 AI 聊天接口（SSE）=====
 router.post('/chat-stream', authenticate, async (req: Request, res: Response) => {
   try {
-    const { messages, context, locale } = req.body;
+    const { messages, context, locale, session_id } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'messages 不能为空' });
       return;
     }
 
-    const chatMessages = buildChatMessages(messages, context, locale);
+    // RAG：检索记忆与相关历史注入系统提示词（失败自动降级为无 RAG 对话）
+    const rag = await retrieveContextSafe(req.user!.id, messages);
+    const chatMessages = buildChatMessages(messages, context, locale, rag);
 
     // 设置 SSE 响应头
     res.setHeader('Content-Type', 'text/event-stream');
@@ -180,6 +253,10 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
     // 转发流式数据（增量文本经 extractDeltaChunk 归一化，兼容各家格式）
     const stream = response.data;
 
+    // 全文累积：流结束后用于异步抽取长期记忆（fire-and-forget，不影响转发）
+    const lastUser = [...messages].reverse().find((m: any) => m.role === 'user');
+    let fullReply = '';
+
     // 上游流看门狗：axios 的 timeout 只覆盖到收到响应头为止，若对端在
     // 传输阶段停滞（连接挂着但一个字节都不来），超时不会触发，请求会
     // 永久挂死（前端表现为一直"思考中"）。这里在持续无数据 30 秒时
@@ -219,6 +296,7 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
           const data = JSON.parse(line.slice(6));
           const content = extractDeltaChunk(data);
           if (content) {
+            fullReply += content;
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
         } catch (e) {
@@ -242,6 +320,15 @@ router.post('/chat-stream', authenticate, async (req: Request, res: Response) =>
       lineBuffer += decoder.decode();   // flush 解码器残留字节
       if (lineBuffer.trim() !== '') {
         handleLine(lineBuffer);         // 处理结尾未带换行符的最后一行
+      }
+      // 流结束后异步抽取长期记忆（fire-and-forget，不阻塞响应收尾）
+      if (fullReply.trim()) {
+        scheduleMemoryExtraction(
+          req.user!.id,
+          String(session_id || 'default'),
+          String(lastUser?.content || ''),
+          fullReply
+        );
       }
       res.end();
     });

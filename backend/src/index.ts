@@ -14,6 +14,7 @@ import { pool } from './db/mysql';
 import { isAppointmentParticipant } from './utils/guards';
 import { checkMessageContentAI, loadSensitiveWords, ModerationContextItem } from './utils/moderation';
 import aiRouter from './routes/ai';
+import memoryRouter from './routes/memory';
 import moderationRouter from './routes/moderation';
 import { registerRestrictBroadcaster, getActiveRestriction, Restriction } from './utils/restrict';
 import jwt from 'jsonwebtoken';
@@ -75,6 +76,7 @@ app.use('/api/tests', testRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/expert', expertRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/memory', memoryRouter);
 app.use('/api/moderation', moderationRouter);
 
 // ===== 6. 错误处理（最后）=====

@@ -67,7 +67,12 @@ export default {
       profileUpdated: '个人信息更新成功',
       avatarUpdated: '头像修改成功',
       registered: '注册成功',
-      passwordReset: '密码重置成功，请使用新密码重新登录'
+      passwordReset: '密码重置成功，请使用新密码重新登录',
+      memoryQueryFailed: '记忆查询失败',
+      memoryIdInvalid: '记忆 id 不合法',
+      memoryNotFound: '记忆不存在或已删除',
+      memoryDeleteFailed: '记忆删除失败',
+      memoryClearFailed: '记忆清空失败'
     },
     loading: '加载中...'
   }
