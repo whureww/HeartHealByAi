@@ -112,47 +112,68 @@ function flatten(obj, prefix, acc) {
   return acc;
 }
 
-// 读取语言包：每个分片文件 export default { ... }，构建期合并
+// 读取语言包：每个分片文件 export default { ... }，构建期静态合并
+// 同时按 .zh / .en 归组，供双语对齐校验
 function extractDefinedKeys() {
   const keys = new Set();
+  const byLang = { zh: new Set(), en: new Set() };
   const files = walkDir(path.join(I18N_DIR, 'locales'), ['.ts']);
+
   for (const file of files) {
     const raw = fs.readFileSync(file, 'utf-8');
     const src = stripComments(raw);
     const marker = src.indexOf('export default');
     if (marker < 0) continue;
-    let brace = src.indexOf('{', marker);
+    const brace = src.indexOf('{', marker);
     if (brace < 0) continue;
-    const parsed = parseObject(src, brace);
-    flatten(parsed, '', keys);
+
+    const flat = flatten(parseObject(src, brace), '', new Set());
+    for (const k of flat) keys.add(k);
+
+    const name = path.basename(file);
+    // zh-CN.ts / *.zh.ts → zh；en.ts / *.en.ts → en
+    if (/(\.zh|zh-CN)\.ts$/.test(name)) for (const k of flat) byLang.zh.add(k);
+    else if (/(\.en|^en)\.ts$/.test(name)) for (const k of flat) byLang.en.add(k);
   }
-  return { keys, files };
+  return { keys, byLang, files };
 }
 
-// 从源代码中提取所有 $t('key') 使用
+// 提取翻译调用：仅 $t('key') / i18n.global.t('key') / t('key')
+// 必须排除 import( / mount( / emit( / setTimeout( 等以 t( 结尾的普通函数调用，
+// 否则会把模块路径和选择器当成翻译 key
+const CALL_RE = /(?:\$t|i18n\.global\.t|(?<![\w$.])t)\(\s*['"]([^'"]+)['"]/g;
+// 传参不是字面量的动态 key，无法静态判定，单独列出供人工确认
+const DYNAMIC_RE = /(?:\$t|i18n\.global\.t|(?<![\w$.])t)\(\s*(?!['"])([^)]{1,60})\)/g;
+
 function extractUsedKeys() {
   const keys = new Set();
+  const dynamic = new Map();
   const srcFiles = walkDir(SRC_DIR, ['.vue', '.ts']).filter(f => !f.includes('/i18n/'));
 
   for (const file of srcFiles) {
     const content = fs.readFileSync(file, 'utf-8');
-    const regex = /\$?t\(['"]([^'"]+)['"]\)/g;
     let match;
-    while ((match = regex.exec(content)) !== null) {
-      keys.add(match[1]);
+    while ((match = CALL_RE.exec(content)) !== null) keys.add(match[1]);
+    while ((match = DYNAMIC_RE.exec(content)) !== null) {
+      const expr = match[1].trim();
+      // 过滤掉多行/跨语句造成的噪声
+      if (/[\n;]/.test(expr) || /^(async|\{|\[|\d)/.test(expr)) continue;
+      if (!dynamic.has(expr)) dynamic.set(expr, []);
+      dynamic.get(expr).push(path.relative(ROOT, file));
     }
   }
-  return keys;
+  return { keys, dynamic };
 }
 
 function main() {
   console.log('🔍 正在解析 i18n 语言包（嵌套路径展开）...\n');
-  const { keys: definedKeys, files } = extractDefinedKeys();
-  console.log(`✅ 扫描 ${files.length} 个语言包文件，展开后共 ${definedKeys.size} 个完整 key\n`);
+  const { keys: definedKeys, byLang, files } = extractDefinedKeys();
+  console.log(`✅ 扫描 ${files.length} 个语言包文件，展开后共 ${definedKeys.size} 个完整 key`);
+  console.log(`   中文侧 ${byLang.zh.size} 个 / 英文侧 ${byLang.en.size} 个\n`);
 
-  console.log('🔍 正在扫描源代码中的 $t() 使用...\n');
-  const usedKeys = extractUsedKeys();
-  console.log(`✅ 代码中使用了 ${usedKeys.size} 个 key\n`);
+  console.log('🔍 正在扫描源代码中的翻译调用...\n');
+  const { keys: usedKeys, dynamic } = extractUsedKeys();
+  console.log(`✅ 静态调用共 ${usedKeys.size} 个 key，动态调用 ${dynamic.size} 处\n`);
 
   const undefinedKeys = [...usedKeys].filter(k => !definedKeys.has(k));
   const unusedKeys = [...definedKeys].filter(k => !usedKeys.has(k));
@@ -174,6 +195,33 @@ function main() {
     if (unusedKeys.length > 20) console.log(`   ... 还有 ${unusedKeys.length - 20} 个`);
   } else {
     console.log('\n✅ 所有定义的 key 都被使用（零冗余）');
+  }
+
+  // 双语对齐：zh 有 en 无 → 切到英文界面时该 key 静默回退成中文
+  const missingInEn = [...byLang.zh].filter(k => !byLang.en.has(k)).sort();
+  const missingInZh = [...byLang.en].filter(k => !byLang.zh.has(k)).sort();
+
+  if (missingInEn.length || missingInZh.length) {
+    console.log(`\n🌐 双语对齐差异：\n`);
+    if (missingInEn.length) {
+      console.log(`   英文侧缺失 ${missingInEn.length} 个（英文界面会显示中文）：`);
+      missingInEn.slice(0, 15).forEach(k => console.log(`     - ${k}`));
+      if (missingInEn.length > 15) console.log(`     ... 还有 ${missingInEn.length - 15} 个`);
+    }
+    if (missingInZh.length) {
+      console.log(`   中文侧缺失 ${missingInZh.length} 个（fallbackLocale 兜不住，会显示 key）：`);
+      missingInZh.slice(0, 15).forEach(k => console.log(`     - ${k}`));
+      if (missingInZh.length > 15) console.log(`     ... 还有 ${missingInZh.length - 15} 个`);
+    }
+  } else {
+    console.log('\n✅ 中英双语 key 完全对齐');
+  }
+
+  if (dynamic.size) {
+    console.log(`\n🔎 动态拼接的 key（${dynamic.size} 处，静态无法判定，需人工确认）：\n`);
+    for (const [expr, files] of dynamic) {
+      console.log(`   - ${expr}   ${[...new Set(files)].join(', ')}`);
+    }
   }
 
   console.log('\n' + '='.repeat(60));
