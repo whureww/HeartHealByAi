@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * i18n 覆盖度校验脚本
- * 
- * 验证：
- * 1. 所有在代码中使用的 $t('key') 都在语言包中定义
- * 2. 所有语言包中定义的 key 都在代码中被使用（或至少导出）
- * 
+ *
+ * 校验 vue-i18n 语言包与代码中 $t() 调用的 key 是否对齐：
+ *   1. 代码中使用的 key 是否都在语言包中定义（缺失 = 运行时回退成 key 字面量）
+ *   2. 语言包中定义的 key 是否有被使用（冗余 = 可清理的死文案）
+ *
  * 用法：node scripts/verify-i18n-coverage.js
  */
 
@@ -16,120 +16,168 @@ const ROOT = path.join(__dirname, '..');
 const I18N_DIR = path.join(ROOT, 'frontend/src/i18n');
 const SRC_DIR = path.join(ROOT, 'frontend/src');
 
-// 递归读取所有文件
-function walkDir(dir, ext) {
-  const results = [];
-  const items = fs.readdirSync(dir, { withFileTypes: true });
-  for (const item of items) {
-    const fullPath = path.join(dir, item.name);
-    if (item.isDirectory()) {
-      results.push(...walkDir(fullPath, ext));
-    } else if (ext.some(e => item.name.endsWith(e))) {
-      results.push(fullPath);
-    }
+function walkDir(dir, exts) {
+  const out = [];
+  for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, item.name);
+    if (item.isDirectory()) out.push(...walkDir(full, exts));
+    else if (exts.some(e => item.name.endsWith(e))) out.push(full);
   }
-  return results;
+  return out;
 }
 
-// 从语言包中提取所有 key
-function extractI18nKeys() {
-  const keys = new Set();
-  const localeFiles = walkDir(path.join(I18N_DIR, 'locales'), ['.ts']);
-  
-  for (const file of localeFiles) {
-    const content = fs.readFileSync(file, 'utf-8');
-    // 匹配 key: 'value' 或 key: "value" 或 key: `value`
-    // 支持嵌套对象中的 key
-    const regex = /^\s*([a-zA-Z0-9_]+)\s*:\s*['"`]/gm;
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-      keys.add(match[1]);
+// 去掉注释，避免注释里的示例文案被当成 key
+function stripComments(src) {
+  let out = '';
+  let i = 0;
+  let quote = null;
+  while (i < src.length) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (quote) {
+      out += ch;
+      if (ch === '\\') { out += next || ''; i += 2; continue; }
+      if (ch === quote) quote = null;
+      i++;
+      continue;
     }
+    if (ch === "'" || ch === '"' || ch === '`') { quote = ch; out += ch; i++; continue; }
+    if (ch === '/' && next === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i++;
   }
-  
-  return keys;
+  return out;
+}
+
+// 解析一个对象字面量，返回 { obj, end }（pos 指向 '{'）
+function parseObject(src, pos) {
+  const obj = {};
+  let i = pos + 1;
+  const skip = () => { while (i < src.length && /[\s,]/.test(src[i])) i++; };
+
+  while (i < src.length) {
+    skip();
+    if (src[i] === '}') { i++; break; }
+
+    let key = '';
+    if (src[i] === "'" || src[i] === '"') {
+      const q = src[i++];
+      while (i < src.length && src[i] !== q) { if (src[i] === '\\') i++; key += src[i++]; }
+      i++;
+    } else {
+      while (i < src.length && /[\w$\-.]/.test(src[i])) key += src[i++];
+    }
+    if (!key) { i++; continue; }
+
+    skip();
+    if (src[i] !== ':') { continue; }
+    i++;
+    skip();
+
+    if (src[i] === '{') {
+      const nested = parseObject(src, i);
+      obj[key] = nested;
+      i = nested.__pos;
+      continue;
+    }
+
+    let value = '';
+    if (src[i] === "'" || src[i] === '"' || src[i] === '`') {
+      const q = src[i++];
+      while (i < src.length && src[i] !== q) { if (src[i] === '\\') { value += src[i]; i++; } value += src[i++]; }
+      i++;
+    } else {
+      while (i < src.length && src[i] !== ',' && src[i] !== '}') value += src[i++];
+    }
+    obj[key] = value.trim();
+  }
+  return Object.assign(obj, { __pos: i });
+}
+
+// 展开成 vue-i18n 的点号路径（core.dialog.info 这种）
+function flatten(obj, prefix, acc) {
+  for (const key of Object.keys(obj)) {
+    if (key === '__pos') continue;
+    const full = prefix ? `${prefix}.${key}` : key;
+    const value = obj[key];
+    if (value && typeof value === 'object') flatten(value, full, acc);
+    else acc.add(full);
+  }
+  return acc;
+}
+
+// 读取语言包：每个分片文件 export default { ... }，构建期合并
+function extractDefinedKeys() {
+  const keys = new Set();
+  const files = walkDir(path.join(I18N_DIR, 'locales'), ['.ts']);
+  for (const file of files) {
+    const raw = fs.readFileSync(file, 'utf-8');
+    const src = stripComments(raw);
+    const marker = src.indexOf('export default');
+    if (marker < 0) continue;
+    let brace = src.indexOf('{', marker);
+    if (brace < 0) continue;
+    const parsed = parseObject(src, brace);
+    flatten(parsed, '', keys);
+  }
+  return { keys, files };
 }
 
 // 从源代码中提取所有 $t('key') 使用
 function extractUsedKeys() {
   const keys = new Set();
-  const srcFiles = walkDir(SRC_DIR, ['.vue', '.ts']);
-  
-  // 排除 i18n 目录本身
-  const filteredFiles = srcFiles.filter(f => !f.includes('/i18n/'));
-  
-  for (const file of filteredFiles) {
+  const srcFiles = walkDir(SRC_DIR, ['.vue', '.ts']).filter(f => !f.includes('/i18n/'));
+
+  for (const file of srcFiles) {
     const content = fs.readFileSync(file, 'utf-8');
-    // 匹配 $t('key') 或 $t("key") 或 t('key') 或 t("key")
     const regex = /\$?t\(['"]([^'"]+)['"]\)/g;
     let match;
     while ((match = regex.exec(content)) !== null) {
       keys.add(match[1]);
     }
   }
-  
   return keys;
 }
 
-// 主逻辑
 function main() {
-  console.log('🔍 正在扫描 i18n 语言包...\n');
-  const definedKeys = extractI18nKeys();
-  console.log(`✅ 语言包中定义了 ${definedKeys.size} 个 key\n`);
-  
+  console.log('🔍 正在解析 i18n 语言包（嵌套路径展开）...\n');
+  const { keys: definedKeys, files } = extractDefinedKeys();
+  console.log(`✅ 扫描 ${files.length} 个语言包文件，展开后共 ${definedKeys.size} 个完整 key\n`);
+
   console.log('🔍 正在扫描源代码中的 $t() 使用...\n');
   const usedKeys = extractUsedKeys();
   console.log(`✅ 代码中使用了 ${usedKeys.size} 个 key\n`);
-  
-  // 检查：使用的 key 是否都定义了
-  const undefinedKeys = [];
-  for (const key of usedKeys) {
-    if (!definedKeys.has(key)) {
-      undefinedKeys.push(key);
-    }
-  }
-  
-  // 检查：定义的 key 是否都使用了（可选，有些 key 可能预留）
-  const unusedKeys = [];
-  for (const key of definedKeys) {
-    if (!usedKeys.has(key)) {
-      unusedKeys.push(key);
-    }
-  }
-  
+
+  const undefinedKeys = [...usedKeys].filter(k => !definedKeys.has(k));
+  const unusedKeys = [...definedKeys].filter(k => !usedKeys.has(k));
+
   console.log('='.repeat(60));
   console.log('📊 覆盖度报告');
   console.log('='.repeat(60));
-  
-  if (undefinedKeys.length > 0) {
-    console.log(`\n❌ 未定义的 key（${undefinedKeys.length} 个）：`);
-    console.log('   这些 key 在代码中被使用，但语言包中没有定义：\n');
+
+  if (undefinedKeys.length) {
+    console.log(`\n❌ 语言包中缺失的 key（${undefinedKeys.length} 个）：\n`);
     undefinedKeys.sort().forEach(k => console.log(`   - ${k}`));
   } else {
     console.log('\n✅ 所有使用的 key 都已定义（零缺失）');
   }
-  
-  if (unusedKeys.length > 0) {
-    console.log(`\n⚠️  未使用的 key（${unusedKeys.length} 个）：`);
-    console.log('   这些 key 在语言包中定义，但代码中未使用（可能是预留）：\n');
+
+  if (unusedKeys.length) {
+    console.log(`\n⚠️  已定义但代码未使用（${unusedKeys.length} 个，前 20）：\n`);
     unusedKeys.sort().slice(0, 20).forEach(k => console.log(`   - ${k}`));
-    if (unusedKeys.length > 20) {
-      console.log(`   ... 还有 ${unusedKeys.length - 20} 个`);
-    }
+    if (unusedKeys.length > 20) console.log(`   ... 还有 ${unusedKeys.length - 20} 个`);
   } else {
     console.log('\n✅ 所有定义的 key 都被使用（零冗余）');
   }
-  
+
   console.log('\n' + '='.repeat(60));
-  
-  // 退出码
-  if (undefinedKeys.length > 0) {
-    console.log('❌ 校验失败：存在未定义的 key');
-    process.exit(1);
-  } else {
-    console.log('✅ 校验通过');
-    process.exit(0);
-  }
+  process.exit(undefinedKeys.length ? 1 : 0);
 }
 
 main();
