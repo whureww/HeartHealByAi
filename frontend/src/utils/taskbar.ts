@@ -109,6 +109,22 @@ export async function clearUnreadFlash() {
 }
 
 /**
+ * 登出 / 会话失效时重置托盘与任务栏提醒状态（不受 flashing 标志限制）：
+ * 清空 Rust 侧未读数据（含悬浮卡片与 tooltip）、还原窗口标题与缩略图。
+ * 与 clearUnreadFlash 的区别：这里无条件执行——未登录时也必须清干净，
+ * 否则停在登录页时悬停托盘仍会弹出过期预览（自定义托盘界面显示异常）。
+ */
+export async function resetTrayState() {
+  if (!isTauri()) return
+  unreadCount = 0
+  flashing = false
+  lastUnreadChatId = null
+  invoke('clear_tray_unread').catch(() => {})
+  invoke('clear_taskbar_preview').catch(() => {})
+  await getCurrentWindow().setTitle(appTitle()).catch(() => {})
+}
+
+/**
  * 托盘系统界面文案跟随语言：菜单项（显示/退出）与默认 tooltip 由前端按当前
  * 语言下发（Rust 侧初始为中文兜底）。启动时与每次切换语言时调用。
  */

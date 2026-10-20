@@ -6,6 +6,7 @@ import {
 } from '@/api/user'
 import { setAuthToken, clearAuthToken } from '@/api/request'
 import { secureSet, secureRemove } from '@/utils/secureStore'
+import { resetTrayState } from '@/utils/taskbar'
 import { i18n } from '@/i18n'
 
 // 会话写入本地加密文件（重启后免登录）
@@ -249,6 +250,8 @@ export const useUserStore = defineStore('user', {
       }
       // 清除加密会话文件（必须等待完成，防止整页跳转时被中断导致 token 复活）
       await secureRemove('session')
+      // 清空托盘未读状态：否则停在登录页时悬停托盘仍会弹出过期消息预览
+      await resetTrayState()
     },
 
     /**

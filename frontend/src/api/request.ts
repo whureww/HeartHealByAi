@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { API_BASE } from '@/config'
 import { secureRemove } from '@/utils/secureStore'
+import { resetTrayState } from '@/utils/taskbar'
 import { i18n } from '@/i18n'
 import { tServer } from '@/utils/serverMsg'
 
@@ -38,6 +39,13 @@ export async function handleSessionExpired() {
     await secureRemove('session')
   } catch {
     // 清理失败不阻断跳转
+  }
+  // 清空托盘未读状态：必须赶在整页跳转前完成，否则 Rust 侧残留的未读数据
+  // 会在登录页悬停托盘时弹出过期消息预览（自定义托盘界面显示异常）
+  try {
+    await resetTrayState()
+  } catch {
+    // 托盘清理失败不阻断跳转
   }
   const publicPaths = ['/login', '/register', '/forget-password']
   if (!publicPaths.includes(location.pathname)) {

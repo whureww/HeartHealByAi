@@ -555,16 +555,16 @@ fn resize_for_menu_bar(img: &tauri::image::Image<'_>) -> Option<tauri::image::Im
 
 /// 托盘常态图标：Windows 直接用应用图标；macOS 需缩放到菜单栏尺寸
 fn default_tray_icon(app: &tauri::AppHandle) -> Option<tauri::image::Image<'static>> {
-    let icon = app.default_window_icon()?.to_owned();
+    // default_window_icon() 返回借用自 app 的引用，to_owned() 不会抹掉生命周期；
+    // 必须把像素数据复制进 Vec，用 new_owned 构造真正拥有数据的 'static 图像
+    let icon = app.default_window_icon()?;
     #[cfg(target_os = "macos")]
-    return resize_for_menu_bar(&icon);
-    // Windows：to_owned() 产生 Image<'a>（rgba 仍借用 app 生命周期），无法直接以
-    // Image<'static> 返回——取像素数据副本后用 new_owned 重建为 'static
+    return resize_for_menu_bar(icon);
     #[cfg(not(target_os = "macos"))]
     Some(tauri::image::Image::new_owned(
         icon.rgba().to_vec(),
-        icon.width(),
-        icon.height(),
+        icon.width() as u32,
+        icon.height() as u32,
     ))
 }
 
