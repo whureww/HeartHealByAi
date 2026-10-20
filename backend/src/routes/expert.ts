@@ -5,6 +5,7 @@ import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { isAppointmentParticipant } from '../utils/guards';
 import { ensureDoctorEnColumns } from '../utils/doctorCols';
+import { ensureTestCreatedByColumn } from '../utils/testCols';
 
 const router = Router();
 
@@ -102,6 +103,7 @@ const normalizeTestQuestions = (questions: any): { ok: boolean; data: any[]; mes
 
 // ========== 专家问卷：创建（status=0 待审核，管理员上架后全平台可见） ==========
 router.post('/tests', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureTestCreatedByColumn();
     const expertUserId = req.user.id;
     const { name, description, category, estimated_minutes, scoring_method, result_levels, questions } = req.body || {};
 
@@ -143,6 +145,7 @@ router.post('/tests', authenticate, requireExpert, asyncHandler(async (req: any,
 
 // ========== 专家问卷：我的问卷列表 ==========
 router.get('/tests', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureTestCreatedByColumn();
     const expertUserId = req.user.id;
     const [rows] = await pool.execute(
         `SELECT id, code, name, category, total_questions, status, created_at
@@ -155,6 +158,7 @@ router.get('/tests', authenticate, requireExpert, asyncHandler(async (req: any, 
 
 // ========== 专家问卷：详情（编辑回填，仅自己的） ==========
 router.get('/tests/:id', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureTestCreatedByColumn();
     const expertUserId = req.user.id;
     const testId = parseInt(req.params.id);
     if (isNaN(testId)) {
@@ -189,6 +193,7 @@ router.get('/tests/:id', authenticate, requireExpert, asyncHandler(async (req: a
 
 // ========== 专家问卷：编辑（仅自己的待审核问卷可改，已上架/已下架归管理员处置） ==========
 router.put('/tests/:id', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureTestCreatedByColumn();
     const expertUserId = req.user.id;
     const testId = parseInt(req.params.id);
     if (isNaN(testId)) {
@@ -244,6 +249,7 @@ router.put('/tests/:id', authenticate, requireExpert, asyncHandler(async (req: a
 
 // ========== 专家问卷：删除（仅自己的待审核问卷；已上架问卷含用户作答数据，归管理员处置） ==========
 router.delete('/tests/:id', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureTestCreatedByColumn();
     const expertUserId = req.user.id;
     const testId = parseInt(req.params.id);
     if (isNaN(testId)) {
