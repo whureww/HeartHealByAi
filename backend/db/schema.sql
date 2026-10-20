@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS psychological_tests (
     scoring_method VARCHAR(30) DEFAULT 'sum',
     result_levels TEXT COMMENT 'JSON: [{min,max,level,desc}]',
     status TINYINT NOT NULL DEFAULT 0 COMMENT '0=待审核 1=已上架 2=已下架',
+    created_by INT UNSIGNED DEFAULT NULL COMMENT '创建者用户ID（专家创建的问卷）；NULL=管理员/系统创建',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

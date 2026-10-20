@@ -73,6 +73,201 @@ router.put('/my-card', authenticate, requireExpert, asyncHandler(async (req: any
     res.json({ success: true, message: '名片已提交审核，管理员通过后将显示在专家列表' });
 }));
 
+// ========== 专家问卷：校验并规整题目（question_number 服务端重排） ==========
+const normalizeTestQuestions = (questions: any): { ok: boolean; data: any[]; message?: string } => {
+    const list = Array.isArray(questions)
+        ? questions.map((q: any, i: number) => {
+            const content = String(q?.content || '').trim();
+            const options = (Array.isArray(q?.options) ? q.options : [])
+                .map((o: any) => ({ score: Number(o?.score) || 0, text: String(o?.text || '').trim() }))
+                .filter((o: any) => o.text);
+            return {
+                question_number: i + 1,
+                content,
+                dimension: String(q?.dimension || ''),
+                reverse_scoring: q?.reverse_scoring ? 1 : 0,
+                options
+            };
+        })
+        : [];
+
+    if (list.length === 0) {
+        return { ok: false, data: [], message: '请至少添加一道题目' };
+    }
+    if (list.some((q: any) => !q.content || q.options.length < 2)) {
+        return { ok: false, data: [], message: '每道题目需填写题干，且至少 2 个选项' };
+    }
+    return { ok: true, data: list };
+};
+
+// ========== 专家问卷：创建（status=0 待审核，管理员上架后全平台可见） ==========
+router.post('/tests', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    const expertUserId = req.user.id;
+    const { name, description, category, estimated_minutes, scoring_method, result_levels, questions } = req.body || {};
+
+    if (!name || !String(name).trim()) {
+        throw new BusinessError('问卷名称不能为空', 400);
+    }
+    const norm = normalizeTestQuestions(questions);
+    if (!norm.ok) {
+        throw new BusinessError(norm.message!, 400);
+    }
+
+    // 安全约束：status/created_by 服务端强制，code 自动生成（专家不可自上架、不可指定编码）
+    const code = `EXP-${expertUserId}-${Date.now()}`;
+    const [testResult] = await pool.execute(
+        `INSERT INTO psychological_tests
+         (code, name, description, category, total_questions, estimated_minutes, scoring_method, result_levels, status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+        [
+            code, String(name).trim(), String(description || ''), String(category || 'emotion'),
+            norm.data.length, Number(estimated_minutes) || 5,
+            String(scoring_method || 'sum'),
+            JSON.stringify(Array.isArray(result_levels) ? result_levels : []),
+            expertUserId
+        ]
+    );
+    const testId = (testResult as any).insertId;
+
+    for (const q of norm.data) {
+        await pool.execute(
+            `INSERT INTO test_questions
+             (test_id, question_number, content, dimension, reverse_scoring, options)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [testId, q.question_number, q.content, q.dimension, q.reverse_scoring, JSON.stringify(q.options)]
+        );
+    }
+
+    res.json({ success: true, message: '问卷已提交，等待管理员审核上架', data: { id: testId } });
+}));
+
+// ========== 专家问卷：我的问卷列表 ==========
+router.get('/tests', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    const expertUserId = req.user.id;
+    const [rows] = await pool.execute(
+        `SELECT id, code, name, category, total_questions, status, created_at
+         FROM psychological_tests WHERE created_by = ?
+         ORDER BY created_at DESC`,
+        [expertUserId]
+    );
+    res.json({ success: true, data: rows });
+}));
+
+// ========== 专家问卷：详情（编辑回填，仅自己的） ==========
+router.get('/tests/:id', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    const expertUserId = req.user.id;
+    const testId = parseInt(req.params.id);
+    if (isNaN(testId)) {
+        throw new BusinessError('无效的问卷ID', 400);
+    }
+
+    const [rows] = await pool.execute(
+        'SELECT * FROM psychological_tests WHERE id = ? AND created_by = ?',
+        [testId, expertUserId]
+    );
+    const test = (rows as any[])[0];
+    if (!test) {
+        throw new BusinessError('问卷不存在或无权访问', 404);
+    }
+
+    const [qRows] = await pool.execute(
+        `SELECT id, question_number, content, dimension, reverse_scoring, options
+         FROM test_questions WHERE test_id = ? ORDER BY question_number ASC`,
+        [testId]
+    );
+    const questions = (qRows as any[]).map((q: any) => ({
+        id: q.id,
+        question_number: q.question_number,
+        content: q.content,
+        dimension: q.dimension || '',
+        reverse_scoring: !!q.reverse_scoring,
+        options: JSON.parse(q.options || '[]')
+    }));
+
+    res.json({ success: true, data: { ...test, questions } });
+}));
+
+// ========== 专家问卷：编辑（仅自己的待审核问卷可改，已上架/已下架归管理员处置） ==========
+router.put('/tests/:id', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    const expertUserId = req.user.id;
+    const testId = parseInt(req.params.id);
+    if (isNaN(testId)) {
+        throw new BusinessError('无效的问卷ID', 400);
+    }
+
+    const [rows] = await pool.execute(
+        'SELECT status FROM psychological_tests WHERE id = ? AND created_by = ?',
+        [testId, expertUserId]
+    );
+    const test = (rows as any[])[0];
+    if (!test) {
+        throw new BusinessError('问卷不存在或无权访问', 404);
+    }
+    if (Number(test.status) !== 0) {
+        throw new BusinessError('仅待审核状态的问卷可编辑，已上架/已下架问卷请联系管理员', 403);
+    }
+
+    const { name, description, category, estimated_minutes, scoring_method, result_levels, questions } = req.body || {};
+    if (!name || !String(name).trim()) {
+        throw new BusinessError('问卷名称不能为空', 400);
+    }
+    const norm = normalizeTestQuestions(questions);
+    if (!norm.ok) {
+        throw new BusinessError(norm.message!, 400);
+    }
+
+    await pool.execute(
+        `UPDATE psychological_tests
+         SET name = ?, description = ?, category = ?, total_questions = ?, estimated_minutes = ?, scoring_method = ?, result_levels = ?
+         WHERE id = ?`,
+        [
+            String(name).trim(), String(description || ''), String(category || 'emotion'),
+            norm.data.length, Number(estimated_minutes) || 5,
+            String(scoring_method || 'sum'),
+            JSON.stringify(Array.isArray(result_levels) ? result_levels : []),
+            testId
+        ]
+    );
+
+    await pool.execute('DELETE FROM test_questions WHERE test_id = ?', [testId]);
+    for (const q of norm.data) {
+        await pool.execute(
+            `INSERT INTO test_questions
+             (test_id, question_number, content, dimension, reverse_scoring, options)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [testId, q.question_number, q.content, q.dimension, q.reverse_scoring, JSON.stringify(q.options)]
+        );
+    }
+
+    res.json({ success: true, message: '问卷已更新，仍为待审核状态' });
+}));
+
+// ========== 专家问卷：删除（仅自己的待审核问卷；已上架问卷含用户作答数据，归管理员处置） ==========
+router.delete('/tests/:id', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    const expertUserId = req.user.id;
+    const testId = parseInt(req.params.id);
+    if (isNaN(testId)) {
+        throw new BusinessError('无效的问卷ID', 400);
+    }
+
+    const [rows] = await pool.execute(
+        'SELECT status FROM psychological_tests WHERE id = ? AND created_by = ?',
+        [testId, expertUserId]
+    );
+    const test = (rows as any[])[0];
+    if (!test) {
+        throw new BusinessError('问卷不存在或无权访问', 404);
+    }
+    if (Number(test.status) !== 0) {
+        throw new BusinessError('仅待审核状态的问卷可删除，已上架/已下架问卷请联系管理员', 403);
+    }
+
+    await pool.execute('DELETE FROM test_questions WHERE test_id = ?', [testId]);
+    await pool.execute('DELETE FROM psychological_tests WHERE id = ?', [testId]);
+
+    res.json({ success: true, message: '问卷已删除' });
+}));
+
 // 获取专家的预约列表
 router.get('/appointments', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
     const expertUserId = req.user.id;

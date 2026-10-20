@@ -17,6 +17,7 @@ export default {
       user: 'Profile',
       expert: 'Expert Workspace',
       expertCard: 'My Card',
+      myTests: 'My Questionnaires',
       admin: 'Admin Console'
     },
     chat: {

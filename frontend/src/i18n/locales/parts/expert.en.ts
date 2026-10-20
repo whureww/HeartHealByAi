@@ -5,8 +5,19 @@ export default {
       workspace: 'Expert Workspace',
       brand: 'XinYu · Consultant',
       appointments: 'Appointments',
+      myTests: 'My Questionnaires',
       myCard: 'My Profile Card',
       userCenter: 'Account Center'
+    },
+    myTests: {
+      title: 'My Questionnaires',
+      subtitle: 'Create your own assessment questionnaires. An admin will review before they go live',
+      readonlyHint: 'Managed by admins',
+      empty: 'No questionnaires yet. Click "New Questionnaire" to create one',
+      nameRequired: 'Please enter the questionnaire name',
+      submittedReview: 'Submitted. Waiting for admin review before publishing',
+      updated: 'Questionnaire updated. Still pending review',
+      loadDetailFailed: 'Failed to load questionnaire'
     },
     card: {
       title: 'My Profile Card',

@@ -26,3 +26,18 @@ export const saveMyCard = (data: {
   name_en?: string; title_en?: string; specialty_en?: string; intro_en?: string
 }) =>
   request.put('/expert/my-card', data)
+
+// 我的问卷：创建（提交后待管理员审核上架）
+export const createMyTest = (data: any) => request.post('/expert/tests', data)
+
+// 我的问卷：列表
+export const getMyTests = () => request.get('/expert/tests')
+
+// 我的问卷：详情（编辑回填）
+export const getMyTestDetail = (id: number) => request.get(`/expert/tests/${id}`)
+
+// 我的问卷：更新（仅待审核状态可改）
+export const updateMyTest = (id: number, data: any) => request.put(`/expert/tests/${id}`, data)
+
+// 我的问卷：删除（仅待审核状态可删）
+export const deleteMyTest = (id: number) => request.delete(`/expert/tests/${id}`)

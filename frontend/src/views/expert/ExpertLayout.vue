@@ -17,6 +17,13 @@
           <span class="menu-text">{{ $t('expert.nav.appointments') }}</span>
         </router-link>
         <router-link
+          to="/expert/my-tests"
+          :class="{ active: $route.path.startsWith('/expert/my-tests') }"
+        >
+          <AppIcon name="list" :size="17" />
+          <span class="menu-text">{{ $t('expert.nav.myTests') }}</span>
+        </router-link>
+        <router-link
           to="/expert/my-card"
           :class="{ active: $route.path === '/expert/my-card' }"
         >

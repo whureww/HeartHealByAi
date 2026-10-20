@@ -56,6 +56,18 @@ const routes = [
       {
         path: 'my-card',
         component: () => import('../views/expert/MyCard.vue')
+      },
+      {
+        path: 'my-tests',
+        component: () => import('../views/expert/MyTests.vue')
+      },
+      {
+        path: 'my-tests/create',
+        component: TestEdit
+      },
+      {
+        path: 'my-tests/edit/:id',
+        component: TestEdit
       }
     ]
   },

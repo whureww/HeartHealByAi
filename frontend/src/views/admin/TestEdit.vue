@@ -7,7 +7,7 @@
     <div class="form-section">
       <h3>{{ $t('admin.test.basicInfo') }}</h3>
       <div class="form-grid">
-        <div class="form-group">
+        <div class="form-group" v-if="!isExpert">
           <label>{{ $t('admin.test.fCode') }} <span class="required">*</span></label>
           <input v-model="form.code" :placeholder="$t('admin.test.phCode')" :disabled="isEdit" />
         </div>
@@ -132,7 +132,7 @@
     </div>
 
     <div class="form-actions">
-      <button class="btn-cancel" @click="$router.back()">{{ $t('admin.test.cancel') }}</button>
+      <button class="btn-cancel" @click="handleCancel">{{ $t('admin.test.cancel') }}</button>
       <button class="btn-submit" :disabled="isSubmitting" @click="submit">
         <span v-if="isSubmitting">{{ $t('admin.test.saving') }}</span>
         <span v-else>{{ $t('admin.test.save') }}</span>
@@ -142,10 +142,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { createTest } from '@/api/admin'
+import { createMyTest, getMyTestDetail, updateMyTest } from '@/api/expert'
 import { alert, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
@@ -183,10 +184,24 @@ interface TestForm {
   questions: Question[]
 }
 
+// mode/testId：嵌入 Dashboard 专家工作台时由父组件传入，避免依赖当前路由 meta
+const props = defineProps<{ mode?: 'admin' | 'expert'; testId?: number | null }>()
+const emit = defineEmits<{ (e: 'saved'): void; (e: 'cancel'): void }>()
+
 const route = useRoute()
 const router = useRouter()
 const isEdit = ref(false)
 const isSubmitting = ref(false)
+// 专家模式：嵌入专家工作台（mode=expert）或独立路由（meta.role=2）。编码由服务端自动生成，提交走 /expert/tests，仅待审核状态可编辑
+const isExpert = props.mode === 'expert' || route.meta.role === 2
+const isEmbedded = props.mode === 'expert'
+const effectiveId = computed<number | null>(() =>
+  props.testId != null ? Number(props.testId) : (route.params.id ? Number(route.params.id) : null)
+)
+const handleCancel = () => {
+  if (isEmbedded) emit('cancel')
+  else router.back()
+}
 
 const form = ref<TestForm>({
   code: '',
@@ -243,7 +258,12 @@ const removeOption = (qIndex: number, oIndex: number) => {
 }
 
 const submit = async () => {
-  if (!form.value.code || !form.value.name) {
+  if (isExpert) {
+    if (!form.value.name) {
+      await alert(t('expert.myTests.nameRequired'))
+      return
+    }
+  } else if (!form.value.code || !form.value.name) {
     await alert(t('admin.test.errCodeName'))
     return
   }
@@ -254,9 +274,21 @@ const submit = async () => {
 
   isSubmitting.value = true
   try {
-    await createTest(form.value)
-    await success(t('admin.test.created'))
-    router.push('/admin/tests')
+    if (isExpert) {
+      if (isEdit.value && effectiveId.value != null) {
+        await updateMyTest(effectiveId.value, form.value)
+        await success(t('expert.myTests.updated'))
+      } else {
+        await createMyTest(form.value)
+        await success(t('expert.myTests.submittedReview'))
+      }
+      if (isEmbedded) emit('saved')
+      else router.push('/expert/my-tests')
+    } else {
+      await createTest(form.value)
+      await success(t('admin.test.created'))
+      router.push('/admin/tests')
+    }
   } catch (e: any) {
     await error(e.message || t('admin.test.saveFailed'))
   } finally {
@@ -264,9 +296,39 @@ const submit = async () => {
   }
 }
 
+// 专家编辑回填：拉取自己的待审核问卷详情填充表单
+const loadExpertTest = async () => {
+  try {
+    const res: any = await getMyTestDetail(effectiveId.value as number)
+    const test = res.data
+    form.value = {
+      code: test.code || '',
+      name: test.name || '',
+      description: test.description || '',
+      category: test.category || 'emotion',
+      total_questions: test.total_questions || 0,
+      estimated_minutes: test.estimated_minutes || 5,
+      scoring_method: test.scoring_method || 'sum',
+      result_levels: test.result_levels ? JSON.parse(test.result_levels) : [],
+      questions: (test.questions || []).map((q: any) => ({
+        question_number: q.question_number,
+        content: q.content || '',
+        dimension: q.dimension || '',
+        reverse_scoring: !!q.reverse_scoring,
+        options: (q.options || []).map((o: any) => ({ score: Number(o.score) || 0, text: o.text || '' }))
+      }))
+    }
+  } catch (e: any) {
+    await error(e.message || t('expert.myTests.loadDetailFailed'))
+  }
+}
+
 onMounted(() => {
-  if (route.params.id) {
+  if (effectiveId.value != null) {
     isEdit.value = true
+    if (isExpert) {
+      loadExpertTest()
+    }
   }
 })
 </script>

@@ -5,8 +5,19 @@ export default {
       workspace: '专家工作台',
       brand: '心愈 · 咨询师端',
       appointments: '预约管理',
+      myTests: '我的问卷',
       myCard: '我的名片',
       userCenter: '个人中心'
+    },
+    myTests: {
+      title: '我的问卷',
+      subtitle: '创建自编心理测评问卷，提交后由管理员审核上架',
+      readonlyHint: '由管理员管理',
+      empty: '暂无问卷，点击右上角「新建问卷」创建',
+      nameRequired: '请填写问卷名称',
+      submittedReview: '提交成功，等待管理员审核上架',
+      updated: '问卷已更新，仍为待审核状态',
+      loadDetailFailed: '加载问卷失败'
     },
     card: {
       title: '我的名片',

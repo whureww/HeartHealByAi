@@ -17,6 +17,7 @@ export default {
       user: '个人中心',
       expert: '专家工作台',
       expertCard: '我的名片',
+      myTests: '我的问卷',
       admin: '管理后台'
     },
     chat: {

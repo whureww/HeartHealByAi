@@ -723,6 +723,16 @@
         <MyCard />
       </div>
 
+      <!-- 6.2 专家工作台 - 我的问卷（列表） -->
+      <div v-if="currentPage === 'my-tests'" class="page show">
+        <MyTests embedded @create="onCreateTest" @edit="onEditTest" />
+      </div>
+
+      <!-- 6.3 专家工作台 - 新建/编辑问卷 -->
+      <div v-if="currentPage === 'my-tests-edit'" class="page show">
+        <TestEdit mode="expert" :test-id="editingTestId" @saved="onTestSaved" @cancel="onTestCancel" />
+      </div>
+
       <!-- 7. 专家工作台 - 预约详情 -->
       <div v-if="currentPage === 'expert-detail'" class="page show">
         <AppointmentDetail 
@@ -782,6 +792,8 @@ import AppointmentList from '../expert/AppointmentList.vue'
 import MyCard from '../expert/MyCard.vue'
 import AppointmentDetail from '../expert/AppointmentDetail.vue'
 import UserAppointmentList from '../expert/UserAppointmentList.vue'
+import MyTests from '../expert/MyTests.vue'
+import TestEdit from '../admin/TestEdit.vue'
 import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import ModelSettingsDialog from "../../components/ModelSettingsDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
@@ -1394,11 +1406,12 @@ const adminMenuItem: MenuItem = {
 
 // 动态菜单：根据 role 显示不同入口
 const menuItems = computed<MenuItem[]>(() => {
-  // role=2 专家：只显示专家工作台 + 我的名片 + 个人中心
+  // role=2 专家：只显示专家工作台 + 我的名片 + 我的问卷 + 个人中心
   if (userStore.userInfo?.role === 2) {
     return [
       { id: 'expert', name: 'dashboard.nav.expert', icon: 'stethoscope' },
       { id: 'expert-card', name: 'dashboard.nav.expertCard', icon: 'fileText' },
+      { id: 'my-tests', name: 'dashboard.nav.myTests', icon: 'list' },
       { id: 'user', name: 'dashboard.nav.user', icon: 'user' }
     ]
   }
@@ -1698,6 +1711,23 @@ const switchPage = async (pageId: string) => {
 const onViewAppointmentDetail = (id: number) => {
   currentAppointmentId.value = id
   currentPage.value = 'expert-detail'
+}
+
+// ===== 专家问卷：新建 / 编辑 / 返回列表（在 Dashboard 内切换，不离开应用外壳） =====
+const editingTestId = ref<number | null>(null)
+const onCreateTest = () => {
+  editingTestId.value = null
+  currentPage.value = 'my-tests-edit'
+}
+const onEditTest = (id: number) => {
+  editingTestId.value = id
+  currentPage.value = 'my-tests-edit'
+}
+const onTestSaved = () => {
+  currentPage.value = 'my-tests'
+}
+const onTestCancel = () => {
+  currentPage.value = 'my-tests'
 }
 
 const onViewUserAppointmentDetail = (id: number) => {
