@@ -719,17 +719,17 @@
       </div>
 
       <!-- 6.1 专家工作台 - 我的名片 -->
-      <div v-if="currentPage === 'expert-card'" class="page show">
+      <div v-if="currentPage === 'expert-card'" class="page show scrollable">
         <MyCard />
       </div>
 
       <!-- 6.2 专家工作台 - 我的问卷（列表） -->
-      <div v-if="currentPage === 'my-tests'" class="page show">
+      <div v-if="currentPage === 'my-tests'" class="page show scrollable">
         <MyTests embedded @create="onCreateTest" @edit="onEditTest" />
       </div>
 
       <!-- 6.3 专家工作台 - 新建/编辑问卷 -->
-      <div v-if="currentPage === 'my-tests-edit'" class="page show">
+      <div v-if="currentPage === 'my-tests-edit'" class="page show scrollable">
         <TestEdit mode="expert" :test-id="editingTestId" @saved="onTestSaved" @cancel="onTestCancel" />
       </div>
 
@@ -2463,6 +2463,13 @@ const scrollToBottom = () => {
 .page.show {
   display: flex;
   flex-direction: column;
+}
+
+/* 内容自适应高度的页面（专家名片 / 我的问卷 / 问卷表单）：
+   .main-content 为 overflow:hidden，页面需自带滚动容器才能翻页。
+   仅对这类页面开启；预约列表等已自带内部滚动的页面不加，避免出现多余滚动条。 */
+.page.scrollable {
+  overflow-y: auto;
 }
 
 .card {
