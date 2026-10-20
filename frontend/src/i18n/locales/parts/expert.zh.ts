@@ -178,7 +178,12 @@ export default {
       sendFailedTitle: '发送失败',
       sendFailedMsg: '网络连接已断开，请稍后重试',
       precheckHit: '消息包含违禁内容（{hit}），请修改后重新发送',
-      precheckHitFallback: '敏感词'
+      precheckHitFallback: '敏感词',
+      sendTest: '发送问卷',
+      pickTestTitle: '选择要发送的问卷',
+      noTests: '暂无可发送的问卷',
+      doTest: '去作答',
+      testSent: '已发送问卷'
     }
   }
 }

@@ -17,6 +17,7 @@ import aiRouter from './routes/ai';
 import memoryRouter from './routes/memory';
 import moderationRouter from './routes/moderation';
 import { registerRestrictBroadcaster, getActiveRestriction, Restriction } from './utils/restrict';
+import { ensureChatCols } from './utils/chatCols';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth';
 
@@ -240,7 +241,8 @@ io.on('connection', (socket) => {
         appointmentId: number,
         senderId: number,
         receiverId: number,
-        content: string
+        content: string,
+        testId?: number
     }) => {
         try {
             // 安全修复：senderId 以服务端校验的身份为准，忽略客户端传值
@@ -270,24 +272,47 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            // 内容审核：词库秒拦 + AI 复核隐晦变体（结合上下文），违规内容不入库不广播
-            const chatContext = await recentChatContext(Number(data.appointmentId), senderId);
-            const moderation = await checkMessageContentAI(data.content, chatContext);
-            if (!moderation.ok) {
-                socket.emit('message-blocked', {
-                    appointmentId: data.appointmentId,
-                    content: data.content,
-                    reason: moderation.hit
-                        ? `消息包含违规内容（${moderation.hit}），已被拦截`
-                        : '消息包含不文明或违规内容，已被拦截'
-                });
-                return;
+            // expert_chat 旧库懒迁移：确保 msg_type / test_id 列存在
+            await ensureChatCols();
+
+            let msgType = 'text';
+            let testId: number | null = null;
+            let content = data.content;
+
+            if (data.testId) {
+                // 发送问卷卡片：服务端校验问卷已上架，内容以问卷名为准（非用户文本，不参与内容审核）
+                const [testRows] = await pool.execute(
+                    'SELECT id, name FROM psychological_tests WHERE id = ? AND status = 1',
+                    [Number(data.testId)]
+                );
+                const test = (testRows as any[])[0];
+                if (!test) {
+                    socket.emit('error', { message: '问卷不存在或未上架' });
+                    return;
+                }
+                msgType = 'test';
+                testId = Number(test.id);
+                content = String(test.name || '问卷');
+            } else {
+                // 内容审核：词库秒拦 + AI 复核隐晦变体（结合上下文），违规内容不入库不广播
+                const chatContext = await recentChatContext(Number(data.appointmentId), senderId);
+                const moderation = await checkMessageContentAI(content, chatContext);
+                if (!moderation.ok) {
+                    socket.emit('message-blocked', {
+                        appointmentId: data.appointmentId,
+                        content,
+                        reason: moderation.hit
+                            ? `消息包含违规内容（${moderation.hit}），已被拦截`
+                            : '消息包含不文明或违规内容，已被拦截'
+                    });
+                    return;
+                }
             }
 
             const [insertResult] = await pool.execute(
-                `INSERT INTO expert_chat (sender_id, receiver_id, content, appointment_id, created_at)
-                 VALUES (?, ?, ?, ?, NOW())`,
-                [senderId, receiverId, data.content, data.appointmentId]
+                `INSERT INTO expert_chat (sender_id, receiver_id, content, appointment_id, msg_type, test_id, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+                [senderId, receiverId, content, data.appointmentId, msgType, testId]
             );
 
             const [senderRows] = await pool.execute(
@@ -302,10 +327,12 @@ io.on('connection', (socket) => {
                 id: (insertResult as any).insertId,
                 sender_id: senderId,
                 receiver_id: receiverId,
-                content: data.content,
+                content,
                 appointment_id: data.appointmentId,
                 sender_name: senderName,
                 sender_avatar: senderAvatar,
+                msg_type: msgType,
+                test_id: testId,
                 created_at: new Date().toISOString()
             };
 
@@ -317,7 +344,7 @@ io.on('connection', (socket) => {
                     appointmentId: data.appointmentId,
                     senderName,
                     senderAvatar,
-                    content: data.content
+                    content
                 });
             }
         } catch (e) {

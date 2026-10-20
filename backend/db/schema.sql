@@ -172,6 +172,8 @@ CREATE TABLE IF NOT EXISTS expert_chat (
     content TEXT NOT NULL,
     appointment_id INT UNSIGNED NOT NULL,
     is_read TINYINT NOT NULL DEFAULT 0,
+    msg_type VARCHAR(16) NOT NULL DEFAULT 'text' COMMENT 'text=普通消息 test=问卷卡片',
+    test_id INT UNSIGNED DEFAULT NULL COMMENT 'msg_type=test 时指向 psychological_tests.id',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     KEY idx_chat_appointment (appointment_id),
     KEY idx_chat_receiver (receiver_id)

@@ -6,6 +6,7 @@ import { BusinessError } from '../middleware/error';
 import { isAppointmentParticipant } from '../utils/guards';
 import { ensureDoctorEnColumns } from '../utils/doctorCols';
 import { ensureTestCreatedByColumn } from '../utils/testCols';
+import { ensureChatCols } from '../utils/chatCols';
 
 const router = Router();
 
@@ -541,13 +542,18 @@ router.get('/chat/:appointmentId', authenticate, asyncHandler(async (req: any, r
         throw new BusinessError('预约不存在或无权访问', 404);
     }
 
+    // expert_chat 旧库懒迁移：确保 msg_type / test_id 列存在后再查询
+    await ensureChatCols();
+
     const [rows] = await pool.execute(
         `SELECT ec.*,
                 sender.username as sender_name,
-                receiver.username as receiver_name
+                receiver.username as receiver_name,
+                pt.name as test_name
          FROM expert_chat ec
          JOIN users sender ON ec.sender_id = sender.id
          JOIN users receiver ON ec.receiver_id = receiver.id
+         LEFT JOIN psychological_tests pt ON ec.test_id = pt.id
          WHERE ec.appointment_id = ?
          ORDER BY ec.created_at ASC, ec.id ASC`,
         [appointmentId]

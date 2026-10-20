@@ -26,7 +26,7 @@
         </div>
         <div class="form-group">
           <label>{{ $t('admin.test.fCount') }}</label>
-          <input v-model.number="form.total_questions" type="number" placeholder="20" />
+          <div class="count-display">{{ $t('admin.test.questionCount', { n: form.questions.length }) }}</div>
         </div>
         <div class="form-group">
           <label>{{ $t('admin.test.fMinutes') }}</label>
@@ -250,7 +250,10 @@ const removeQuestion = (index: number) => {
 }
 
 const addOption = (qIndex: number) => {
-  form.value.questions[qIndex].options.push({ score: 1, text: '' })
+  const options = form.value.questions[qIndex].options
+  // 分值接着上一个选项递增（默认 1/2/3/4，再加即为 5）
+  const lastScore = options.length ? Number(options[options.length - 1]?.score) : 0
+  options.push({ score: (Number.isFinite(lastScore) ? lastScore : 0) + 1, text: '' })
 }
 
 const removeOption = (qIndex: number, oIndex: number) => {
@@ -272,6 +275,8 @@ const submit = async () => {
     return
   }
 
+  // 题目数量始终以实际题目数为准（编辑框已移除，避免与题库不一致）
+  form.value.total_questions = form.value.questions.length
   isSubmitting.value = true
   try {
     if (isExpert) {
@@ -401,7 +406,8 @@ h2 {
 
 .form-group input,
 .form-group select,
-.form-group textarea {
+.form-group textarea,
+.option-row input {
   padding: 9px 13px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-ctl);
@@ -416,9 +422,21 @@ h2 {
 
 .form-group input:focus,
 .form-group select:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.option-row input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* 题目数量：只读展示，随题目总数自动更新 */
+.count-display {
+  padding: 9px 13px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-ctl);
+  font-size: 14px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  box-sizing: border-box;
 }
 
 .checkbox-group label {

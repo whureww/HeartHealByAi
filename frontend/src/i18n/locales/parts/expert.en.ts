@@ -178,7 +178,12 @@ export default {
       sendFailedTitle: 'Send failed',
       sendFailedMsg: 'Network connection lost. Please try again later',
       precheckHit: 'Message contains prohibited content ({hit}). Please edit and resend',
-      precheckHitFallback: 'sensitive word'
+      precheckHitFallback: 'sensitive word',
+      sendTest: 'Send Questionnaire',
+      pickTestTitle: 'Choose a questionnaire to send',
+      noTests: 'No questionnaires available to send',
+      doTest: 'Take the Test',
+      testSent: 'Questionnaire sent'
     }
   }
 }

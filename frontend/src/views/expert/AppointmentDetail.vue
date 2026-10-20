@@ -138,7 +138,22 @@
           </span>
           <div class="msg-bubble">
             <div class="msg-sender">{{ msg.sender_name }}</div>
-            <div class="msg-content">{{ msg.content }}</div>
+            <!-- 问卷卡片消息：接收方可点「去作答」，发送方显示已发送 -->
+            <template v-if="msg.msg_type === 'test' && msg.test_id">
+              <div class="msg-test-card">
+                <AppIcon name="clipboard" :size="15" />
+                <span class="mtc-name">{{ msg.test_name || msg.content }}</span>
+              </div>
+              <button
+                v-if="msg.sender_id !== currentUserId"
+                class="msg-test-open"
+                @click="openTest(msg.test_id)"
+              >
+                {{ $t('expert.detail.doTest') }}
+              </button>
+              <span v-else class="msg-test-sent">{{ $t('expert.detail.testSent') }}</span>
+            </template>
+            <div v-else class="msg-content">{{ msg.content }}</div>
             <div class="msg-time">{{ formatTime(msg.created_at) }}</div>
           </div>
         </div>
@@ -196,6 +211,17 @@
       </div>
       <!-- 正常聊天输入（预检命中时输入框保留，便于直接修改重发） -->
       <div v-if="!isChatClosed && !mutedInfo" class="chat-input">
+        <!-- 专家可在输入框左侧选择已上架量表，作为问卷卡片发送给会话对方作答 -->
+        <button
+          v-if="!isUserView"
+          class="send-test-btn"
+          :title="$t('expert.detail.sendTest')"
+          :disabled="!isSelfConnected"
+          @click="openTestPicker"
+        >
+          <AppIcon name="clipboard" :size="14" />
+          {{ $t('expert.detail.sendTest') }}
+        </button>
         <input
           v-model="newMessage"
           @keyup.enter="sendMessage"
@@ -207,6 +233,35 @@
           <AppIcon name="send" :size="14" />
           {{ $t('expert.detail.send') }}
         </button>
+      </div>
+    </div>
+
+    <!-- ===== 发送问卷：选择已上架量表 ===== -->
+    <div v-if="showTestPicker" class="modal-overlay" @click="showTestPicker = false">
+      <div class="modal-content test-picker" @click.stop>
+        <div class="modal-header">
+          <h3>
+            <AppIcon name="clipboard" :size="16" />
+            {{ $t('expert.detail.pickTestTitle') }}
+          </h3>
+        </div>
+        <div class="test-picker-list">
+          <button
+            v-for="item in availableTests"
+            :key="item.id"
+            class="test-pick-item"
+            @click="sendTest(item)"
+          >
+            <span class="tp-name">{{ item.name }}</span>
+            <span class="tp-meta">{{ $t('admin.test.questionCount', { n: item.total_questions }) }}</span>
+          </button>
+          <div v-if="availableTests.length === 0" class="tp-empty">
+            {{ $t('expert.detail.noTests') }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-close-modal" @click="showTestPicker = false">{{ $t('expert.detail.cancel') }}</button>
+        </div>
       </div>
     </div>
 
@@ -280,12 +335,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed, watch, shallowRef } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL, getAuthToken } from '@/config'
 import { getAppointmentDetail, updateAppointmentStatus, getChatMessages } from '@/api/expert'
 import { precheckContent } from '@/api/moderation'
 import { submitChatReport } from '@/api/user'
+import { getTestList } from '@/api/tests'
 import { showToast } from '@/utils/notify'
 import { bindChatNotification, notifyIfBackground } from '@/utils/taskbar'
 import { handleSessionExpired } from '@/api/request'
@@ -307,6 +364,43 @@ const userStore = useUserStore()
 const { t, locale } = useI18n()
 const appointmentId = props.id
 const currentUserId = computed(() => userStore.userInfo?.id || 0)
+
+const router = useRouter()
+
+// ===== 专家发送问卷：选择已上架量表 → 以问卷卡片消息发给会话对方 =====
+const showTestPicker = ref(false)
+const availableTests = ref<any[]>([])
+
+const openTestPicker = async () => {
+  showTestPicker.value = true
+  if (availableTests.value.length === 0) {
+    try {
+      const res: any = await getTestList()
+      availableTests.value = res.data || []
+    } catch (e) {
+      console.error('加载问卷列表失败:', e)
+    }
+  }
+}
+
+const sendTest = (test: any) => {
+  if (!socket.value || !isSelfConnected.value) {
+    showToast(t('expert.detail.sendFailedTitle'), t('expert.detail.sendFailedMsg'), false)
+    return
+  }
+  socket.value.emit('send-message', {
+    appointmentId,
+    senderId: currentUserId.value,
+    receiverId: otherUserId.value,
+    content: '',
+    testId: test.id
+  })
+  showTestPicker.value = false
+}
+
+const openTest = (testId: number) => {
+  router.push(`/tests/do/${testId}`)
+}
 
 // ===== 判断当前视角：用户还是专家 =====
 const isUserView = computed(() => {
@@ -1725,5 +1819,126 @@ watch(() => appointment.value, (newVal) => {
 .chat-input button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 发送问卷按钮：输入框左侧的次级按钮（覆盖 .chat-input button 的主色样式） */
+.chat-input .send-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 11px 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  transition: all 0.2s var(--ease-out);
+}
+
+.chat-input .send-test-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chat-input .send-test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 问卷卡片消息 */
+.msg-test-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 6px;
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-ctl);
+  background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
+  font-weight: 600;
+}
+
+.mtc-name {
+  font-size: 13.5px;
+}
+
+.msg-test-open {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-ui);
+  transition: background 0.2s var(--ease-out);
+}
+
+.msg-test-open:hover {
+  background: var(--accent-strong);
+}
+
+.msg-test-sent {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ===== 问卷选择弹窗 ===== */
+.test-picker {
+  max-width: 420px;
+}
+
+.test-picker-list {
+  padding: 14px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.test-pick-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-family: var(--font-ui);
+  text-align: left;
+  transition: all 0.2s var(--ease-out);
+}
+
+.test-pick-item:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tp-name {
+  font-weight: 600;
+}
+
+.tp-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tp-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 24px 0;
 }
 </style>
