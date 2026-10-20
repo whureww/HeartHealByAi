@@ -558,8 +558,14 @@ fn default_tray_icon(app: &tauri::AppHandle) -> Option<tauri::image::Image<'stat
     let icon = app.default_window_icon()?.to_owned();
     #[cfg(target_os = "macos")]
     return resize_for_menu_bar(&icon);
+    // Windows：to_owned() 产生 Image<'a>（rgba 仍借用 app 生命周期），无法直接以
+    // Image<'static> 返回——取像素数据副本后用 new_owned 重建为 'static
     #[cfg(not(target_os = "macos"))]
-    Some(icon)
+    Some(tauri::image::Image::new_owned(
+        icon.rgba().to_vec(),
+        icon.width(),
+        icon.height(),
+    ))
 }
 
 /// 系统任务栏是否为浅色主题（读 SystemUsesLightTheme，失败默认浅色）
