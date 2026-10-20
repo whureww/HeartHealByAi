@@ -17,7 +17,7 @@
 
 [功能特性](#功能特性) · [技术架构](#技术架构) · [快速开始](#快速开始) · [下载安装](#下载安装) · [开发指南](#开发指南)
 
-**[English](#overview-en)** · 简体中文
+**[English](README_EN.md)** · 简体中文
 
 </div>
 
@@ -32,7 +32,7 @@
 - [开发指南](#开发指南)（项目结构 / 环境变量 / 数据库 / 健康检查）
 - [路线图](#路线图)
 - [免责声明](#免责声明)
-- [English](#overview-en)
+- [English](README_EN.md)
 
 ---
 
@@ -267,22 +267,6 @@ curl http://localhost:3001/health
 - [ ] 离线模式（LlamaCPP 本地推理）
 - [ ] 测评题目双语化、预约时段选择
 - [ ] 自动化测试框架（Jest / Playwright）
-
----
-
-## Overview (EN)
-
-**XinYu** is a desktop mental-health service platform that turns "AI companionship, assessment, report, human expert" into one continuous care loop.
-
-- **AI counseling**: streaming chat with RAG long-term memory (viewable and deletable), real-time sentence-level translation in 32 languages
-- **Assessment**: traditional scales and AI-generated questionnaires with holistic scoring; experts can create their own scales pending admin review
-- **Periodic AI reports**: structured analysis exportable as HTML, translatable into 32 languages
-- **Expert booking and chat**: real-time private chat over Socket.IO with online status, read receipts and offline alerts
-- **Community safety**: two-layer content moderation (120+ sensitive-word variants and AI semantic re-check), in-chat reporting with real-time mute/ban handling
-- **Desktop polish**: QQ-style tray badge and blinking, DWM hover message cards, taskbar alerts, global shortcut, light/dark themes, full zh/en i18n, dual-source auto update
-- **Security**: AES-256-GCM local storage, JWT + Redis single sign-on with token blacklist, role-based access control, server-side identity derivation
-
-See the Chinese sections above for full details.
 
 ---
 
