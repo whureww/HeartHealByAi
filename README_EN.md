@@ -30,6 +30,7 @@ A desktop mental-health service platform: AI counseling (streaming chat + long-t
 - [Download & Install](#download--install)
 - [Development](#development) (Project Structure / Environment Variables / Database / Health Check)
 - [Roadmap](#roadmap)
+- [Feedback](#feedback)
 - [Disclaimer](#disclaimer)
 - [简体中文](README.md)
 
@@ -273,6 +274,10 @@ curl http://localhost:3001/health
 - [ ] Automated test framework (Jest / Playwright)
 
 ---
+
+## Feedback
+
+Found a bug, security issue, or have a feature request? Submit it at **[yxpil.com/feedback](https://yxpil.com/feedback)**, or open an issue in the repository. Please include your OS version, app version and steps to reproduce.
 
 ## Contributing
 
