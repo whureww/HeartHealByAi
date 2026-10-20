@@ -24,7 +24,7 @@
     </div>
 
     <div class="table-card">
-      <table class="data-table">
+      <table class="data-table" :class="{ 'is-empty': users.length === 0 }">
         <thead>
           <tr>
             <th>ID</th>
@@ -642,6 +642,11 @@ onMounted(loadUsers)
   white-space: nowrap;
 }
 
+/* 空态：表头允许换行，使表格回落到卡片宽度，空状态提示得以在卡片内居中 */
+.data-table.is-empty th {
+  white-space: normal;
+}
+
 .data-table td {
   padding: 13px 16px;
   text-align: left;
@@ -740,7 +745,7 @@ onMounted(loadUsers)
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.empty-cell {
+.data-table td.empty-cell {
   text-align: center;
   padding: 56px 16px;
   color: var(--text-muted);

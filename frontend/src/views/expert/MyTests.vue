@@ -12,7 +12,7 @@
     </div>
 
     <div class="table-card">
-      <table class="data-table">
+      <table class="data-table" :class="{ 'is-empty': tests.length === 0 }">
         <thead>
           <tr>
             <th>{{ $t('admin.test.th.name') }}</th>
@@ -209,6 +209,11 @@ onMounted(loadTests)
   white-space: nowrap;
 }
 
+/* 空态：表头允许换行，使表格回落到卡片宽度，空状态提示得以在卡片内居中 */
+.data-table.is-empty th {
+  white-space: normal;
+}
+
 .data-table td {
   padding: 13px 16px;
   text-align: left;
@@ -318,7 +323,7 @@ onMounted(loadTests)
   color: var(--text-muted);
 }
 
-.empty-cell {
+.data-table td.empty-cell {
   text-align: center;
   padding: 48px 0 !important;
   color: var(--text-muted);

@@ -38,7 +38,7 @@
     </div>
 
     <div class="table-card">
-      <table class="data-table">
+      <table class="data-table" :class="{ 'is-empty': filtered.length === 0 }">
         <thead>
           <tr>
             <th>{{ $t('admin.words.th.word') }}</th>
@@ -326,6 +326,11 @@ onMounted(load)
   white-space: nowrap;
 }
 
+/* 空态：表头允许换行，使表格回落到卡片宽度，空状态提示得以在卡片内居中 */
+.data-table.is-empty th {
+  white-space: normal;
+}
+
 .data-table td {
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-color);
@@ -431,7 +436,7 @@ onMounted(load)
   cursor: not-allowed;
 }
 
-.empty-cell {
+.data-table td.empty-cell {
   text-align: center;
   padding: 48px 0;
   color: var(--text-muted);
