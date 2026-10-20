@@ -10,7 +10,7 @@
 [![Vue](https://img.shields.io/badge/Vue-3.5-42B883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Node](https://img.shields.io/badge/Node.js-18%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![License](https://img.shields.io/badge/license-OSL--3.0-yellow)](LICENSE)
 
 一个桌面端心理健康服务平台：AI 心理倾诉（流式对话 + 长期记忆）、心理测评（量表 + AI 智能出题）、
 周期性 AI 分析报告（多语种翻译）、专家预约与实时私聊、社区内容治理（审核 / 举报 / 处置）。
@@ -276,7 +276,7 @@ curl http://localhost:3001/health
 
 ## 许可证
 
-[MIT](LICENSE) · 本项目为毕业设计作品
+[OSL 3.0](LICENSE) · 本项目为毕业设计作品
 
 ## 免责声明
 

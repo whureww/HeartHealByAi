@@ -10,7 +10,7 @@
 [![Vue](https://img.shields.io/badge/Vue-3.5-42B883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Node](https://img.shields.io/badge/Node.js-18%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![License](https://img.shields.io/badge/license-OSL--3.0-yellow)](LICENSE)
 
 A desktop mental-health service platform: AI counseling (streaming chat + long-term memory), psych assessments (scales + AI-generated questionnaires), periodic AI reports (multilingual translation), expert booking with real-time private chat, and community content governance (moderation / reporting / enforcement).
 
@@ -280,7 +280,7 @@ Issues and PRs are welcome. Please make sure `backend` passes `npm run build` an
 
 ## License
 
-[MIT](LICENSE) · This project is a graduation-design work.
+[OSL 3.0](LICENSE) · This project is a graduation-design work.
 
 ## Disclaimer
 
