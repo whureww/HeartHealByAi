@@ -280,7 +280,16 @@ io.on('connection', (socket) => {
             let content = data.content;
 
             if (data.testId) {
-                // 发送问卷卡片：服务端校验问卷已上架，内容以问卷名为准（非用户文本，不参与内容审核）
+                // 发送问卷卡片：仅专家可发（普通用户不可向专家发送问卷），
+                // 且问卷须已上架；内容以问卷名为准（非用户文本，不参与内容审核）
+                const [senderRows0] = await pool.execute(
+                    'SELECT role FROM users WHERE id = ?',
+                    [senderId]
+                );
+                if (Number((senderRows0 as any[])[0]?.role) !== 2) {
+                    socket.emit('error', { message: '仅专家可发送问卷' });
+                    return;
+                }
                 const [testRows] = await pool.execute(
                     'SELECT id, name FROM psychological_tests WHERE id = ? AND status = 1',
                     [Number(data.testId)]
