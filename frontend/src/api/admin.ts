@@ -29,3 +29,11 @@ export const getReports = (status?: string) => request.get('/admin/reports', { p
 export const handleReport = (id: number, data: { action: 'mute' | 'ban' | 'dismiss'; duration?: string; note?: string }) =>
   request.post(`/admin/reports/${id}/handle`, data)
 export const unrestrictUser = (id: number) => request.post(`/admin/users/${id}/unrestrict`)
+
+// AI 对话审查（可审查/透明化/可追溯：查看会话全文自动落审计记录，审计日志可回查）
+export const getAdminChats = (params: { page?: number; pageSize?: number; keyword?: string }) =>
+  request.get('/admin/chats', { params })
+export const getAdminChatDetail = (userId: number, sessionId: string) =>
+  request.get(`/admin/chats/${userId}/${encodeURIComponent(sessionId)}`)
+export const getChatAuditLogs = (params?: { page?: number; pageSize?: number }) =>
+  request.get('/admin/chat-audit-logs', { params })

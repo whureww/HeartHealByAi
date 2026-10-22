@@ -10,6 +10,7 @@ export default {
       doctorCards: 'Card Review',
       reports: 'Reports',
       words: 'Sensitive Words',
+      chats: 'Chat Audit',
       back: 'Back to App'
     },
     user: {
@@ -238,6 +239,48 @@ export default {
       deleted: 'Deleted',
       deleteFailed: 'Failed to delete',
       loadFailed: 'Failed to load'
+    },
+    chats: {
+      title: 'Chat Audit',
+      subtitle: 'Review full AI conversation transcripts; every view is logged for traceability',
+      searchPlaceholder: 'Search username / email / session title',
+      search: 'Search',
+      countTip: '{n} sessions in total',
+      th: {
+        user: 'User',
+        email: 'Email',
+        title: 'Session Title',
+        messages: 'Messages',
+        createdAt: 'Created At',
+        lastTime: 'Last Active',
+        actions: 'Actions'
+      },
+      view: 'View Session',
+      loading: 'Loading...',
+      empty: 'No sessions yet',
+      prevPage: 'Prev',
+      nextPage: 'Next',
+      loadFailed: 'Failed to load',
+      backToList: 'Back to List',
+      msgCount: '{n} messages',
+      createdBy: 'Created {time}',
+      lastActive: 'Last active {time}',
+      roleUser: 'User',
+      roleExpert: 'Expert',
+      roleAdmin: 'Admin',
+      roleUnknown: 'Unknown',
+      me: 'User',
+      ai: 'AI',
+      auditTitle: 'Audit Trail',
+      auditSubtitle: 'All view records (admin / target user / session / time); this visit is included',
+      auditTh: {
+        admin: 'Reviewed By',
+        target: 'Target User',
+        session: 'Session ID',
+        time: 'Viewed At'
+      },
+      auditEmpty: 'No audit records yet',
+      auditLoadFailed: 'Failed to load audit records'
     },
     test: {
       title: 'Test Management',

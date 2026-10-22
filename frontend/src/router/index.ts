@@ -112,6 +112,10 @@ const routes = [
       {
         path: 'sensitive-words',
         component: () => import('../views/admin/SensitiveWordManage.vue')
+      },
+      {
+        path: 'chats',
+        component: () => import('../views/admin/ChatAudit.vue')
       }
     ]
   }

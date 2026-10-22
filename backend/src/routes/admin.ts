@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { invalidateWords } from '../utils/moderation';
 import { notifyUserRestricted, notifyRestrictionLifted, disconnectUser, Restriction } from '../utils/restrict';
+import { ensureAuditSchema } from '../utils/auditLog';
 
 const router = Router();
 
@@ -500,6 +501,107 @@ router.post('/users/:id/unrestrict', authenticate, requireAdmin, asyncHandler(as
     notifyRestrictionLifted(userId);
 
     res.json({ success: true, message: '已解除该账号的限制' });
+}));
+
+// ========== AI 对话审查 ==========
+// 可审查：管理员可按用户搜索并查看任意 AI 会话全文；透明化：消息带角色/时间完整展示；
+// 可追溯：每次查看自动落 ai_audit_logs 审计记录，且审计日志本身可在页面上回查
+
+// 会话列表（分页 + 用户名/邮箱/会话标题搜索，按最近活跃倒序）
+router.get('/chats', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = Math.min(parseInt(req.query.pageSize as string) || 20, 50);
+    const keyword = (req.query.keyword as string || '').trim();
+    const offset = (page - 1) * pageSize;
+
+    let whereClause = '';
+    let params: any[] = [];
+    if (keyword) {
+        whereClause = ' WHERE u.username LIKE ? OR u.email LIKE ? OR s.title LIKE ?';
+        params = [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`];
+    }
+
+    const countSql = `SELECT COUNT(*) as total FROM chat_sessions s JOIN users u ON u.id = s.user_id${whereClause}`;
+    const [countRows] = await pool.query(countSql, params);
+    const total = (countRows as any[])[0].total;
+
+    // 消息数用相关子查询实时统计（chat_sessions 无冗余计数列）
+    const sql = `SELECT s.id, s.user_id, s.session_id, s.title, s.locked, s.created_at, s.last_time,
+                u.username, u.email, u.avatar, u.role,
+                (SELECT COUNT(*) FROM chat_records c
+                  WHERE c.user_id = s.user_id AND c.session_id = s.session_id) AS message_count
+                FROM chat_sessions s JOIN users u ON u.id = s.user_id${whereClause}
+                ORDER BY s.last_time DESC LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`;
+    const [rows] = await pool.query(sql, params);
+
+    res.json({
+        success: true,
+        data: { list: rows, total, page, pageSize }
+    });
+}));
+
+// 会话详情：全部消息正序 + 会话元数据；每次查看写入审计日志
+router.get('/chats/:userId/:sessionId', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.userId);
+    const sessionId = String(req.params.sessionId || '');
+    if (!Number.isInteger(userId) || !sessionId || sessionId.length > 40) {
+        throw new BusinessError('无效的会话标识', 400);
+    }
+
+    const [sessRows] = await pool.execute(
+        `SELECT s.session_id, s.title, s.created_at, s.last_time, u.id AS user_id, u.username, u.email, u.avatar
+         FROM chat_sessions s JOIN users u ON u.id = s.user_id
+         WHERE s.user_id = ? AND s.session_id = ?`,
+        [userId, sessionId]
+    );
+    const session = (sessRows as any[])[0];
+    if (!session) {
+        throw new BusinessError('会话不存在', 404);
+    }
+
+    const [msgRows] = await pool.execute(
+        'SELECT id, type, content, created_at FROM chat_records WHERE user_id = ? AND session_id = ? ORDER BY created_at ASC, id ASC',
+        [userId, sessionId]
+    );
+
+    // 审计落库（失败不阻断查看，仅记错误日志）
+    try {
+        await ensureAuditSchema();
+        await pool.execute(
+            'INSERT INTO ai_audit_logs (admin_id, target_user_id, session_id, action) VALUES (?, ?, ?, ?)',
+            [req.user!.id, userId, sessionId, 'view']
+        );
+    } catch (e: any) {
+        console.error('写入对话审查审计日志失败:', e.message);
+    }
+
+    res.json({
+        success: true,
+        data: { session, messages: msgRows }
+    });
+}));
+
+// 审查审计日志（分页倒序，谁在何时查看了谁的会话）
+router.get('/chat-audit-logs', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = Math.min(parseInt(req.query.pageSize as string) || 20, 50);
+    const offset = (page - 1) * pageSize;
+
+    const [countRows] = await pool.query('SELECT COUNT(*) as total FROM ai_audit_logs');
+    const total = (countRows as any[])[0].total;
+
+    const sql = `SELECT a.id, a.admin_id, a.target_user_id, a.session_id, a.action, a.created_at,
+                u1.username AS admin_name, u2.username AS target_name
+                FROM ai_audit_logs a
+                JOIN users u1 ON u1.id = a.admin_id
+                JOIN users u2 ON u2.id = a.target_user_id
+                ORDER BY a.created_at DESC, a.id DESC LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`;
+    const [rows] = await pool.query(sql);
+
+    res.json({
+        success: true,
+        data: { list: rows, total, page, pageSize }
+    });
 }));
 
 export default router;

@@ -10,6 +10,7 @@ export default {
       doctorCards: '名片审核',
       reports: '举报管理',
       words: '敏感词库',
+      chats: '对话审查',
       back: '返回前台'
     },
     user: {
@@ -238,6 +239,48 @@ export default {
       deleted: '已删除',
       deleteFailed: '删除失败',
       loadFailed: '加载失败'
+    },
+    chats: {
+      title: '对话审查',
+      subtitle: '查看用户 AI 倾诉会话全文；每次查看自动留痕，审查行为可追溯',
+      searchPlaceholder: '搜索用户名 / 邮箱 / 会话标题',
+      search: '搜索',
+      countTip: '共 {n} 个会话',
+      th: {
+        user: '用户',
+        email: '邮箱',
+        title: '会话标题',
+        messages: '消息数',
+        createdAt: '创建时间',
+        lastTime: '最近活跃',
+        actions: '操作'
+      },
+      view: '查看会话',
+      loading: '加载中...',
+      empty: '暂无会话记录',
+      prevPage: '上一页',
+      nextPage: '下一页',
+      loadFailed: '加载失败',
+      backToList: '返回列表',
+      msgCount: '{n} 条消息',
+      createdBy: '创建于 {time}',
+      lastActive: '最近活跃 {time}',
+      roleUser: '用户',
+      roleExpert: '专家',
+      roleAdmin: '管理员',
+      roleUnknown: '未知',
+      me: '用户',
+      ai: 'AI',
+      auditTitle: '审查留痕',
+      auditSubtitle: '全部查看记录（管理员 / 目标用户 / 会话 / 时间），本次查看也已计入',
+      auditTh: {
+        admin: '审查人',
+        target: '被审查用户',
+        session: '会话 ID',
+        time: '查看时间'
+      },
+      auditEmpty: '暂无审查记录',
+      auditLoadFailed: '审查记录加载失败'
     },
     test: {
       title: '问卷管理',

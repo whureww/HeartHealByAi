@@ -153,6 +153,21 @@ CREATE TABLE IF NOT EXISTS user_chat_models (
     KEY idx_model_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ========== AI 对话审查审计日志表 ==========
+-- 管理员每次查看用户 AI 会话落一条审计记录（谁、何时、看了谁的哪个会话），
+-- 实现「对话可审查、透明化、可追溯」合规闭环；存量部署由 ensureAuditSchema() 兜底建表
+CREATE TABLE IF NOT EXISTS ai_audit_logs (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    admin_id INT UNSIGNED NOT NULL COMMENT '操作管理员',
+    target_user_id INT UNSIGNED NOT NULL COMMENT '被查看会话归属用户',
+    session_id VARCHAR(40) NOT NULL COMMENT '被查看的会话 id',
+    action VARCHAR(20) NOT NULL DEFAULT 'view' COMMENT '动作（当前仅 view）',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_audit_admin (admin_id),
+    KEY idx_audit_target (target_user_id),
+    KEY idx_audit_time (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ========== AI 分析报告表 ==========
 CREATE TABLE IF NOT EXISTS analysis_reports (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

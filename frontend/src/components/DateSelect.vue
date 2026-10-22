@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 // 自定义三段日期选择器：原生 <input type="date"> 的显示格式由 Windows 系统区域决定，
@@ -47,35 +47,50 @@ const yearList = computed(() => {
   return list
 })
 
-const parts = computed(() => {
-  const raw = String(props.modelValue || '')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return { y: 0, m: 0, d: 0 }
-  return { y: Number(raw.slice(0, 4)), m: Number(raw.slice(5, 7)), d: Number(raw.slice(8, 10)) }
-})
+// 本地三段状态：逐段选择必须先暂存在本地（修复：此前各段 setter 互相从 modelValue
+// 读另外两段，而 modelValue 仅在三段齐备时才回写，导致从空状态永远拼不出完整日期）
+const y = ref(0)
+const m = ref(0)
+const d = ref(0)
+
+// 外部值变化（初始回填/清空）时同步本地三段
+watch(
+  () => props.modelValue,
+  (raw) => {
+    const s = String(raw || '')
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      y.value = Number(s.slice(0, 4))
+      m.value = Number(s.slice(5, 7))
+      d.value = Number(s.slice(8, 10))
+    } else {
+      y.value = 0
+      m.value = 0
+      d.value = 0
+    }
+  },
+  { immediate: true }
+)
 
 const yearVal = computed({
-  get: () => parts.value.y || '',
-  set: (v: any) => { emitParts(Number(v) || 0, parts.value.m, parts.value.d) }
+  get: () => y.value || '',
+  set: (v: any) => { y.value = Number(v) || 0; tryEmit() }
 })
 const monthVal = computed({
-  get: () => parts.value.m || '',
-  set: (v: any) => { emitParts(parts.value.y, Number(v) || 0, parts.value.d) }
+  get: () => m.value || '',
+  set: (v: any) => { m.value = Number(v) || 0; tryEmit() }
 })
 const dayVal = computed({
-  get: () => parts.value.d || '',
-  set: (v: any) => { emitParts(parts.value.y, parts.value.m, Number(v) || 0) }
+  get: () => d.value || '',
+  set: (v: any) => { d.value = Number(v) || 0; tryEmit() }
 })
 
-const emitParts = (y: number, m: number, d: number) => {
-  // 任一段为空 → 值为空串（等待其余段选择）
-  if (!y || !m || !d) {
-    // 部分选择时不回写完整值：仅当三段齐备才 emit，避免中间态误触发校验
-    if (!y && !m && !d) emit('update:modelValue', '')
-    return
-  }
-  const days = daysInMonth(y, m)
-  const dd = Math.min(d, days)
-  emit('update:modelValue', `${y}-${pad(m)}-${pad(dd)}`)
+// 三段齐备才 emit（部分选择不回写，避免中间态误触发父级校验）
+const tryEmit = () => {
+  if (!y.value || !m.value || !d.value) return
+  const days = daysInMonth(y.value, m.value)
+  const dd = Math.min(d.value, days)
+  d.value = dd
+  emit('update:modelValue', `${y.value}-${pad(m.value)}-${pad(dd)}`)
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -83,8 +98,7 @@ const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate()
 
 // 所选年月的天数（年月未选全时按 31 展示）
 const dayCount = computed(() => {
-  const { y, m } = parts.value
-  return y && m ? daysInMonth(y, m) : 31
+  return y.value && m.value ? daysInMonth(y.value, m.value) : 31
 })
 
 // 月份名称：中文「10月」、英文「Oct」（Intl 短格式）
