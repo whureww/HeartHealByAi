@@ -1446,7 +1446,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.6.2'
+  const cur = updateInfo.value?.current_version || '0.6.3'
   const base = t('dashboard.update.appVersion', { version: cur })
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return t('dashboard.update.availableDesc', { latest: updateInfo.value.latest_version, current: cur })
