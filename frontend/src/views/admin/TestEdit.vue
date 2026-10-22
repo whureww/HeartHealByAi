@@ -4,6 +4,30 @@
       <h2>{{ isEdit ? $t('admin.test.edit') : $t('admin.test.create') }}</h2>
     </div>
 
+    <!-- 模板栏（仅专家）：套用已存样板 / 把当前问卷存为模板 -->
+    <div v-if="isExpert" class="tpl-bar">
+      <span class="tpl-label">{{ $t('expert.myTests.tplLabel') }}</span>
+      <select v-model="selectedTplId" class="tpl-select" :disabled="templates.length === 0">
+        <option value="">{{ templates.length ? $t('expert.myTests.tplSelect') : $t('expert.myTests.tplEmpty') }}</option>
+        <option v-for="tpl in templates" :key="tpl.id" :value="tpl.id">
+          {{ tpl.name }}（{{ $t('admin.test.questionCount', { n: tpl.question_count }) }}）
+        </option>
+      </select>
+      <button class="btn-tpl" :disabled="!selectedTplId" @click="applyTemplate">
+        <AppIcon name="check" :size="13" />
+        {{ $t('expert.myTests.tplApply') }}
+      </button>
+      <button class="btn-tpl btn-tpl-danger" :disabled="!selectedTplId" @click="removeTemplate">
+        <AppIcon name="trash" :size="13" />
+        {{ $t('expert.myTests.tplDelete') }}
+      </button>
+      <span class="tpl-spacer"></span>
+      <button class="btn-tpl btn-tpl-save" :disabled="isSubmitting" @click="saveAsTemplate">
+        <AppIcon name="plus" :size="13" />
+        {{ $t('expert.myTests.tplSave') }}
+      </button>
+    </div>
+
     <div class="form-section">
       <h3>{{ $t('admin.test.basicInfo') }}</h3>
       <div class="form-grid">
@@ -146,8 +170,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { createTest } from '@/api/admin'
-import { createMyTest, getMyTestDetail, updateMyTest } from '@/api/expert'
-import { alert, success, error } from '@/utils/dialog'
+import { createMyTest, getMyTestDetail, updateMyTest, getTestTemplates, saveTestTemplate, deleteTestTemplate } from '@/api/expert'
+import { alert, confirm, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
 const { t } = useI18n()
@@ -260,6 +284,90 @@ const removeOption = (qIndex: number, oIndex: number) => {
   form.value.questions[qIndex].options.splice(oIndex, 1)
 }
 
+// ===== 问卷模板（仅专家）：套用样板 / 存为模板 / 删除模板 =====
+const templates = ref<any[]>([])
+const selectedTplId = ref<number | ''>('')
+
+const loadTemplates = async () => {
+  try {
+    const res: any = await getTestTemplates()
+    templates.value = res.data || []
+  } catch {
+    templates.value = []
+  }
+}
+
+// 套用模板：整表回填（名称/描述/分级/题目全部以模板为准，专家可在此基础上微调）
+const applyTemplate = async () => {
+  const tpl = templates.value.find((x) => x.id === selectedTplId.value)
+  if (!tpl) return
+  form.value = {
+    code: '',
+    name: tpl.name || '',
+    description: tpl.description || '',
+    category: tpl.category || 'emotion',
+    total_questions: (tpl.questions || []).length,
+    estimated_minutes: tpl.estimated_minutes || 5,
+    scoring_method: tpl.scoring_method || 'sum',
+    result_levels: (tpl.result_levels || []).map((l: any) => ({
+      min: Number(l.min) || 0, max: Number(l.max) || 100, level: l.level || '', desc: l.desc || ''
+    })),
+    questions: (tpl.questions || []).map((q: any, i: number) => ({
+      question_number: i + 1,
+      content: q.content || '',
+      dimension: q.dimension || '',
+      reverse_scoring: !!q.reverse_scoring,
+      options: (q.options || []).map((o: any) => ({ score: Number(o.score) || 0, text: o.text || '' }))
+    }))
+  }
+  await success(t('expert.myTests.tplApplied'))
+}
+
+// 把当前表单存为私人模板（名称 + 至少一题）
+const saveAsTemplate = async () => {
+  if (!form.value.name || !String(form.value.name).trim()) {
+    await alert(t('expert.myTests.nameRequired'))
+    return
+  }
+  if (form.value.questions.length === 0) {
+    await alert(t('admin.test.errNeedQuestion'))
+    return
+  }
+  isSubmitting.value = true
+  try {
+    await saveTestTemplate({
+      name: form.value.name,
+      description: form.value.description,
+      category: form.value.category,
+      estimated_minutes: form.value.estimated_minutes,
+      scoring_method: form.value.scoring_method,
+      result_levels: form.value.result_levels,
+      questions: form.value.questions
+    })
+    await success(t('expert.myTests.tplSaved'))
+    await loadTemplates()
+  } catch (e: any) {
+    await error(e?.response?.data?.message || t('expert.myTests.tplSaveFailed'))
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const removeTemplate = async () => {
+  const tpl = templates.value.find((x) => x.id === selectedTplId.value)
+  if (!tpl) return
+  const ok = await confirm(t('expert.myTests.tplConfirmDelete', { name: tpl.name }), t('expert.myTests.tplDeleteTitle'))
+  if (!ok) return
+  try {
+    await deleteTestTemplate(tpl.id)
+    await success(t('expert.myTests.tplDeleted'))
+    selectedTplId.value = ''
+    await loadTemplates()
+  } catch (e: any) {
+    await error(e?.response?.data?.message || t('expert.myTests.tplDeleteFailed'))
+  }
+}
+
 const submit = async () => {
   if (isExpert) {
     if (!form.value.name) {
@@ -335,6 +443,10 @@ onMounted(() => {
       loadExpertTest()
     }
   }
+  // 专家模式：加载私人模板列表（套用/删除用）
+  if (isExpert) {
+    loadTemplates()
+  }
 })
 </script>
 
@@ -347,6 +459,90 @@ onMounted(() => {
   padding: 28px 32px;
   max-width: 900px;
   margin: 0 auto;
+}
+
+/* ===== 模板栏（仅专家）===== */
+.tpl-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: var(--radius-ctl);
+  margin-bottom: 18px;
+}
+
+.tpl-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.tpl-select {
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: var(--font-ui);
+  outline: none;
+  cursor: pointer;
+}
+
+.tpl-spacer {
+  flex: 1;
+}
+
+.btn-tpl {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 13px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-tpl:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.btn-tpl:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-tpl.btn-tpl-danger {
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+.btn-tpl.btn-tpl-danger:hover:not(:disabled) {
+  border-color: var(--danger, #c0503a);
+  color: var(--danger, #c0503a);
+  background: color-mix(in srgb, var(--danger, #c0503a) 10%, transparent);
+}
+
+.btn-tpl.btn-tpl-save {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn-tpl.btn-tpl-save:hover:not(:disabled) {
+  background: var(--accent-strong);
 }
 
 .page-header {

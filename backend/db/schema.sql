@@ -74,6 +74,23 @@ CREATE TABLE IF NOT EXISTS test_questions (
     KEY idx_question_test (test_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ========== 专家问卷模板表 ==========
+-- 专家把编好的完整问卷存为私人样板（expert_id 隔离，仅本人可见），
+-- 新建问卷时一键套用；存量部署由 ensureTemplateSchema() 兜底建表
+CREATE TABLE IF NOT EXISTS test_templates (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    expert_id INT UNSIGNED NOT NULL COMMENT '归属专家用户ID',
+    name VARCHAR(100) NOT NULL COMMENT '模板名称',
+    description TEXT,
+    category VARCHAR(50) DEFAULT '',
+    estimated_minutes INT NOT NULL DEFAULT 5,
+    scoring_method VARCHAR(30) DEFAULT 'sum',
+    result_levels TEXT COMMENT 'JSON: [{min,max,level,desc}]',
+    questions MEDIUMTEXT NOT NULL COMMENT 'JSON: 规整后的完整题目与选项',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_template_expert (expert_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ========== 测评结果表 ==========
 CREATE TABLE IF NOT EXISTS test_results (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

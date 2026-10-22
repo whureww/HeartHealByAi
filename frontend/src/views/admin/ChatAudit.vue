@@ -114,6 +114,42 @@
         </div>
       </div>
 
+      <!-- 处置栏：账号限制状态 + 禁言/封禁/解除/删除会话（动作实时生效且全部留痕） -->
+      <div class="action-bar">
+        <div class="action-status">
+          <span v-if="restriction" :class="['restrict-tag', restriction.type === 'banned' ? 'is-banned' : 'is-muted']">
+            {{ restriction.type === 'banned' ? $t('admin.chats.bannedTag') : $t('admin.chats.mutedTag') }}
+            <template v-if="restriction.until">{{ restrictionText }}</template>
+            <template v-else>{{ $t('admin.chats.permanent') }}</template>
+          </span>
+          <span v-else class="restrict-tag normal">{{ $t('admin.chats.normalTag') }}</span>
+        </div>
+        <div class="action-btns">
+          <select v-model="actionDuration" class="duration-select">
+            <option value="24h">{{ $t('admin.chats.dur24h') }}</option>
+            <option value="72h">{{ $t('admin.chats.dur72h') }}</option>
+            <option value="7d">{{ $t('admin.chats.dur7d') }}</option>
+            <option value="permanent">{{ $t('admin.chats.durPermanent') }}</option>
+          </select>
+          <button class="btn-act btn-mute" :disabled="acting" @click="doRestrict('mute')">
+            <AppIcon name="shield" :size="13" />
+            {{ $t('admin.chats.muteBtn') }}
+          </button>
+          <button class="btn-act btn-ban" :disabled="acting" @click="doRestrict('ban')">
+            <AppIcon name="close" :size="13" />
+            {{ $t('admin.chats.banBtn') }}
+          </button>
+          <button v-if="restriction" class="btn-act btn-lift" :disabled="acting" @click="doLift">
+            <AppIcon name="check" :size="13" />
+            {{ $t('admin.chats.liftBtn') }}
+          </button>
+          <button class="btn-act btn-del-session" :disabled="acting" @click="doDeleteSession">
+            <AppIcon name="trash" :size="13" />
+            {{ $t('admin.chats.deleteBtn') }}
+          </button>
+        </div>
+      </div>
+
       <!-- 会话全文（透明化：角色 + 完整内容 + 逐条时间） -->
       <div class="transcript-card">
         <div
@@ -171,8 +207,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getAdminChats, getAdminChatDetail, getChatAuditLogs } from '@/api/admin'
+import { getAdminChats, getAdminChatDetail, getChatAuditLogs, restrictChatUser, deleteAdminChat, unrestrictUser } from '@/api/admin'
 import AppIcon from '@/components/AppIcon.vue'
+import { confirm, success, error } from '@/utils/dialog'
 
 const { t } = useI18n()
 
@@ -185,8 +222,17 @@ const loading = ref(false)
 
 const detail = ref<{ session: any; messages: any[] } | null>(null)
 const auditLogs = ref<any[]>([])
+const restriction = ref<{ type: 'muted' | 'banned'; until: string | null; message: string } | null>(null)
+const actionDuration = ref('24h')
+const acting = ref(false)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+// 限制到期时间的本地化展示
+const restrictionText = computed(() => {
+  if (!restriction.value?.until) return ''
+  return t('admin.chats.restrictUntil', { time: formatFull(restriction.value.until) })
+})
 
 const loadSessions = async () => {
   loading.value = true
@@ -204,16 +250,81 @@ const onSearch = () => {
   loadSessions()
 }
 
-// 查看会话全文：拉取消息 + 审查留痕（后端同时自动落一条本次查看的审计记录）
+// 查看会话全文：拉取消息 + 账号限制状态 + 审查留痕（后端同时自动落一条本次查看的审计记录）
 const openDetail = async (s: any) => {
   const res = await getAdminChatDetail(s.user_id, s.session_id) as any
   detail.value = { session: res.data.session, messages: res.data.messages }
+  restriction.value = res.data.restriction || null
   await loadAuditLogs()
 }
 
 const closeDetail = () => {
   detail.value = null
   auditLogs.value = []
+  restriction.value = null
+}
+
+// ===== 处置动作（全部审计留痕）=====
+const doRestrict = async (action: 'mute' | 'ban') => {
+  if (!detail.value || acting.value) return
+  const ok = await confirm(
+    action === 'ban'
+      ? t('admin.chats.confirmBan', { name: detail.value.session.username })
+      : t('admin.chats.confirmMute', { name: detail.value.session.username }),
+    t('admin.chats.actionTitle')
+  )
+  if (!ok) return
+  acting.value = true
+  try {
+    const res: any = await restrictChatUser(detail.value.session.user_id, detail.value.session.session_id, {
+      action,
+      duration: actionDuration.value === 'permanent' ? undefined : actionDuration.value
+    })
+    restriction.value = res.data?.restriction || null
+    await success(res.message || t(action === 'ban' ? 'admin.chats.banned' : 'admin.chats.muted'))
+    await loadAuditLogs()
+  } catch (e: any) {
+    await error(e?.response?.data?.message || t('admin.chats.actionFailed'))
+  } finally {
+    acting.value = false
+  }
+}
+
+const doLift = async () => {
+  if (!detail.value || acting.value) return
+  const ok = await confirm(
+    t('admin.chats.confirmLift', { name: detail.value.session.username }),
+    t('admin.chats.actionTitle')
+  )
+  if (!ok) return
+  acting.value = true
+  try {
+    await unrestrictUser(detail.value.session.user_id)
+    restriction.value = null
+    await success(t('admin.chats.lifted'))
+    await loadAuditLogs()
+  } catch (e: any) {
+    await error(e?.response?.data?.message || t('admin.chats.actionFailed'))
+  } finally {
+    acting.value = false
+  }
+}
+
+const doDeleteSession = async () => {
+  if (!detail.value || acting.value) return
+  const ok = await confirm(t('admin.chats.confirmDeleteSession'), t('admin.chats.actionTitle'))
+  if (!ok) return
+  acting.value = true
+  try {
+    await deleteAdminChat(detail.value.session.user_id, detail.value.session.session_id)
+    await success(t('admin.chats.sessionDeleted'))
+    closeDetail()
+    await loadSessions()
+  } catch (e: any) {
+    await error(e?.response?.data?.message || t('admin.chats.actionFailed'))
+  } finally {
+    acting.value = false
+  }
 }
 
 const loadAuditLogs = async () => {
@@ -520,6 +631,121 @@ onMounted(loadSessions)
 .meta-count {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+/* ===== 处置栏 ===== */
+.action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  margin-bottom: 14px;
+}
+
+.action-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.duration-select {
+  padding: 7px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-ctl);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: var(--font-ui);
+  outline: none;
+  cursor: pointer;
+}
+
+.btn-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 13px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-act:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-act.btn-mute {
+  border-color: #d48806;
+  color: #d48806;
+}
+
+.btn-act.btn-mute:hover:not(:disabled) {
+  background: color-mix(in srgb, #d48806 12%, transparent);
+}
+
+.btn-act.btn-ban {
+  border-color: var(--danger, #c0503a);
+  color: var(--danger, #c0503a);
+}
+
+.btn-act.btn-ban:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger, #c0503a) 12%, transparent);
+}
+
+.btn-act.btn-lift {
+  border-color: #52c41a;
+  color: #52c41a;
+}
+
+.btn-act.btn-lift:hover:not(:disabled) {
+  background: color-mix(in srgb, #52c41a 12%, transparent);
+}
+
+.btn-act.btn-del-session {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+.btn-act.btn-del-session:hover:not(:disabled) {
+  border-color: var(--danger, #c0503a);
+  color: var(--danger, #c0503a);
+  background: color-mix(in srgb, var(--danger, #c0503a) 10%, transparent);
+}
+
+.restrict-tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.restrict-tag.is-banned {
+  background: color-mix(in srgb, var(--danger, #c0503a) 12%, transparent);
+  color: var(--danger, #c0503a);
+}
+
+.restrict-tag.is-muted {
+  background: color-mix(in srgb, #d48806 14%, transparent);
+  color: #d48806;
+}
+
+.restrict-tag.normal {
+  background: color-mix(in srgb, #52c41a 12%, transparent);
+  color: #52c41a;
 }
 
 /* ===== 会话全文 ===== */

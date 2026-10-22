@@ -17,7 +17,20 @@ export default {
       nameRequired: '请填写问卷名称',
       submittedReview: '提交成功，等待管理员审核上架',
       updated: '问卷已更新，仍为待审核状态',
-      loadDetailFailed: '加载问卷失败'
+      loadDetailFailed: '加载问卷失败',
+      tplLabel: '问卷模板',
+      tplSelect: '选择要套用的模板',
+      tplEmpty: '暂无模板，可先把编好的问卷存为模板',
+      tplApply: '套用',
+      tplDelete: '删除',
+      tplSave: '存为模板',
+      tplApplied: '已套用模板，可在此基础上调整后提交',
+      tplSaved: '已保存为模板',
+      tplSaveFailed: '模板保存失败',
+      tplConfirmDelete: '确认删除模板「{name}」？删除后不可恢复。',
+      tplDeleteTitle: '删除模板',
+      tplDeleted: '模板已删除',
+      tplDeleteFailed: '模板删除失败'
     },
     card: {
       title: '我的名片',

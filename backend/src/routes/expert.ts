@@ -7,6 +7,7 @@ import { isAppointmentParticipant } from '../utils/guards';
 import { ensureDoctorEnColumns } from '../utils/doctorCols';
 import { ensureTestCreatedByColumn } from '../utils/testCols';
 import { ensureChatCols } from '../utils/chatCols';
+import { ensureTemplateSchema } from '../utils/testTemplate';
 
 const router = Router();
 
@@ -273,6 +274,94 @@ router.delete('/tests/:id', authenticate, requireExpert, asyncHandler(async (req
     await pool.execute('DELETE FROM psychological_tests WHERE id = ?', [testId]);
 
     res.json({ success: true, message: '问卷已删除' });
+}));
+
+// ========== 专家问卷模板：把编好的完整问卷存为私人样板，新建问卷时一键套用 ==========
+// 模板仅归属专家本人可见（expert_id 隔离），内容为规整后的完整题目与选项 JSON
+
+// 模板列表（含完整内容，套用时直接回填，无需二次请求）
+router.get('/test-templates', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureTemplateSchema();
+    const expertUserId = req.user.id;
+    const [rows] = await pool.execute(
+        `SELECT id, name, description, category, estimated_minutes, scoring_method, result_levels, questions, created_at
+         FROM test_templates WHERE expert_id = ? ORDER BY created_at DESC`,
+        [expertUserId]
+    );
+    const templates = (rows as any[]).map((t: any) => {
+        let questions: any[] = [];
+        try { questions = JSON.parse(t.questions || '[]'); } catch { questions = []; }
+        let resultLevels: any[] = [];
+        try { resultLevels = t.result_levels ? JSON.parse(t.result_levels) : []; } catch { resultLevels = []; }
+        return {
+            id: t.id,
+            name: t.name,
+            description: t.description || '',
+            category: t.category || '',
+            estimated_minutes: t.estimated_minutes,
+            scoring_method: t.scoring_method || 'sum',
+            result_levels: resultLevels,
+            question_count: questions.length,
+            questions,
+            created_at: t.created_at
+        };
+    });
+    res.json({ success: true, data: templates });
+}));
+
+// 保存模板（来自问卷编辑页当前表单；题目校验与正式创建同标准）
+router.post('/test-templates', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureTemplateSchema();
+    const expertUserId = req.user.id;
+    const { name, description, category, estimated_minutes, scoring_method, result_levels, questions } = req.body || {};
+
+    if (!name || !String(name).trim()) {
+        throw new BusinessError('模板名称不能为空', 400);
+    }
+    const norm = normalizeTestQuestions(questions);
+    if (!norm.ok) {
+        throw new BusinessError(norm.message!, 400);
+    }
+
+    const [result] = await pool.execute(
+        `INSERT INTO test_templates
+         (expert_id, name, description, category, estimated_minutes, scoring_method, result_levels, questions)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            expertUserId, String(name).trim().slice(0, 100), String(description || ''),
+            String(category || 'emotion'), Number(estimated_minutes) || 5,
+            String(scoring_method || 'sum'),
+            JSON.stringify(Array.isArray(result_levels) ? result_levels : []),
+            JSON.stringify(norm.data)
+        ]
+    );
+
+    res.json({
+        success: true,
+        message: '模板已保存，新建问卷时可一键套用',
+        data: { id: (result as any).insertId }
+    });
+}));
+
+// 删除模板（仅自己的）
+router.delete('/test-templates/:id', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureTemplateSchema();
+    const expertUserId = req.user.id;
+    const tplId = parseInt(req.params.id);
+    if (isNaN(tplId)) {
+        throw new BusinessError('无效的模板ID', 400);
+    }
+
+    const [rows] = await pool.execute(
+        'SELECT id FROM test_templates WHERE id = ? AND expert_id = ?',
+        [tplId, expertUserId]
+    );
+    if ((rows as any[]).length === 0) {
+        throw new BusinessError('模板不存在或无权访问', 404);
+    }
+
+    await pool.execute('DELETE FROM test_templates WHERE id = ?', [tplId]);
+    res.json({ success: true, message: '模板已删除' });
 }));
 
 // 获取专家的预约列表

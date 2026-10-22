@@ -10,17 +10,20 @@ const router = Router();
 // AI 智能测评的特殊量表编码（在普通列表中隐藏，由前端单独置顶展示）
 const AI_TEST_CODE = 'AI-GEN';
 const AI_TEST_NAME = 'AI 智能测评';
-// 题目数量范围（业务约束：生成少于下限自动重试，超过上限自动截取）
-const AI_QUESTIONS_MIN = 8;
-const AI_QUESTIONS_MAX = 20;
+// 技术性兜底上限（非业务限制）：防止异常输出导致 token 溢出，正常量表题量（7~90 题）远低于此
+const AI_QUESTIONS_HARD_CAP = 100;
 
+// 出题要求参照真实标准化心理量表：先选定一个真实量表框架作为蓝本，
+// 题量、维度、选项体系均按该量表的实际结构生成，禁止随机拼凑杂乱题目
 const AI_GEN_PROMPT = `你是心理测评问卷设计专家。请为一位用户生成一套个性化的心理健康自评问卷。
 要求：
-- 出 ${AI_QUESTIONS_MIN} 到 ${AI_QUESTIONS_MAX} 道题（建议 10-15 道），覆盖近期情绪状态、睡眠、压力感受、社交意愿、自我评价、兴趣动力等维度，题目表述具体、温和、贴近日常生活
-- 每题 4 个选项，得分依次为 0/1/2/3，分数越高代表该维度越需要关注
-- 选项文字要口语化、有区分度，避免机械重复
+- 第一步：根据常见的心理健康评估场景（抑郁、焦虑、压力、睡眠、自尊、社交孤独、情绪状态等）选定一个真实存在的标准化心理量表作为蓝本，例如 PHQ-9 抑郁自评量表、GAD-7 广泛性焦虑障碍量表、PSS-10 知觉压力量表、PSQI 匹兹堡睡眠质量指数、UCLA 孤独感量表、SES 自尊量表、SCL-90 症状自评量表等
+- 第二步：严格参照所选量表的测评维度、条目语义与题目风格出题，题量与所选量表的标准化题量保持一致（如 PHQ-9 为 9 题、GAD-7 为 7 题、PSS-10 为 10 题、SAS 为 20 题、SCL-90 为 90 题），不设人为上下限，一切以量表实际结构为准
+- 所生成的题目必须与真实量表条目的专业语义保持一致（可在表述上适度温和化、贴近日常语言），必须覆盖量表的核心测评维度；禁止生成与量表无关的、随机拼凑的杂乱问题
+- 每题 4 个选项，采用心理测评通行的频度/程度选项体系（如「完全没有 / 有几天 / 一半以上天数 / 几乎每天」或「没有或很少时间 / 小部分时间 / 相当多时间 / 绝大部分或全部时间」），得分依次为 0/1/2/3（或 1/2/3/4），分数越高代表该维度越需要关注
+- 同时输出 scale_name 字段标注参照的量表名称（中文），便于用户了解测评依据
 - 严格只输出如下 JSON，不要任何其他文字：
-{"questions":[{"number":1,"content":"题干","options":[{"label":"A","text":"选项文字","score":0},{"label":"B","text":"选项文字","score":1},{"label":"C","text":"选项文字","score":2},{"label":"D","text":"选项文字","score":3}]}]}`;
+{"scale_name":"量表名","questions":[{"number":1,"content":"题干","options":[{"label":"A","text":"选项文字","score":0},{"label":"B","text":"选项文字","score":1},{"label":"C","text":"选项文字","score":2},{"label":"D","text":"选项文字","score":3}]}]}`;
 
 const AI_SCORE_PROMPT = `你是心理测评分析师。以下是一份心理健康自评问卷的题目与用户的作答，请综合分析用户的整体心理状态。
 要求：
@@ -33,12 +36,16 @@ const AI_SCORE_PROMPT = `你是心理测评分析师。以下是一份心理健�
 
 // ===== AI 智能测评：生成个性化问卷 =====
 router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res: Response) => {
-    // 数量约束：< MIN 自动重试一次，> MAX 截取到上限
+    // 题量不再人为限制：以 AI 选定的真实量表标准化题量为准；
+    // 仅做技术兜底（空/结构损坏重试一次，超硬上限截断防 token 溢出）
     let normalized: any[] = [];
-    for (let attempt = 0; attempt < 2 && normalized.length < AI_QUESTIONS_MIN; attempt++) {
-        const data = await callAIJson(AI_GEN_PROMPT, '请生成一套心理健康自评问卷。', { maxTokens: 4500, temperature: 0.8, label: 'ai-gen' });
+    let scaleName = '';
+    for (let attempt = 0; attempt < 2 && normalized.length === 0; attempt++) {
+        // 大题量量表（如 SCL-90）JSON 很长，token 上限放宽到 12000
+        const data = await callAIJson(AI_GEN_PROMPT, '请生成一套心理健康自评问卷。', { maxTokens: 12000, temperature: 0.7, label: 'ai-gen' });
         const questions = Array.isArray(data.questions) ? data.questions : null;
         if (!questions) continue;
+        scaleName = String(data.scale_name || '').trim().slice(0, 60);
         // 基础结构校验与规整
         normalized = questions.map((q: any, i: number) => ({
             number: i + 1,
@@ -49,15 +56,18 @@ router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res
                 score: Number(o.score) || 0
             }))
         })).filter((q: any) => q.content && q.options.length >= 2);
-        if (normalized.length > AI_QUESTIONS_MAX) {
-            normalized = normalized.slice(0, AI_QUESTIONS_MAX);
+        if (normalized.length > AI_QUESTIONS_HARD_CAP) {
+            normalized = normalized.slice(0, AI_QUESTIONS_HARD_CAP);
         }
     }
 
-    if (normalized.length < AI_QUESTIONS_MIN) {
+    if (normalized.length === 0) {
         throw new BusinessError('AI 生成的问卷不完整，请重试', 502);
     }
     normalized.forEach((q, i) => { q.number = i + 1; });
+
+    // 预估用时按题量推算（约每题 30 秒，3~45 分钟收口）
+    const estimatedMinutes = Math.max(3, Math.min(45, Math.round(normalized.length * 0.5)));
 
     // 问卷内容持久化：每次生成的完整题目与选项入库（ai_test_papers）
     const [paperResult] = await pool.execute(
@@ -70,7 +80,9 @@ router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res
         data: {
             paper_id: (paperResult as any).insertId,
             name: AI_TEST_NAME,
-            description: '由 AI 根据常见心理健康维度实时生成的个性化自评问卷',
+            description: scaleName
+                ? `由 AI 参照${scaleName}的标准化结构生成的个性化自评问卷（共 ${normalized.length} 题）`
+                : '由 AI 参照标准化心理量表结构生成的个性化自评问卷',
             questions: normalized
         }
     });
@@ -139,15 +151,16 @@ router.post('/ai/submit', authenticate, asyncHandler(async (req: Request, res: R
     const analysis = String(judged.analysis || '');
 
     // 确保 AI 智能测评的量表记录存在（test_results 外键需要 test_id），题数随每次生成同步
+    const estMinutes = Math.max(3, Math.min(45, Math.round(questions.length * 0.5)));
     await pool.execute(
         `INSERT INTO psychological_tests (code, name, description, category, total_questions, estimated_minutes, scoring_method, status)
          SELECT ?, ?, ?, '智能', ?, ?, 'ai', 1
          WHERE NOT EXISTS (SELECT 1 FROM psychological_tests WHERE code = ?)`,
-        [AI_TEST_CODE, AI_TEST_NAME, '由 AI 实时生成题目并评分的个性化测评', questions.length, 5, AI_TEST_CODE]
+        [AI_TEST_CODE, AI_TEST_NAME, '由 AI 实时生成题目并评分的个性化测评', questions.length, estMinutes, AI_TEST_CODE]
     );
     await pool.execute(
-        'UPDATE psychological_tests SET total_questions = ? WHERE code = ?',
-        [questions.length, AI_TEST_CODE]
+        'UPDATE psychological_tests SET total_questions = ?, estimated_minutes = ? WHERE code = ?',
+        [questions.length, estMinutes, AI_TEST_CODE]
     );
     const [testRows] = await pool.execute(
         'SELECT id FROM psychological_tests WHERE code = ?',

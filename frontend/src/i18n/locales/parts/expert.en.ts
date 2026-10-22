@@ -17,7 +17,20 @@ export default {
       nameRequired: 'Please enter the questionnaire name',
       submittedReview: 'Submitted. Waiting for admin review before publishing',
       updated: 'Questionnaire updated. Still pending review',
-      loadDetailFailed: 'Failed to load questionnaire'
+      loadDetailFailed: 'Failed to load questionnaire',
+      tplLabel: 'Templates',
+      tplSelect: 'Pick a template to apply',
+      tplEmpty: 'No templates yet. Save a finished questionnaire as a template first',
+      tplApply: 'Apply',
+      tplDelete: 'Delete',
+      tplSave: 'Save as Template',
+      tplApplied: 'Template applied. Adjust and submit when ready',
+      tplSaved: 'Saved as template',
+      tplSaveFailed: 'Failed to save template',
+      tplConfirmDelete: 'Delete template "{name}"? This cannot be undone.',
+      tplDeleteTitle: 'Delete Template',
+      tplDeleted: 'Template deleted',
+      tplDeleteFailed: 'Failed to delete template'
     },
     card: {
       title: 'My Profile Card',

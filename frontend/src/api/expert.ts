@@ -41,3 +41,12 @@ export const updateMyTest = (id: number, data: any) => request.put(`/expert/test
 
 // 我的问卷：删除（仅待审核状态可删）
 export const deleteMyTest = (id: number) => request.delete(`/expert/tests/${id}`)
+
+// 问卷模板：我的模板列表（含完整内容，套用时直接回填）
+export const getTestTemplates = () => request.get('/expert/test-templates')
+
+// 问卷模板：把当前表单存为模板
+export const saveTestTemplate = (data: any) => request.post('/expert/test-templates', data)
+
+// 问卷模板：删除
+export const deleteTestTemplate = (id: number) => request.delete(`/expert/test-templates/${id}`)

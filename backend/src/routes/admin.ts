@@ -5,7 +5,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { invalidateWords } from '../utils/moderation';
-import { notifyUserRestricted, notifyRestrictionLifted, disconnectUser, Restriction } from '../utils/restrict';
+import { notifyUserRestricted, notifyRestrictionLifted, disconnectUser, Restriction, getActiveRestriction } from '../utils/restrict';
 import { ensureAuditSchema } from '../utils/auditLog';
 
 const router = Router();
@@ -540,7 +540,7 @@ router.get('/chats', authenticate, requireAdmin, asyncHandler(async (req: Reques
     });
 }));
 
-// 会话详情：全部消息正序 + 会话元数据；每次查看写入审计日志
+// 会话详情：全部消息正序 + 会话元数据（含账号限制状态）+ 最近审计记录；每次查看写入审计日志
 router.get('/chats/:userId/:sessionId', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const userId = parseInt(req.params.userId);
     const sessionId = String(req.params.sessionId || '');
@@ -549,7 +549,8 @@ router.get('/chats/:userId/:sessionId', authenticate, requireAdmin, asyncHandler
     }
 
     const [sessRows] = await pool.execute(
-        `SELECT s.session_id, s.title, s.created_at, s.last_time, u.id AS user_id, u.username, u.email, u.avatar
+        `SELECT s.session_id, s.title, s.created_at, s.last_time, u.id AS user_id, u.username, u.email, u.avatar,
+                u.status, u.restricted_until
          FROM chat_sessions s JOIN users u ON u.id = s.user_id
          WHERE s.user_id = ? AND s.session_id = ?`,
         [userId, sessionId]
@@ -575,10 +576,107 @@ router.get('/chats/:userId/:sessionId', authenticate, requireAdmin, asyncHandler
         console.error('写入对话审查审计日志失败:', e.message);
     }
 
+    // 会话归属账号当前限制状态（禁言/封禁/正常，供处置栏直接展示）
+    const restriction = await getActiveRestriction(userId);
+
     res.json({
         success: true,
-        data: { session, messages: msgRows }
+        data: { session, messages: msgRows, restriction }
     });
+}));
+
+// 审查处置：直接对会话归属账号禁言/封禁（无需举报记录，实时通知，封禁强制踢线）
+router.post('/chats/:userId/:sessionId/restrict', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.userId);
+    const sessionId = String(req.params.sessionId || '');
+    const { action, duration } = req.body || {};
+    if (!Number.isInteger(userId)) {
+        throw new BusinessError('无效的用户标识', 400);
+    }
+    if (!['mute', 'ban'].includes(action)) {
+        throw new BusinessError('无效的处置方式', 400);
+    }
+
+    const [rows] = await pool.execute('SELECT id, username FROM users WHERE id = ?', [userId]);
+    const target = (rows as any[])[0];
+    if (!target) {
+        throw new BusinessError('用户不存在', 404);
+    }
+
+    // 处置时长：24h / 72h / 7d，未传或 permanent = 永久
+    const hoursMap: Record<string, number> = { '24h': 24, '72h': 72, '7d': 168 };
+    const until: Date | null = duration && hoursMap[duration]
+        ? new Date(Date.now() + hoursMap[duration] * 3600 * 1000)
+        : null;
+    const statusVal = action === 'ban' ? 2 : 1;
+    await pool.execute(
+        'UPDATE users SET status = ?, restricted_until = ? WHERE id = ?',
+        [statusVal, until, userId]
+    );
+
+    const label = action === 'ban' ? '封禁' : '禁言';
+    const untilText = until
+        ? `${until.toLocaleString('zh-CN', { hour12: false })} 自动解除`
+        : '永久生效';
+
+    // 审计留痕：处置动作可追溯
+    try {
+        await ensureAuditSchema();
+        await pool.execute(
+            'INSERT INTO ai_audit_logs (admin_id, target_user_id, session_id, action) VALUES (?, ?, ?, ?)',
+            [req.user!.id, userId, sessionId || '-', action]
+        );
+    } catch (e: any) {
+        console.error('写入对话审查处置审计日志失败:', e.message);
+    }
+
+    const payload: Restriction = {
+        type: action === 'ban' ? 'banned' : 'muted',
+        until: until ? until.toISOString() : null,
+        message: `您的账号已被管理员${label}（${untilText}），期间无法${action === 'ban' ? '登录和使用' : '发送消息'}`
+    };
+    notifyUserRestricted(userId, payload);
+    if (action === 'ban') {
+        disconnectUser(userId);
+    }
+
+    res.json({
+        success: true,
+        message: `已${label}账号「${target.username}」（${untilText}）`,
+        data: { restriction: await getActiveRestriction(userId) }
+    });
+}));
+
+// 审查处置：删除违规会话（消息与会话元数据一并删除，删除动作审计留痕）
+router.delete('/chats/:userId/:sessionId', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.userId);
+    const sessionId = String(req.params.sessionId || '');
+    if (!Number.isInteger(userId) || !sessionId || sessionId.length > 40) {
+        throw new BusinessError('无效的会话标识', 400);
+    }
+
+    const [rows] = await pool.execute(
+        'SELECT id FROM chat_sessions WHERE user_id = ? AND session_id = ?',
+        [userId, sessionId]
+    );
+    if ((rows as any[]).length === 0) {
+        throw new BusinessError('会话不存在', 404);
+    }
+
+    await pool.execute('DELETE FROM chat_records WHERE user_id = ? AND session_id = ?', [userId, sessionId]);
+    await pool.execute('DELETE FROM chat_sessions WHERE user_id = ? AND session_id = ?', [userId, sessionId]);
+
+    try {
+        await ensureAuditSchema();
+        await pool.execute(
+            'INSERT INTO ai_audit_logs (admin_id, target_user_id, session_id, action) VALUES (?, ?, ?, ?)',
+            [req.user!.id, userId, sessionId, 'delete']
+        );
+    } catch (e: any) {
+        console.error('写入对话审查删除审计日志失败:', e.message);
+    }
+
+    res.json({ success: true, message: '已删除该会话' });
 }));
 
 // 审查审计日志（分页倒序，谁在何时查看了谁的会话）
