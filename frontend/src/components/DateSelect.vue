@@ -3,17 +3,17 @@
     <!-- 年 -->
     <select v-model="yearVal" :aria-label="$t('ui.date.year')">
       <option v-if="!yearVal" value="">{{ yearLabel }}</option>
-      <option v-for="y in yearList" :key="y" :value="y">{{ isEn ? y : y + t('ui.date.yearSuffix') }}</option>
+      <option v-for="y in yearOptions" :key="y" :value="y">{{ isEn ? y : y + t('ui.date.yearSuffix') }}</option>
     </select>
     <!-- 月 -->
     <select v-model="monthVal" :aria-label="$t('ui.date.month')">
       <option v-if="!monthVal" value="">{{ monthLabel }}</option>
-      <option v-for="m in 12" :key="m" :value="m">{{ monthName(m) }}</option>
+      <option v-for="m in monthOptions" :key="m" :value="m">{{ monthName(m) }}</option>
     </select>
     <!-- 日 -->
     <select v-model="dayVal" :aria-label="$t('ui.date.day')">
       <option v-if="!dayVal" value="">{{ dayLabel }}</option>
-      <option v-for="d in dayCount" :key="d" :value="d">{{ isEn ? d : d + t('ui.date.daySuffix') }}</option>
+      <option v-for="d in dayOptions" :key="d" :value="d">{{ isEn ? d : d + t('ui.date.daySuffix') }}</option>
     </select>
   </div>
 </template>
@@ -26,6 +26,8 @@ import { useI18n } from 'vue-i18n'
 // 页面语言无法控制；此组件的年/月/日文字完全跟随界面语言，值仍以 'YYYY-MM-DD' 字符串对外。
 const props = defineProps<{
   modelValue: string
+  /** 可选上限（'YYYY-MM-DD'）：传入后不可选择超过该日期的年/月/日（如报告截止日期不可超过当天） */
+  max?: string
 }>()
 
 const emit = defineEmits<{
@@ -45,6 +47,34 @@ const yearList = computed(() => {
   const list: number[] = []
   for (let y = currentYear; y >= currentYear - 5; y--) list.push(y)
   return list
+})
+
+// 上限日期解析（无效或缺省时不设限）
+const maxLimit = computed(() => {
+  const s = String(props.max || '')
+  return /^\d{4}-\d{2}-\d{2}$/.test(s)
+    ? { y: Number(s.slice(0, 4)), m: Number(s.slice(5, 7)), d: Number(s.slice(8, 10)) }
+    : null
+})
+
+// 逐级约束：上限年内不出现更晚年份；上限年月内不出现更晚月份；上限年月内不出现更晚日
+const yearOptions = computed(() => {
+  const maxY = maxLimit.value?.y
+  return maxY ? yearList.value.filter((y) => y <= maxY) : yearList.value
+})
+const monthOptions = computed(() => {
+  const lim = maxLimit.value
+  if (lim && y.value && y.value === lim.y) {
+    return Array.from({ length: lim.m }, (_, i) => i + 1)
+  }
+  return Array.from({ length: 12 }, (_, i) => i + 1)
+})
+const dayOptions = computed(() => {
+  const lim = maxLimit.value
+  if (lim && y.value && m.value && y.value === lim.y && m.value === lim.m) {
+    return Array.from({ length: lim.d }, (_, i) => i + 1)
+  }
+  return Array.from({ length: dayCount.value }, (_, i) => i + 1)
 })
 
 // 本地三段状态：逐段选择必须先暂存在本地（修复：此前各段 setter 互相从 modelValue
@@ -73,16 +103,27 @@ watch(
 
 const yearVal = computed({
   get: () => y.value || '',
-  set: (v: any) => { y.value = Number(v) || 0; tryEmit() }
+  set: (v: any) => { y.value = Number(v) || 0; clampByMax(); tryEmit() }
 })
 const monthVal = computed({
   get: () => m.value || '',
-  set: (v: any) => { m.value = Number(v) || 0; tryEmit() }
+  set: (v: any) => { m.value = Number(v) || 0; clampByMax(); tryEmit() }
 })
 const dayVal = computed({
   get: () => d.value || '',
   set: (v: any) => { d.value = Number(v) || 0; tryEmit() }
 })
+
+// 年/月变化后，已选的月/日可能越界（如上限月为 10 月时先选了 12 月）：
+// 按上限与当月天数收敛，避免组合出超过上限的日期
+const clampByMax = () => {
+  const lim = maxLimit.value
+  if (lim && y.value === lim.y) {
+    if (m.value > lim.m) m.value = 0
+  }
+  const days = y.value && m.value ? daysInMonth(y.value, m.value) : 31
+  if (d.value > days) d.value = 0
+}
 
 // 三段齐备才 emit（部分选择不回写，避免中间态误触发父级校验）
 const tryEmit = () => {
@@ -90,7 +131,16 @@ const tryEmit = () => {
   const days = daysInMonth(y.value, m.value)
   const dd = Math.min(d.value, days)
   d.value = dd
-  emit('update:modelValue', `${y.value}-${pad(m.value)}-${pad(dd)}`)
+  // 双保险：上限存在时截断到上限日，绝不允许 emit 出超过 max 的日期
+  let out = `${y.value}-${pad(m.value)}-${pad(dd)}`
+  const lim = maxLimit.value
+  if (lim && out > `${lim.y}-${pad(lim.m)}-${pad(lim.d)}`) {
+    out = `${lim.y}-${pad(lim.m)}-${pad(lim.d)}`
+    y.value = lim.y
+    m.value = lim.m
+    d.value = lim.d
+  }
+  emit('update:modelValue', out)
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')

@@ -333,6 +333,7 @@ export default {
       republish: '重新上架',
       editBtn: '编辑',
       delete: '删除',
+      systemProtected: '系统维护',
       empty: '暂无问卷数据',
       loadFailed: '加载问卷列表失败',
       statusUpdated: '状态更新成功',

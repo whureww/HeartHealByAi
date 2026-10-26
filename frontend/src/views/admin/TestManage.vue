@@ -56,44 +56,57 @@
             <td class="date-cell">{{ formatDate(test.created_at) }}</td>
             <td>
               <div class="action-btns">
-                <button
-                  v-if="test.status === 0"
-                  class="btn-action"
-                  @click="updateStatus(test.id, 1)"
-                >
-                  <AppIcon name="upload" :size="13" />
-                  {{ $t('admin.test.publish') }}
-                </button>
-                <button
-                  v-if="test.status === 1"
-                  class="btn-action"
-                  @click="updateStatus(test.id, 2)"
-                >
-                  <AppIcon name="download" :size="13" />
-                  {{ $t('admin.test.unpublish') }}
-                </button>
-                <button
-                  v-if="test.status === 2"
-                  class="btn-action"
-                  @click="updateStatus(test.id, 1)"
-                >
-                  <AppIcon name="refresh" :size="13" />
-                  {{ $t('admin.test.republish') }}
-                </button>
-                <button
-                  class="btn-action"
-                  @click="$router.push(`/admin/tests/edit/${test.id}`)"
-                >
-                  <AppIcon name="edit" :size="13" />
-                  {{ $t('admin.test.editBtn') }}
-                </button>
-                <button
-                  class="btn-action btn-action-danger"
-                  @click="deleteTest(test.id)"
-                >
-                  <AppIcon name="trash" :size="13" />
-                  {{ $t('admin.test.delete') }}
-                </button>
+                <!-- AI 智能测评由系统自动维护：不提供上架/下架/删除入口（服务端同步拦截） -->
+                <template v-if="test.code === 'AI-GEN'">
+                  <span class="system-tag">{{ $t('admin.test.systemProtected') }}</span>
+                  <button
+                    class="btn-action"
+                    @click="$router.push(`/admin/tests/edit/${test.id}`)"
+                  >
+                    <AppIcon name="edit" :size="13" />
+                    {{ $t('admin.test.editBtn') }}
+                  </button>
+                </template>
+                <template v-else>
+                  <button
+                    v-if="test.status === 0"
+                    class="btn-action"
+                    @click="updateStatus(test.id, 1)"
+                  >
+                    <AppIcon name="upload" :size="13" />
+                    {{ $t('admin.test.publish') }}
+                  </button>
+                  <button
+                    v-if="test.status === 1"
+                    class="btn-action"
+                    @click="updateStatus(test.id, 2)"
+                  >
+                    <AppIcon name="download" :size="13" />
+                    {{ $t('admin.test.unpublish') }}
+                  </button>
+                  <button
+                    v-if="test.status === 2"
+                    class="btn-action"
+                    @click="updateStatus(test.id, 1)"
+                  >
+                    <AppIcon name="refresh" :size="13" />
+                    {{ $t('admin.test.republish') }}
+                  </button>
+                  <button
+                    class="btn-action"
+                    @click="$router.push(`/admin/tests/edit/${test.id}`)"
+                  >
+                    <AppIcon name="edit" :size="13" />
+                    {{ $t('admin.test.editBtn') }}
+                  </button>
+                  <button
+                    class="btn-action btn-action-danger"
+                    @click="deleteTest(test.id)"
+                  >
+                    <AppIcon name="trash" :size="13" />
+                    {{ $t('admin.test.delete') }}
+                  </button>
+                </template>
               </div>
             </td>
           </tr>
@@ -404,6 +417,18 @@ onMounted(loadTests)
 .btn-action-danger:hover {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
+}
+
+/* AI 智能测评「系统维护」标识 */
+.system-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .data-table td.empty-cell {

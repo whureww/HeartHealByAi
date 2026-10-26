@@ -45,6 +45,9 @@ export const deleteMyTest = (id: number) => request.delete(`/expert/tests/${id}`
 // 问卷模板：我的模板列表（含完整内容，套用时直接回填）
 export const getTestTemplates = () => request.get('/expert/test-templates')
 
+// 问卷模板：预设量表模板（开箱即用的 14 份真实标准化量表，id 为 'preset:编码'）
+export const getTestTemplatePresets = () => request.get('/expert/test-templates/presets')
+
 // 问卷模板：把当前表单存为模板
 export const saveTestTemplate = (data: any) => request.post('/expert/test-templates', data)
 

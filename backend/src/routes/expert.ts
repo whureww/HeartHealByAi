@@ -8,6 +8,7 @@ import { ensureDoctorEnColumns } from '../utils/doctorCols';
 import { ensureTestCreatedByColumn } from '../utils/testCols';
 import { ensureChatCols } from '../utils/chatCols';
 import { ensureTemplateSchema } from '../utils/testTemplate';
+import { ensureScaleTemplates } from '../utils/aiScaleSeed';
 
 const router = Router();
 
@@ -278,6 +279,41 @@ router.delete('/tests/:id', authenticate, requireExpert, asyncHandler(async (req
 
 // ========== 专家问卷模板：把编好的完整问卷存为私人样板，新建问卷时一键套用 ==========
 // 模板仅归属专家本人可见（expert_id 隔离），内容为规整后的完整题目与选项 JSON
+
+// 预设量表模板（开箱即用）：来自 ai_scale_templates 的 14 份真实标准化量表，
+// 与私人模板同构返回（id 为 'preset:编码' 前缀标识），套用后可直接微调提交
+router.get('/test-templates/presets', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {
+    await ensureScaleTemplates();
+    const [rows] = await pool.execute(
+        'SELECT code, name, category, estimated_minutes, intro, score_note, result_levels, items FROM ai_scale_templates WHERE enabled = 1 ORDER BY id'
+    );
+    const data = (rows as any[]).map((t: any) => {
+        let items: any[] = [];
+        try { items = JSON.parse(t.items || '[]'); } catch { items = []; }
+        let resultLevels: any[] = [];
+        try { resultLevels = t.result_levels ? JSON.parse(t.result_levels) : []; } catch { resultLevels = []; }
+        return {
+            id: 'preset:' + t.code,
+            is_preset: true,
+            name: t.name,
+            description: [t.intro, t.score_note ? '计分说明：' + t.score_note : ''].filter(Boolean).join(' '),
+            category: t.category || 'emotion',
+            estimated_minutes: t.estimated_minutes,
+            scoring_method: 'sum',
+            result_levels: resultLevels,
+            question_count: items.length,
+            questions: items.map((it: any, i: number) => ({
+                question_number: i + 1,
+                content: it.content,
+                dimension: '',
+                reverse_scoring: false,
+                options: (it.options || []).map((o: any) => ({ score: Number(o.score) || 0, text: String(o.text || '') }))
+            })),
+            created_at: null
+        };
+    });
+    res.json({ success: true, data });
+}));
 
 // 模板列表（含完整内容，套用时直接回填，无需二次请求）
 router.get('/test-templates', authenticate, requireExpert, asyncHandler(async (req: any, res: any) => {

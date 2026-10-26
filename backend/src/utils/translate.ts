@@ -82,3 +82,98 @@ export async function translateText(text: string, targetCode: string, constraint
   const content = res?.data?.choices?.[0]?.message?.content;
   return stripThink(typeof content === 'string' ? content : '');
 }
+
+// ===== 长文本分块翻译 =====
+// 实测网关对 2500+ 字长文本必现 504（其内部约 30s 超时），短文本（~1s）稳定但高峰期整机会抖动；
+// 报告类长文本按段落边界切成小块送译，全部成功后按原顺序拼接；网关整体不可用时快速转入主厂模型回落
+const CHUNK_MAX_CHARS = 800;     // 单块字符上限（块越小 504 概率越低）
+const CHUNK_CONCURRENCY = 3;     // 并发送译数（对公共网关保持克制）
+const CHUNK_TIMEOUT_MS = 22000;  // 单块超时（健康网关 800 字约 1~15s 出结果，超时即视为网关过载）
+const CHUNK_RETRIES = 1;         // 单块失败重试次数（网关偶发抖动，重试常可恢复）
+const PHASE_BUDGET_MS = 40000;   // 网关阶段总预算：超时立即放弃网关转入回落，避免故障期用户空等 90s+
+
+/** 按段落边界切块：优先在空行处断开，超长段落按句号/问号/感叹号二次切分 */
+function splitIntoChunks(text: string, maxChars = CHUNK_MAX_CHARS): string[] {
+  const paragraphs = text.split(/\n{2,}/);
+  const sentences = (p: string): string[] => {
+    if (p.length <= maxChars) return [p];
+    const parts: string[] = [];
+    let buf = '';
+    for (const seg of p.split(/(?<=[。！？!?；;\.])\s*/)) {
+      if ((buf + seg).length > maxChars && buf) {
+        parts.push(buf);
+        buf = seg;
+      } else {
+        buf += seg;
+      }
+    }
+    if (buf.trim()) parts.push(buf);
+    return parts;
+  };
+
+  const chunks: string[] = [];
+  let cur = '';
+  for (const p of paragraphs) {
+    const pieces = sentences(p.trim()).filter((s) => s.length);
+    for (const piece of pieces) {
+      if (!cur) {
+        cur = piece;
+      } else if ((cur + '\n\n' + piece).length <= maxChars) {
+        cur += '\n\n' + piece;
+      } else {
+        chunks.push(cur);
+        cur = piece;
+      }
+    }
+  }
+  if (cur.trim()) chunks.push(cur);
+  return chunks;
+}
+
+/**
+ * 长文本翻译入口：短文本直接透传；长文本自动分块并受限并发送译，按原序拼接。
+ * 任一块失败即整体抛错（调用方决定回落策略），避免拼接出残缺译文。
+ */
+export async function translateTextLong(text: string, targetCode: string, constraint?: string, timeoutMs = 90000): Promise<string> {
+  const src = String(text || '').trim();
+  if (src.length <= CHUNK_MAX_CHARS) {
+    return translateText(src, targetCode, constraint, timeoutMs);
+  }
+
+  const chunks = splitIntoChunks(src);
+  const results: string[] = new Array(chunks.length).fill('');
+  let next = 0;
+  let failed = false;
+  const phaseStart = Date.now();
+
+  const worker = async () => {
+    while (next < chunks.length && !failed) {
+      // 网关阶段预算耗尽：停止排新任务，尽快转入回落链路
+      if (Date.now() - phaseStart > PHASE_BUDGET_MS) {
+        failed = true;
+        console.error('[translate] 网关阶段超预算，转回落');
+        break;
+      }
+      const idx = next++;
+      let t = '';
+      // 单块失败自动重试（网关偶发 504/抖动，重试常可恢复）
+      for (let r = 0; r <= CHUNK_RETRIES && !t; r++) {
+        try {
+          t = await translateText(chunks[idx], targetCode, constraint, CHUNK_TIMEOUT_MS);
+        } catch (e: any) {
+          console.error(`[translate] 分块 ${idx + 1}/${chunks.length} 第 ${r + 1} 次尝试失败:`, e?.message);
+        }
+      }
+      if (t) {
+        results[idx] = t;
+      } else {
+        failed = true;
+        console.error(`[translate] 分块 ${idx + 1}/${chunks.length} 重试后仍失败，整体转回落`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, worker));
+
+  if (failed) throw new Error('分块翻译部分失败');
+  return results.join('\n\n');
+}

@@ -333,6 +333,7 @@ export default {
       republish: 'Republish',
       editBtn: 'Edit',
       delete: 'Delete',
+      systemProtected: 'System-maintained',
       empty: 'No tests yet',
       loadFailed: 'Failed to load tests',
       statusUpdated: 'Status updated',

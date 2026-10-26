@@ -172,6 +172,12 @@ router.put('/tests/:id/status', authenticate, requireAdmin, asyncHandler(async (
         throw new BusinessError('无效的状态', 400);
     }
 
+    // AI 智能测评由系统自动维护（用户端单独入口），不允许从后台改变上下架状态
+    const [aiRows] = await pool.execute('SELECT code FROM psychological_tests WHERE id = ?', [testId]);
+    if (((aiRows as any[])[0]?.code || '') === 'AI-GEN') {
+        throw new BusinessError('AI 智能测评由系统自动维护，不允许上架或下架', 403);
+    }
+
     await pool.execute('UPDATE psychological_tests SET status = ? WHERE id = ?', [status, testId]);
 
     const statusText = { 0: '未上架', 1: '已上架', 2: '已下架' };
@@ -181,6 +187,12 @@ router.put('/tests/:id/status', authenticate, requireAdmin, asyncHandler(async (
 // 删除问卷
 router.delete('/tests/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const testId = parseInt(req.params.id);
+
+    // AI 智能测评被用户测评历史（test_results 外键）引用，删除会破坏历史数据，禁止删除
+    const [aiRows] = await pool.execute('SELECT code FROM psychological_tests WHERE id = ?', [testId]);
+    if (((aiRows as any[])[0]?.code || '') === 'AI-GEN') {
+        throw new BusinessError('AI 智能测评由系统自动维护，不允许删除', 403);
+    }
 
     await pool.execute('DELETE FROM test_questions WHERE test_id = ?', [testId]);
     await pool.execute('DELETE FROM psychological_tests WHERE id = ?', [testId]);

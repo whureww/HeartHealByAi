@@ -121,6 +121,7 @@ export interface AITranslateResponse {
 
 // 翻译已生成的报告（target 可选：Index-Translate 语言码，32 语种；
 // 译文不落库，仅本次展示；原文始终保留）
+// 翻译链路（分块送译/回落主厂模型）耗时可达 90s+，单独放宽超时到 120s（默认 50s 会中途掐断）
 export const translateReport = (text: string, target?: string): Promise<AITranslateResponse> => {
-  return request.post('/ai/translate', { text, target, locale: i18n.global.locale.value }) as Promise<AITranslateResponse>
+  return request.post('/ai/translate', { text, target, locale: i18n.global.locale.value }, { timeout: 120000 }) as Promise<AITranslateResponse>
 }

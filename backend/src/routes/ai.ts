@@ -8,7 +8,7 @@ import {
 import { decryptSecret } from '../utils/secretBox';
 import { pool } from '../db/mysql';
 import { retrieveRagContext, extractAndStoreMemories, backfillChatEmbeddings } from '../utils/memory';
-import { isSupportedLang, translateText } from '../utils/translate';
+import { isSupportedLang, translateText, translateTextLong, TRANSLATE_LANG_NAMES } from '../utils/translate';
 
 const router = Router();
 
@@ -558,9 +558,9 @@ router.post('/translate', authenticate, async (req: Request, res: Response) => {
       ? String(target).toLowerCase()
       : (locale === 'en' ? 'en' : 'zh');
 
-    // 首选 Index-Translate 公共翻译网关（免费、多语种）
+    // 首选 Index-Translate 公共翻译网关（免费、多语种；长文本自动分块绕开其 504 限制）
     try {
-      const translated = await translateText(
+      const translated = await translateTextLong(
         raw.slice(0, 12000),
         targetCode,
         '严格保留原文的 Markdown 结构、标题、列表与换行，忠实且自然地翻译全部内容',
@@ -574,19 +574,34 @@ router.post('/translate', authenticate, async (req: Request, res: Response) => {
     } catch (e: any) {
       // 公共网关不可用 → 回落主厂大模型翻译链路（保底）
       console.error('[ai/translate] Index-Translate 不可用，回落主厂模型:', e?.message);
-      const targetName = locale === 'en' ? 'English' : '简体中文';
-      const fallback = await callAI(
-        [
-          {
-            role: 'system',
-            content: 'You are a professional translator for psychological analysis reports. Translate the user text into ' + targetName
-              + '. Preserve the original Markdown structure, headings, lists and line breaks exactly. Translate faithfully and naturally; output ONLY the translation with no explanations.'
-          },
-          { role: 'user', content: raw.slice(0, 12000) }
-        ],
-        { temperature: 0.3, maxTokens: 4000, timeout: 90000 }
-      );
-      res.json({ success: true, translated: fallback || '' });
+      // 目标语言必须跟随用户所选 targetCode，而非界面语言 locale：
+      // 此前按 locale 取「简体中文」，中文界面选英语翻译时回落链路会把中文原样返回（等于没翻译）
+      const targetName = TRANSLATE_LANG_NAMES[targetCode] || (locale === 'en' ? 'English' : '简体中文');
+      const fallbackMessages = [
+        {
+          role: 'system' as const,
+          content: 'You are a professional translator for psychological analysis reports. Translate the user text into ' + targetName
+            + '. Preserve the original Markdown structure, headings, lists and line breaks exactly. Translate faithfully and naturally; output ONLY the translation with no explanations.'
+        },
+        { role: 'user' as const, content: raw.slice(0, 12000) }
+      ];
+      // 回落链路稳健性：deepseek-v4-flash 为推理型模型，长文本会先输出大段思考，
+      // token 预算不足时 content 可能为空 → 首选 8000，仍为空则升级 12000 再试一次
+      let fallback = '';
+      let lastErr: any = null;
+      for (const maxTokens of [8000, 12000]) {
+        try {
+          fallback = await callAI(fallbackMessages, { temperature: 0.3, maxTokens, timeout: 90000 });
+        } catch (e: any) {
+          lastErr = e;
+        }
+        if (fallback) break;
+      }
+      if (!fallback) {
+        if (lastErr) throw lastErr;
+        throw new Error('翻译结果为空');
+      }
+      res.json({ success: true, translated: fallback });
     }
   } catch (error: any) {
     console.error('翻译接口错误:', error.message);

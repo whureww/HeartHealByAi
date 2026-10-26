@@ -273,7 +273,8 @@
           <div class="time-select">
             <DateSelect v-model="startDate" />
             <span>{{ $t('dashboard.report.to') }}</span>
-            <DateSelect v-model="endDate" />
+            <!-- 截止日期不允许超过当天（max 传入当天日期，超出的月/日选项不出现） -->
+            <DateSelect v-model="endDate" :max="todayStr" />
             <button @click="createReport" :disabled="reportLoading">
               {{ reportLoading ? $t('dashboard.report.generating') : $t('dashboard.report.generateBtn') }}
             </button>
@@ -1057,6 +1058,11 @@ const removeSession = async (s: any) => {
 const chatBox = ref<HTMLElement | null>(null)
 const startDate = ref('')
 const endDate = ref('')
+// 当天日期（本地时区 'YYYY-MM-DD'）：作为报告截止日期的上限
+const todayStr = (() => {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+})()
 // 报告区占位哨兵：仅用于内部状态判断，不会展示给用户
 const REPORT_LOADING = '__REPORT_LOADING__'
 const REPORT_FAILED = '__REPORT_FAILED__'
@@ -1143,6 +1149,9 @@ const translateCurrentReport = async () => {
     if (res?.translated) {
       translationText.value = res.translated
       showingTranslation.value = true
+    } else {
+      // 后端返回成功但译文为空：必须给出反馈，否则表现为「点了翻译没反应」
+      await error(t('dashboard.report.translateFailed'))
     }
   } catch (e: any) {
     await error(e?.message || t('dashboard.report.translateFailed'))
@@ -1446,7 +1455,7 @@ const updateProgressText = computed(() => {
 })
 
 const updateDesc = computed(() => {
-  const cur = updateInfo.value?.current_version || '0.6.4'
+  const cur = updateInfo.value?.current_version || '0.6.5'
   const base = t('dashboard.update.appVersion', { version: cur })
   if (updatePhase.value === 'available' && updateInfo.value?.has_update) {
     return t('dashboard.update.availableDesc', { latest: updateInfo.value.latest_version, current: cur })
@@ -1900,6 +1909,14 @@ const bookDoctor = async (doc: any) => {
 const createReport = async () => {
   if (!startDate.value || !endDate.value) {
     await alert(t('dashboard.report.dateRequired'), t('dashboard.report.dateError'))
+    return
+  }
+  // 防御：截止日期不允许超过当天（选择器已限制，此处兜底避免异常路径绕过）
+  if (endDate.value > todayStr) {
+    endDate.value = todayStr
+  }
+  if (startDate.value > endDate.value) {
+    await alert(t('dashboard.report.dateRangeInvalid'), t('dashboard.report.dateError'))
     return
   }
 

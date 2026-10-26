@@ -7,17 +7,29 @@
     <!-- 模板栏（仅专家）：套用已存样板 / 把当前问卷存为模板 -->
     <div v-if="isExpert" class="tpl-bar">
       <span class="tpl-label">{{ $t('expert.myTests.tplLabel') }}</span>
-      <select v-model="selectedTplId" class="tpl-select" :disabled="templates.length === 0">
-        <option value="">{{ templates.length ? $t('expert.myTests.tplSelect') : $t('expert.myTests.tplEmpty') }}</option>
-        <option v-for="tpl in templates" :key="tpl.id" :value="tpl.id">
-          {{ tpl.name }}（{{ $t('admin.test.questionCount', { n: tpl.question_count }) }}）
-        </option>
+      <select v-model="selectedTplId" class="tpl-select" :disabled="allTemplates.length === 0">
+        <option value="">{{ allTemplates.length ? $t('expert.myTests.tplSelect') : $t('expert.myTests.tplEmpty') }}</option>
+        <optgroup v-if="presetTemplates.length" :label="$t('expert.myTests.tplPresetGroup')">
+          <option v-for="tpl in presetTemplates" :key="tpl.id" :value="tpl.id">
+            {{ tpl.name }}（{{ $t('admin.test.questionCount', { n: tpl.question_count }) }}）
+          </option>
+        </optgroup>
+        <optgroup v-if="templates.length" :label="$t('expert.myTests.tplMyGroup')">
+          <option v-for="tpl in templates" :key="tpl.id" :value="tpl.id">
+            {{ tpl.name }}（{{ $t('admin.test.questionCount', { n: tpl.question_count }) }}）
+          </option>
+        </optgroup>
       </select>
       <button class="btn-tpl" :disabled="!selectedTplId" @click="applyTemplate">
         <AppIcon name="check" :size="13" />
         {{ $t('expert.myTests.tplApply') }}
       </button>
-      <button class="btn-tpl btn-tpl-danger" :disabled="!selectedTplId" @click="removeTemplate">
+      <button
+        class="btn-tpl btn-tpl-danger"
+        :disabled="!selectedTplId || isPresetSelected"
+        :title="isPresetSelected ? $t('expert.myTests.tplPresetNoDelete') : ''"
+        @click="removeTemplate"
+      >
         <AppIcon name="trash" :size="13" />
         {{ $t('expert.myTests.tplDelete') }}
       </button>
@@ -170,7 +182,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { createTest } from '@/api/admin'
-import { createMyTest, getMyTestDetail, updateMyTest, getTestTemplates, saveTestTemplate, deleteTestTemplate } from '@/api/expert'
+import { createMyTest, getMyTestDetail, updateMyTest, getTestTemplates, getTestTemplatePresets, saveTestTemplate, deleteTestTemplate } from '@/api/expert'
 import { alert, confirm, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
@@ -285,10 +297,21 @@ const removeOption = (qIndex: number, oIndex: number) => {
 }
 
 // ===== 问卷模板（仅专家）：套用样板 / 存为模板 / 删除模板 =====
+// 模板来源两类：预设量表模板（服务端真实标准化量表，开箱即用）+ 专家自己的私人模板
 const templates = ref<any[]>([])
-const selectedTplId = ref<number | ''>('')
+const presetTemplates = ref<any[]>([])
+const selectedTplId = ref<number | string>('')
+const allTemplates = computed(() => [...presetTemplates.value, ...templates.value])
+const isPresetSelected = computed(() => typeof selectedTplId.value === 'string' && String(selectedTplId.value).startsWith('preset:'))
 
 const loadTemplates = async () => {
+  // 预设量表模板（失败不阻断私人模板加载）
+  try {
+    const res: any = await getTestTemplatePresets()
+    presetTemplates.value = res.data || []
+  } catch {
+    presetTemplates.value = []
+  }
   try {
     const res: any = await getTestTemplates()
     templates.value = res.data || []
@@ -299,7 +322,7 @@ const loadTemplates = async () => {
 
 // 套用模板：整表回填（名称/描述/分级/题目全部以模板为准，专家可在此基础上微调）
 const applyTemplate = async () => {
-  const tpl = templates.value.find((x) => x.id === selectedTplId.value)
+  const tpl = allTemplates.value.find((x) => x.id === selectedTplId.value)
   if (!tpl) return
   form.value = {
     code: '',
@@ -354,6 +377,7 @@ const saveAsTemplate = async () => {
 }
 
 const removeTemplate = async () => {
+  if (isPresetSelected.value) return
   const tpl = templates.value.find((x) => x.id === selectedTplId.value)
   if (!tpl) return
   const ok = await confirm(t('expert.myTests.tplConfirmDelete', { name: tpl.name }), t('expert.myTests.tplDeleteTitle'))

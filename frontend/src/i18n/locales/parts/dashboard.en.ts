@@ -121,6 +121,7 @@ export default {
       generateFirst: 'Please generate a report first',
       dateRequired: 'Please select both start and end dates',
       dateError: 'Invalid dates',
+      dateRangeInvalid: 'Start date cannot be after the end date, and the end date cannot be in the future',
       generateFailed: 'Report generation failed. Please try again later',
       htmlTitle: 'Mental State Analysis Report',
       docTitle: 'Comprehensive Mental State Analysis Report',

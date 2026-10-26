@@ -121,6 +121,7 @@ export default {
       generateFirst: '请先生成报告',
       dateRequired: '请选择完整的起止日期！',
       dateError: '日期错误',
+      dateRangeInvalid: '开始日期不能晚于截止日期，且截止日期不能超过今天',
       generateFailed: '报告生成失败，请稍后重试',
       htmlTitle: '心理状态分析报告',
       docTitle: '心理状态综合分析报告',
