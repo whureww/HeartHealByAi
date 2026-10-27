@@ -197,7 +197,7 @@ export default {
       aiMemory: 'AI 记忆',
       aiMemoryDisabled: '服务端未配置向量检索服务（EMBED_API_KEY），记忆功能未启用',
       aiMemoryToggle: 'AI 记忆',
-      aiMemoryToggleDesc: 'AI 自动记住你的重要信息（可随时在下方查看与删除）',
+      aiMemoryToggleDesc: 'AI 自动记住你的重要信息，可随时关闭或清空',
       crossMemoryToggle: '跨对话记忆',
       crossMemoryToggleDesc: '新对话中 AI 可回忆起你过往对话的相关内容',
       memoryPausedHint: 'AI 记忆已关闭：暂停记录新记忆，已有记忆保留且不再注入对话',

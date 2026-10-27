@@ -615,30 +615,8 @@
                   </div>
                 </div>
               </div>
-              <div class="setting-item" v-if="memoryLoading">
-                <div class="setting-item-left">
-                  <span class="setting-desc">{{ $t('dashboard.common.loading') }}</span>
-                </div>
-              </div>
-              <div class="setting-item" v-else-if="!memoryStatus?.ai_memory">
-                <div class="setting-item-left">
-                  <span class="setting-desc">{{ $t('dashboard.settings.memoryPausedHint') }}</span>
-                </div>
-              </div>
-              <div class="setting-item" v-else-if="memoryList.length === 0">
-                <div class="setting-item-left">
-                  <span class="setting-desc">{{ $t('dashboard.settings.memoryEmpty') }}</span>
-                </div>
-              </div>
-              <div v-else class="memory-list">
-                <div class="memory-item" v-for="m in memoryList" :key="m.id">
-                  <div class="memory-content">{{ m.content }}</div>
-                  <button class="memory-delete" :disabled="memoryDeleting" @click="onDeleteMemory(m.id)" :title="$t('dashboard.settings.memoryDelete')">
-                    <AppIcon name="trash" :size="14" />
-                  </button>
-                </div>
-              </div>
-              <div class="setting-item" v-if="memoryStatus?.ai_memory && memoryList.length > 0" @click="onClearMemories">
+              <!-- 清除记忆 -->
+              <div class="setting-item" @click="onClearMemories">
                 <div class="setting-item-left">
                   <span>{{ $t('dashboard.settings.memoryClear') }}</span>
                   <span class="setting-desc">{{ $t('dashboard.settings.memoryClearDesc') }}</span>
@@ -814,7 +792,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, createChatSession, lockChatSession, refreshSessionSummary, deleteChatSession, getChatModels, getUserAppointments, getAnalysisReports } from '@/api/user'
 import { useLoadingStore } from '@/stores/loading'
 import { chatWithAIStream, generateReport } from '@/api/ai'
-import { getMemoryStatus, listMemories, deleteMemory, clearMemories, updateMemorySettings, type MemoryItem } from '@/api/memory'
+import { getMemoryStatus, clearMemories, updateMemorySettings } from '@/api/memory'
 import { getTestHistory } from '@/api/tests'
 import { alert, success, confirm, error } from '@/utils/dialog'
 import TestList from './TestList.vue'
@@ -2181,27 +2159,17 @@ const clearData = async () => {
   }
 }
 
-// ===== AI 记忆管理（个人中心）：开关 / 查看 / 删除 / 清空 AI 自动抽取的长期记忆 =====
+// ===== AI 记忆管理（个人中心）：开关 / 清空 AI 自动抽取的长期记忆 =====
 const memoryStatus = ref<{ enabled: boolean; ai_memory?: boolean; cross_memory?: boolean } | null>(null)
-const memoryList = ref<MemoryItem[]>([])
-const memoryLoading = ref(false)
-const memoryDeleting = ref(false)
 const memorySettingsSaving = ref(false)
 
 const loadMemoryData = async () => {
-  memoryLoading.value = true
   try {
     const status = await getMemoryStatus() as any
     memoryStatus.value = status?.data || { enabled: false, ai_memory: true, cross_memory: true }
-    if (memoryStatus.value.enabled) {
-      const res = await listMemories() as any
-      memoryList.value = res?.data || []
-    }
   } catch (e) {
-    console.error('加载 AI 记忆失败:', e)
+    console.error('加载 AI 记忆设置失败:', e)
     memoryStatus.value = { enabled: false, ai_memory: true, cross_memory: true }
-  } finally {
-    memoryLoading.value = false
   }
 }
 
@@ -2228,33 +2196,14 @@ const saveMemorySettings = async (patch: { ai_memory?: boolean; cross_memory?: b
 const toggleAiMemory = () => saveMemorySettings({ ai_memory: !memoryStatus.value?.ai_memory })
 const toggleCrossMemory = () => saveMemorySettings({ cross_memory: !memoryStatus.value?.cross_memory })
 
-const onDeleteMemory = async (id: number) => {
-  const ok = await confirm(t('dashboard.settings.memoryDeleteConfirm'), t('dashboard.settings.memoryDeleteConfirmTitle'))
-  if (!ok) return
-  memoryDeleting.value = true
-  try {
-    await deleteMemory(id)
-    memoryList.value = memoryList.value.filter(m => m.id !== id)
-    await success(t('dashboard.settings.memoryDeleted'), t('dashboard.settings.aiMemory'))
-  } catch (e: any) {
-    await error(e?.message || t('dashboard.settings.memoryDeleteFailed'), t('dashboard.settings.aiMemory'))
-  } finally {
-    memoryDeleting.value = false
-  }
-}
-
 const onClearMemories = async () => {
   const ok = await confirm(t('dashboard.settings.memoryClearConfirm'), t('dashboard.settings.memoryClearConfirmTitle'))
   if (!ok) return
-  memoryDeleting.value = true
   try {
     await clearMemories()
-    memoryList.value = []
     await success(t('dashboard.settings.memoryCleared'), t('dashboard.settings.aiMemory'))
   } catch (e: any) {
     await error(e?.message || t('dashboard.settings.memoryDeleteFailed'), t('dashboard.settings.aiMemory'))
-  } finally {
-    memoryDeleting.value = false
   }
 }
 

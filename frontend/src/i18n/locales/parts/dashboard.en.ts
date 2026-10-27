@@ -197,7 +197,7 @@ export default {
       aiMemory: 'AI Memory',
       aiMemoryDisabled: 'Vector service not configured on the server (EMBED_API_KEY); memory is disabled',
       aiMemoryToggle: 'AI Memory',
-      aiMemoryToggleDesc: 'The AI remembers key things about you (view or delete below anytime)',
+      aiMemoryToggleDesc: 'The AI remembers key things about you; turn off or clear anytime',
       crossMemoryToggle: 'Cross-conversation Memory',
       crossMemoryToggleDesc: 'The AI can recall relevant content from your past conversations',
       memoryPausedHint: 'AI Memory is off: new memories are paused. Existing ones are kept but not injected into chats',
