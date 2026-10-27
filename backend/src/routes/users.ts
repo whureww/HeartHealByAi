@@ -1114,8 +1114,8 @@ router.post('/chat', authenticate, asyncHandler(async (req: Request, res: Respon
         [userId, content, type, sessionId]
     );
 
-    // RAG：消息异步向量化供历史检索（fire-and-forget，不阻塞落库响应）
-    void embedChatMessage((result as any).insertId, String(content || ''));
+    // RAG：消息异步向量化供历史检索（fire-and-forget，不阻塞落库响应；跨对话记忆关闭时内部跳过）
+    void embedChatMessage(userId, (result as any).insertId, String(content || ''));
 
     // 消息入库的同时确保会话行存在并刷新活跃时间（兜底：未经 POST /chat-sessions 创建的会话）
     await pool.execute(

@@ -583,15 +583,46 @@
           <div class="settings-group">
             <div class="settings-group-head"><AppIcon name="spark" :size="15" /><h3>{{ $t('dashboard.settings.aiMemory') }}</h3></div>
             <div class="settings-group-body">
-            <div class="setting-item" v-if="memoryStatus && !memoryStatus.enabled">
-              <div class="setting-item-left">
-                <span>{{ $t('dashboard.settings.aiMemoryDisabled') }}</span>
+            <template v-if="memoryStatus && !memoryStatus.enabled">
+              <div class="setting-item">
+                <div class="setting-item-left">
+                  <span>{{ $t('dashboard.settings.aiMemoryDisabled') }}</span>
+                </div>
               </div>
-            </div>
+            </template>
             <template v-else>
+              <!-- 开关一：AI 记忆（自动抽取长期记忆 + 记忆库注入） -->
+              <div class="setting-item" @click="toggleAiMemory">
+                <div class="setting-item-left">
+                  <span>{{ $t('dashboard.settings.aiMemoryToggle') }}</span>
+                  <span class="setting-desc">{{ $t('dashboard.settings.aiMemoryToggleDesc') }}</span>
+                </div>
+                <div class="setting-item-right">
+                  <div class="toggle-switch" :class="{ active: memoryStatus?.ai_memory, disabled: memorySettingsSaving }">
+                    <div class="toggle-knob"></div>
+                  </div>
+                </div>
+              </div>
+              <!-- 开关二：跨对话记忆（历史对话跨会话检索注入） -->
+              <div class="setting-item" @click="toggleCrossMemory">
+                <div class="setting-item-left">
+                  <span>{{ $t('dashboard.settings.crossMemoryToggle') }}</span>
+                  <span class="setting-desc">{{ $t('dashboard.settings.crossMemoryToggleDesc') }}</span>
+                </div>
+                <div class="setting-item-right">
+                  <div class="toggle-switch" :class="{ active: memoryStatus?.cross_memory, disabled: memorySettingsSaving }">
+                    <div class="toggle-knob"></div>
+                  </div>
+                </div>
+              </div>
               <div class="setting-item" v-if="memoryLoading">
                 <div class="setting-item-left">
                   <span class="setting-desc">{{ $t('dashboard.common.loading') }}</span>
+                </div>
+              </div>
+              <div class="setting-item" v-else-if="!memoryStatus?.ai_memory">
+                <div class="setting-item-left">
+                  <span class="setting-desc">{{ $t('dashboard.settings.memoryPausedHint') }}</span>
                 </div>
               </div>
               <div class="setting-item" v-else-if="memoryList.length === 0">
@@ -607,7 +638,7 @@
                   </button>
                 </div>
               </div>
-              <div class="setting-item" v-if="memoryList.length > 0" @click="onClearMemories">
+              <div class="setting-item" v-if="memoryStatus?.ai_memory && memoryList.length > 0" @click="onClearMemories">
                 <div class="setting-item-left">
                   <span>{{ $t('dashboard.settings.memoryClear') }}</span>
                   <span class="setting-desc">{{ $t('dashboard.settings.memoryClearDesc') }}</span>
@@ -783,7 +814,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { saveChat, saveAnalysisReport, clearAllData, createAppointment, getChatHistory, getChatSessions, createChatSession, lockChatSession, refreshSessionSummary, deleteChatSession, getChatModels, getUserAppointments, getAnalysisReports } from '@/api/user'
 import { useLoadingStore } from '@/stores/loading'
 import { chatWithAIStream, generateReport } from '@/api/ai'
-import { getMemoryStatus, listMemories, deleteMemory, clearMemories, type MemoryItem } from '@/api/memory'
+import { getMemoryStatus, listMemories, deleteMemory, clearMemories, updateMemorySettings, type MemoryItem } from '@/api/memory'
 import { getTestHistory } from '@/api/tests'
 import { alert, success, confirm, error } from '@/utils/dialog'
 import TestList from './TestList.vue'
@@ -2150,28 +2181,52 @@ const clearData = async () => {
   }
 }
 
-// ===== AI 记忆管理（个人中心）：查看 / 删除 / 清空 AI 自动抽取的长期记忆 =====
-const memoryStatus = ref<{ enabled: boolean } | null>(null)
+// ===== AI 记忆管理（个人中心）：开关 / 查看 / 删除 / 清空 AI 自动抽取的长期记忆 =====
+const memoryStatus = ref<{ enabled: boolean; ai_memory?: boolean; cross_memory?: boolean } | null>(null)
 const memoryList = ref<MemoryItem[]>([])
 const memoryLoading = ref(false)
 const memoryDeleting = ref(false)
+const memorySettingsSaving = ref(false)
 
 const loadMemoryData = async () => {
   memoryLoading.value = true
   try {
     const status = await getMemoryStatus() as any
-    memoryStatus.value = status?.data || { enabled: false }
+    memoryStatus.value = status?.data || { enabled: false, ai_memory: true, cross_memory: true }
     if (memoryStatus.value.enabled) {
       const res = await listMemories() as any
       memoryList.value = res?.data || []
     }
   } catch (e) {
     console.error('加载 AI 记忆失败:', e)
-    memoryStatus.value = { enabled: false }
+    memoryStatus.value = { enabled: false, ai_memory: true, cross_memory: true }
   } finally {
     memoryLoading.value = false
   }
 }
+
+// ===== 记忆开关（AI 记忆 / 跨对话记忆）：乐观更新 + 失败回滚 =====
+const saveMemorySettings = async (patch: { ai_memory?: boolean; cross_memory?: boolean }) => {
+  if (!memoryStatus.value || memorySettingsSaving.value) return
+  const prev = { ai_memory: memoryStatus.value.ai_memory, cross_memory: memoryStatus.value.cross_memory }
+  // 乐观更新
+  memoryStatus.value = { ...memoryStatus.value, ...patch }
+  memorySettingsSaving.value = true
+  try {
+    await updateMemorySettings(
+      memoryStatus.value.ai_memory,
+      memoryStatus.value.cross_memory
+    )
+  } catch (e: any) {
+    // 回滚
+    memoryStatus.value = { ...memoryStatus.value, ...prev }
+    await error(e?.message || t('dashboard.settings.memorySettingsFailed'), t('dashboard.settings.aiMemory'))
+  } finally {
+    memorySettingsSaving.value = false
+  }
+}
+const toggleAiMemory = () => saveMemorySettings({ ai_memory: !memoryStatus.value?.ai_memory })
+const toggleCrossMemory = () => saveMemorySettings({ cross_memory: !memoryStatus.value?.cross_memory })
 
 const onDeleteMemory = async (id: number) => {
   const ok = await confirm(t('dashboard.settings.memoryDeleteConfirm'), t('dashboard.settings.memoryDeleteConfirmTitle'))

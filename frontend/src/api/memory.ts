@@ -10,11 +10,18 @@ export interface MemoryItem {
 
 export interface MemoryStatus {
   enabled: boolean
+  ai_memory: boolean
+  cross_memory: boolean
 }
 
-// AI 记忆功能是否启用（服务端已配置向量服务）
+// AI 记忆功能是否启用（服务端已配置向量服务）+ 用户记忆开关状态
 export const getMemoryStatus = (): Promise<{ success: boolean; data: MemoryStatus }> => {
   return request.get('/memory/status') as Promise<{ success: boolean; data: MemoryStatus }>
+}
+
+// 保存记忆开关（AI 记忆 / 跨对话记忆）
+export const updateMemorySettings = (aiMemory: boolean, crossMemory: boolean): Promise<{ success: boolean; data: { ai_memory: boolean; cross_memory: boolean } }> => {
+  return request.put('/memory/settings', { ai_memory: aiMemory, cross_memory: crossMemory }) as Promise<{ success: boolean; data: { ai_memory: boolean; cross_memory: boolean } }>
 }
 
 // 记忆列表
