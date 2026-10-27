@@ -52,7 +52,9 @@ export function ensureRagSchema(): Promise<void> {
 // ========== 记忆抽取 ==========
 
 // 抽取提示词：只抽持久事实，忽略一次性闲聊；输出 JSON
-const EXTRACT_SYSTEM = '你是记忆管理助手。从心理咨询对话中提取关于「用户」的持久性事实，用于长期记忆。只提取满足以下条件的项：1.用户稳定的个人情况（身份、家庭、工作、重大生活事件）2.用户的情绪模式或长期困扰 3.用户明确的偏好、诉求或目标 4.用户提到的重要他人关系。不要提取：一次性闲聊、AI 的回复内容、临时情绪波动、敏感的健康隐私细节（如具体病症名）。每条用第三人称简短陈述（如「用户近期面临考研压力」「用户喜欢在晚上散步放松」），每条不超过60字，最多3条，没有可提取内容时返回空数组。';
+// 注意：结尾必须包含 JSON 输出说明——厂商 json_object 模式要求提示词含 "json" 字样，
+// 否则 400（此前「暂无记忆」的根因：抽取调用每次都被 DeepSeek 拒绝）
+const EXTRACT_SYSTEM = '你是记忆管理助手。从心理咨询对话中提取关于「用户」的持久性事实，用于长期记忆。只提取满足以下条件的项：1.用户稳定的个人情况（身份、家庭、工作、重大生活事件）2.用户的情绪模式或长期困扰 3.用户明确的偏好、诉求或目标 4.用户提到的重要他人关系。不要提取：一次性闲聊、AI 的回复内容、临时情绪波动、敏感的健康隐私细节（如具体病症名）。每条用第三人称简短陈述（如「用户近期面临考研压力」「用户喜欢在晚上散步放松」），每条不超过60字，最多3条，没有可提取内容时返回空数组。\n严格只输出如下 JSON，不要任何其他文字：\n{"memories":["用户近期面临考研压力","用户喜欢在晚上散步放松"]}，没有可提取内容时输出 {"memories":[]}。';
 
 /** 抽取结果的最短长度：过短的碎片没有记忆价值 */
 const MIN_MEMORY_LEN = 6;
@@ -84,7 +86,7 @@ export async function extractAndStoreMemories(
             const result = await callAIJson(
                 EXTRACT_SYSTEM,
                 `用户消息：${uMsg.slice(0, 1500)}\nAI回复：${aMsg.slice(0, 1500)}`,
-                { temperature: 0.2, maxTokens: 500, timeout: 30000, retries: 2, label: 'memory-extract' }
+                { temperature: 0.2, maxTokens: 1000, timeout: 30000, retries: 2, label: 'memory-extract' }
             );
             const items = Array.isArray(result?.memories) ? result.memories : [];
             const facts = items
