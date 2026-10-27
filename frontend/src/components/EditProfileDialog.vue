@@ -13,8 +13,8 @@
         <div class="avatar-section">
           <div class="avatar-wrapper" @click="changeAvatar">
             <img
-              v-if="userStore.avatarBase64"
-              :src="userStore.avatarBase64"
+              v-if="userStore.avatarUrl"
+              :src="userStore.avatarUrl"
               class="avatar-img"
               :alt="$t('ui.profile.avatarAlt')"
             />

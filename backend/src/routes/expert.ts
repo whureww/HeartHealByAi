@@ -9,6 +9,7 @@ import { ensureTestCreatedByColumn } from '../utils/testCols';
 import { ensureChatCols } from '../utils/chatCols';
 import { ensureTemplateSchema } from '../utils/testTemplate';
 import { ensureScaleTemplates } from '../utils/aiScaleSeed';
+import { getAvatarUrl } from '../utils/minio';
 
 const router = Router();
 
@@ -501,12 +502,12 @@ router.get('/appointments/:id', authenticate, asyncHandler(async (req: any, res:
     const userId = req.user.id;
     const userRole = req.user.role;
     
-    let sql = `SELECT ar.*, u.username as user_name, u.email as user_email, u.phone as user_phone, u.avatar as user_avatar
+    let sql = `SELECT ar.*, u.username as user_name, u.email as user_email, u.phone as user_phone
                FROM appointment_records ar
                JOIN users u ON ar.user_id = u.id
                WHERE ar.id = ?`;
     let params: any[] = [appointmentId];
-    
+
     if (userRole === 1) {
         sql += ' AND ar.user_id = ?';
         params.push(userId);
@@ -522,28 +523,29 @@ router.get('/appointments/:id', authenticate, asyncHandler(async (req: any, res:
         sql += ' AND ar.doctor_id = ?';
         params.push(doctorId);
     }
-    
+
     const [aptRows] = await pool.execute(sql, params);
-    
+
     const appointment = (aptRows as any[])[0];
     if (!appointment) {
         throw new BusinessError('预约不存在', 404);
     }
+    appointment.user_avatar = appointment.user_id ? await getAvatarUrl(appointment.user_id) : null;
 
     let doctorUserId = null;
     if (appointment.doctor_id) {
         // 附带专家名片公开信息（姓名/职称/专长/简介/头像）：
         // 用户端聊天页展示「专家信息」卡使用，不包含邮箱/手机等隐私字段
         const [docRows] = await pool.execute(
-            `SELECT d.user_id, u.avatar AS doctor_avatar, d.name AS doctor_name, d.title AS doctor_title,
+            `SELECT d.user_id, d.name AS doctor_name, d.title AS doctor_title,
                     d.specialty AS doctor_specialty, d.intro AS doctor_intro,
                     d.name_en, d.title_en, d.specialty_en, d.intro_en
-             FROM doctors d LEFT JOIN users u ON d.user_id = u.id WHERE d.id = ?`,
+             FROM doctors d WHERE d.id = ?`,
             [appointment.doctor_id]
         );
         const doc = (docRows as any[])[0];
         doctorUserId = doc?.user_id || null;
-        appointment.doctor_avatar = doc?.doctor_avatar || null;
+        appointment.doctor_avatar = doc?.user_id ? await getAvatarUrl(doc.user_id) : null;
         appointment.doctor_name = doc?.doctor_name || null;
         appointment.doctor_title = doc?.doctor_title || null;
         appointment.doctor_specialty = doc?.doctor_specialty || null;

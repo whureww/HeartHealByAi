@@ -18,6 +18,7 @@ import memoryRouter from './routes/memory';
 import moderationRouter from './routes/moderation';
 import { registerRestrictBroadcaster, getActiveRestriction, Restriction } from './utils/restrict';
 import { ensureChatCols } from './utils/chatCols';
+import { getAvatarUrl } from './utils/minio';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth';
 
@@ -325,11 +326,11 @@ io.on('connection', (socket) => {
             );
 
             const [senderRows] = await pool.execute(
-                'SELECT username, avatar FROM users WHERE id = ?',
+                'SELECT username FROM users WHERE id = ?',
                 [senderId]
             );
             const senderName = (senderRows as any[])[0]?.username || '未知用户';
-            const senderAvatar = (senderRows as any[])[0]?.avatar || null;
+            const senderAvatar = await getAvatarUrl(senderId) || null;
 
             const messageData = {
                 // 使用数据库真实自增 id，保证 Socket 推送与 HTTP 历史记录 id 一致（举报等依赖消息 id 的功能依赖此一致性）

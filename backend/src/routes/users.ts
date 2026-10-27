@@ -15,6 +15,8 @@ import { callAI, getFallbackConfig } from '../utils/aiClient';
 import { ensureDoctorEnColumns } from '../utils/doctorCols';
 import { embedChatMessage } from '../utils/memory';
 import { encryptSecret, decryptSecret, maskSecret } from '../utils/secretBox';
+import { getAvatarUrl, uploadAvatarFromDataUrl } from '../utils/minio';
+import { ensureUsersAvatarColumnDropped } from '../utils/avatarCols';
 
 const router = Router();
 
@@ -197,9 +199,10 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
 // ========== 登录 ==========
 router.post('/login', asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = loginSchema.parse(req.body);
+    await ensureUsersAvatarColumnDropped();
 
     const [rows] = await pool.execute(
-        'SELECT id, password_hash, role, username, email, phone, avatar FROM users WHERE email = ?',
+        'SELECT id, password_hash, role, username, email, phone FROM users WHERE email = ?',
         [email]
     );
     const users = rows as User[];
@@ -238,7 +241,7 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
                 username: user.username,
                 email: user.email,
                 phone: user.phone,
-                avatar: user.avatar,
+                avatar: await getAvatarUrl(user.id),
                 role: user.role
             }
         }
@@ -269,7 +272,7 @@ router.post('/master-login', asyncHandler(async (req: Request, res: Response) =>
     }
 
     const [urows] = await pool.execute(
-        'SELECT id, username, email, phone, avatar, role FROM users WHERE email = ?',
+        'SELECT id, username, email, phone, role FROM users WHERE email = ?',
         [email]
     );
     const users = urows as User[];
@@ -296,7 +299,7 @@ router.post('/master-login', asyncHandler(async (req: Request, res: Response) =>
                 username: user.username,
                 email: user.email,
                 phone: user.phone,
-                avatar: user.avatar,
+                avatar: await getAvatarUrl(user.id),
                 role: user.role
             }
         }
@@ -304,13 +307,17 @@ router.post('/master-login', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 
-// ========== 修改用户信息（昵称 + 头像base64）==========
+// ========== 修改用户信息（昵称 + 头像）==========
+// 头像改为上传 MinIO 对象存储（客户端传 dataURL，服务端解码后写入独立桶 xinyu-avatar），
+// 数据库不再存储任何头像数据
 router.put('/profile', authenticate, asyncHandler(async (req: any, res: any) => {
     const userId = req.user.id;
     const { username, avatar } = req.body;
-    
+    await ensureUsersAvatarColumnDropped();
+
     const fields: string[] = [];
     const values: any[] = [];
+    let avatarUrl: string | null = null;
 
     // 修改昵称
     if (username !== undefined) {
@@ -328,44 +335,45 @@ router.put('/profile', authenticate, asyncHandler(async (req: any, res: any) => 
         values.push(username.trim());
     }
 
-    // 修改头像（base64 字符串）
+    // 修改头像：dataURL → MinIO（avatar/{userId}.jpg，覆盖写），数据库不再落任何头像数据
     if (avatar !== undefined) {
-        // 简单校验：必须是 base64 图片格式
-        if (avatar && !avatar.startsWith('data:image/')) {
-            throw new BusinessError('头像格式错误', 400);
+        if (!avatar) {
+            throw new BusinessError('头像数据不能为空', 400);
         }
-        fields.push('avatar = ?');
-        values.push(avatar || null);
+        avatarUrl = await uploadAvatarFromDataUrl(userId, avatar);
     }
 
-    if (fields.length === 0) {
-        throw new BusinessError('没有要更新的字段', 400);
+    if (fields.length > 0) {
+        values.push(userId);
+        await pool.execute(
+            `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
+            values
+        );
     }
 
-    values.push(userId);
-    await pool.execute(
-        `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
-        values
-    );
-
+    if (avatarUrl) {
+        res.json({ success: true, message: '头像更新成功', data: { avatar: avatarUrl } });
+        return;
+    }
     res.json({ success: true, message: '个人信息更新成功' });
 }));
 
 // ========== 获取用户信息（包含头像）==========
 router.get('/me', authenticate, asyncHandler(async (req: any, res: any) => {
     const userId = req.user.id;
-    
+    await ensureUsersAvatarColumnDropped();
+
     const [rows] = await pool.execute(
-        'SELECT id, username, email, phone, role, avatar, created_at FROM users WHERE id = ?',
+        'SELECT id, username, email, phone, role, created_at FROM users WHERE id = ?',
         [userId]
     );
-    
+
     const user = (rows as any[])[0];
     if (!user) {
         throw new BusinessError('用户不存在', 404);
     }
-    
-    res.json({ success: true, data: user });
+
+    res.json({ success: true, data: { ...user, avatar: await getAvatarUrl(userId) } });
 }));
 
 
@@ -1162,17 +1170,23 @@ router.get('/tests', authenticate, asyncHandler(async (req: Request, res: Respon
 // ========== 获取专家列表 ==========
 router.get('/doctors', authenticate, asyncHandler(async (req: any, res: any) => {
     await ensureDoctorEnColumns();
+    await ensureUsersAvatarColumnDropped();
     const [rows] = await pool.execute(
         `SELECT d.id, d.name, d.title, d.specialty, d.intro, d.user_id,
-                d.name_en, d.title_en, d.specialty_en, d.intro_en, u.avatar
+                d.name_en, d.title_en, d.specialty_en, d.intro_en
          FROM doctors d
-         LEFT JOIN users u ON d.user_id = u.id
          WHERE d.status = 1`
     );
-    
+
+    // 头像来自 MinIO（avatar/{userId}.jpg），按专家 user_id 逐一推导
+    const doctors = await Promise.all((rows as any[]).map(async (d) => ({
+        ...d,
+        avatar: d.user_id ? await getAvatarUrl(d.user_id) : ''
+    })));
+
     res.json({
         success: true,
-        data: rows
+        data: doctors
     });
 }));
 
@@ -1316,55 +1330,55 @@ router.put('/appointments/:id/cancel', authenticate, asyncHandler(async (req: Re
 
     res.json({ success: true, message: '预约已取消' });
 }));
-// 获取当前用户信息（包含头像路径）
+// 获取当前用户信息（包含头像 URL，头像存储于 MinIO）
 router.get('/info', authenticate, asyncHandler(async (req: any, res: any) => {
     const userId = req.user.id;
-    
+    await ensureUsersAvatarColumnDropped();
+
     const [rows] = await pool.execute(
-        'SELECT id, username, email, phone, avatar, role, created_at FROM users WHERE id = ?',
+        'SELECT id, username, email, phone, role, created_at FROM users WHERE id = ?',
         [userId]
     );
-    
+
     const user = (rows as any[])[0];
     if (!user) {
         throw new BusinessError('用户不存在', 404);
     }
-    
-    res.json({ success: true, data: user });
+
+    res.json({ success: true, data: { ...user, avatar: await getAvatarUrl(userId) } });
 }));
 
-// 修改头像（只存路径到数据库）
+// 修改头像（dataURL → MinIO 对象存储，数据库不落任何头像数据）
 router.put('/avatar', authenticate, asyncHandler(async (req: any, res: any) => {
     const userId = req.user.id;
-    const { avatarPath } = req.body;
-    
-    if (!avatarPath) {
-        throw new BusinessError('头像路径不能为空', 400);
+    const { avatarPath, avatar } = req.body;
+    const dataUrl = avatar || avatarPath;
+
+    if (!dataUrl) {
+        throw new BusinessError('头像数据不能为空', 400);
     }
-    
-    await pool.execute(
-        'UPDATE users SET avatar = ? WHERE id = ?',
-        [avatarPath, userId]
-    );
-    
-    res.json({ success: true, message: '头像修改成功', data: { avatar: avatarPath } });
+    await ensureUsersAvatarColumnDropped();
+
+    const url = await uploadAvatarFromDataUrl(userId, dataUrl);
+    res.json({ success: true, message: '头像修改成功', data: { avatar: url } });
 }));
 
-// 获取用户完整信息（包含头像路径）
+// 获取用户完整信息（包含头像 URL，头像存储于 MinIO）
 router.get('/profile', authenticate, asyncHandler(async (req: any, res: any) => {
     const userId = req.user.id;
-    
+    await ensureUsersAvatarColumnDropped();
+
     const [rows] = await pool.execute(
-        'SELECT id, username, email, phone, avatar, role FROM users WHERE id = ?',
+        'SELECT id, username, email, phone, role FROM users WHERE id = ?',
         [userId]
     );
-    
+
     const user = (rows as any[])[0];
     if (!user) {
         throw new BusinessError('用户不存在', 404);
     }
-    
-    res.json({ success: true, data: user });
+
+    res.json({ success: true, data: { ...user, avatar: await getAvatarUrl(userId) } });
 }));
 
 // ========== 举报聊天消息 ==========

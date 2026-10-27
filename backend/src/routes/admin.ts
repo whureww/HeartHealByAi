@@ -7,6 +7,7 @@ import { BusinessError } from '../middleware/error';
 import { invalidateWords } from '../utils/moderation';
 import { notifyUserRestricted, notifyRestrictionLifted, disconnectUser, Restriction, getActiveRestriction } from '../utils/restrict';
 import { ensureAuditSchema } from '../utils/auditLog';
+import { getAvatarUrl } from '../utils/minio';
 
 const router = Router();
 
@@ -41,15 +42,21 @@ router.get('/users', authenticate, requireAdmin, asyncHandler(async (req: Reques
     const total = (countRows as any[])[0].total;
 
     // 查询列表 - LIMIT 与 OFFSET 转换为数字传入
-    const sql = `SELECT id, username, email, phone, role, avatar, status, restricted_until, created_at FROM users${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    const sql = `SELECT id, username, email, phone, role, status, restricted_until, created_at FROM users${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
     const queryParams = [...params, Number(pageSize), Number(offset)];
-    
+
     const [rows] = await pool.query(sql, queryParams);
+
+    // 头像来自 MinIO（avatar/{userId}.jpg），按用户 ID 逐一推导（带存在性缓存）
+    const list = await Promise.all((rows as any[]).map(async (u) => ({
+        ...u,
+        avatar: await getAvatarUrl(u.id)
+    })));
 
     res.json({
         success: true,
         data: {
-            list: rows,
+            list,
             total,
             page,
             pageSize
@@ -539,16 +546,21 @@ router.get('/chats', authenticate, requireAdmin, asyncHandler(async (req: Reques
 
     // 消息数用相关子查询实时统计（chat_sessions 无冗余计数列）
     const sql = `SELECT s.id, s.user_id, s.session_id, s.title, s.locked, s.created_at, s.last_time,
-                u.username, u.email, u.avatar, u.role,
+                u.username, u.email, u.role,
                 (SELECT COUNT(*) FROM chat_records c
                   WHERE c.user_id = s.user_id AND c.session_id = s.session_id) AS message_count
                 FROM chat_sessions s JOIN users u ON u.id = s.user_id${whereClause}
                 ORDER BY s.last_time DESC LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`;
     const [rows] = await pool.query(sql, params);
 
+    const list = await Promise.all((rows as any[]).map(async (s) => ({
+        ...s,
+        avatar: await getAvatarUrl(s.user_id)
+    })));
+
     res.json({
         success: true,
-        data: { list: rows, total, page, pageSize }
+        data: { list, total, page, pageSize }
     });
 }));
 
@@ -561,7 +573,7 @@ router.get('/chats/:userId/:sessionId', authenticate, requireAdmin, asyncHandler
     }
 
     const [sessRows] = await pool.execute(
-        `SELECT s.session_id, s.title, s.created_at, s.last_time, u.id AS user_id, u.username, u.email, u.avatar,
+        `SELECT s.session_id, s.title, s.created_at, s.last_time, u.id AS user_id, u.username, u.email,
                 u.status, u.restricted_until
          FROM chat_sessions s JOIN users u ON u.id = s.user_id
          WHERE s.user_id = ? AND s.session_id = ?`,
@@ -571,6 +583,7 @@ router.get('/chats/:userId/:sessionId', authenticate, requireAdmin, asyncHandler
     if (!session) {
         throw new BusinessError('会话不存在', 404);
     }
+    session.avatar = await getAvatarUrl(userId);
 
     const [msgRows] = await pool.execute(
         'SELECT id, type, content, created_at FROM chat_records WHERE user_id = ? AND session_id = ? ORDER BY created_at ASC, id ASC',

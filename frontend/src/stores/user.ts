@@ -54,7 +54,7 @@ export const useUserStore = defineStore('user', {
     doctors: [] as any[],
     currentTestView: 'list' as 'list' | 'history' | 'do' | 'detail',
     currentResultId: null as number | null,
-    avatarBase64: '' as string  // 新增：头像 base64 数据
+    avatarUrl: '' as string  // 头像访问 URL（MinIO 对象存储，dataURL 仅在上传瞬间使用）
   }),
 
   getters: {
@@ -108,7 +108,7 @@ export const useUserStore = defineStore('user', {
         this.userInfo = res.data
         // 如果用户有头像，加载它
         if (this.userInfo?.avatar) {
-          this.avatarBase64 = this.userInfo.avatar
+          this.avatarUrl = this.userInfo.avatar
         }
       }
       return res
@@ -165,12 +165,13 @@ export const useUserStore = defineStore('user', {
       return res
     },
 
-    // 修改头像（传入 base64 字符串）
-    async updateAvatar(avatarBase64: string) {
-      const res = await updateAvatar(avatarBase64) as any
+    // 修改头像（传入 dataURL，后端转存 MinIO 并返回访问 URL）
+    async updateAvatar(avatarDataUrl: string) {
+      const res = await updateAvatar(avatarDataUrl) as any
       if (res.success && this.userInfo) {
-        this.userInfo.avatar = avatarBase64
-        this.avatarBase64 = avatarBase64
+        const url = res.data?.avatar || avatarDataUrl
+        this.userInfo.avatar = url
+        this.avatarUrl = url
       }
       return res
     },
@@ -210,10 +211,10 @@ export const useUserStore = defineStore('user', {
       })
     },
 
-    // 加载头像（从 userInfo.avatar 同步到 avatarBase64）
+    // 加载头像（从 userInfo.avatar 同步到 avatarUrl）
     async loadAvatar() {
       if (this.userInfo?.avatar) {
-        this.avatarBase64 = this.userInfo.avatar
+        this.avatarUrl = this.userInfo.avatar
       }
     },
 
@@ -241,7 +242,7 @@ export const useUserStore = defineStore('user', {
       this.doctors = []
       this.currentTestView = 'list'
       this.currentResultId = null
-      this.avatarBase64 = ''
+      this.avatarUrl = ''
       clearAuthToken()
       // 锁屏仍挂起时保留 accountEmail：守卫在锁定期间因 401 触发完整登出，
       // 若清掉邮箱，解锁界面将「无法识别当前账户」且万能钥匙无从定位账户
@@ -279,7 +280,7 @@ export const useUserStore = defineStore('user', {
       this.doctors = []
       this.currentTestView = 'list'
       this.currentResultId = null
-      this.avatarBase64 = ''
+      this.avatarUrl = ''
       clearAuthToken()
       if (email) {
         localStorage.setItem('accountEmail', email)
@@ -291,8 +292,9 @@ export const useUserStore = defineStore('user', {
 
 /**
  * 头像压缩：等比缩放到最长边 256px。
- * PNG 输出 PNG（保留透明通道），其余类型输出 JPEG（质量 0.85）。
- * 返回可直接入库的 dataURL。
+ * 统一输出 JPEG（质量 0.85，绘制前铺白底以保留原透明区域的观感）——
+ * 上传到 MinIO 后对象名固定为 avatar/{userId}.jpg，无需数据库记录扩展名。
+ * 返回 dataURL，由后端转存 MinIO 并返回访问 URL。
  */
 function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -315,10 +317,12 @@ function compressImage(file: File): Promise<string> {
           reject(new Error(i18n.global.t('core.store.canvasUnavailable')))
           return
         }
+        // JPEG 无透明通道：先铺白底再绘制，避免原透明区域变黑
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, w, h)
         ctx.drawImage(img, 0, 0, w, h)
 
-        const isPng = file.type === 'image/png'
-        resolve(canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.85))
+        resolve(canvas.toDataURL('image/jpeg', 0.85))
       }
       img.src = reader.result as string
     }
