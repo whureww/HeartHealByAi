@@ -3,7 +3,12 @@ import jwt from 'jsonwebtoken';
 import { TokenManager } from '../utils/tokenManager';
 import { pool } from '../db/mysql';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'ijVBkJ6riP1KGyG98LY+oJWM1384Roc+KkdzgjmtGgX07SgQ+v/n5HgyOAJ/n5X1gFKEMmbJEvjmA2+iLaPbRg';
+// JWT 密钥必须通过环境变量注入，不提供硬编码兜底：
+// 公开仓库中的可预测密钥可被用于伪造 token，未配置时拒绝启动（fail-fast）
+const JWT_SECRET = process.env.JWT_SECRET || '';
+if (!JWT_SECRET) {
+    throw new Error('安全检查失败：未配置 JWT_SECRET 环境变量，请参考 backend/.env.example 配置后启动');
+}
 
 export { JWT_SECRET };
 
