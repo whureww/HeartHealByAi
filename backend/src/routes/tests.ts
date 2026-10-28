@@ -40,6 +40,15 @@ const AI_SCORE_PROMPT = `你是心理测评分析师。以下是一份心理健�
 // 反向计分已在库中翻转）。AI 只负责逐条温和化改写题干，选项与分值由服务端直接取自模板，
 // 保证题量、维度、选项体系与真实量表完全一致
 router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res: Response) => {
+    // AI 智能测评问卷上下架同步：管理员下架后用户端暂停出题（上架后恢复）
+    const [aiTestRows] = await pool.execute(
+        "SELECT status FROM psychological_tests WHERE code = 'AI-GEN' LIMIT 1"
+    );
+    const aiTestStatus = Number((aiTestRows as any[])[0]?.status ?? 1);
+    if (aiTestStatus !== 1) {
+        throw new BusinessError('AI 智能测评已下架，暂时无法使用，请稍后再试', 403);
+    }
+
     let paperMeta: { scale_name: string; scale_note: string; estimated_minutes: number } | null = null;
     let questions: any[] | null = null;
     let scaleReason = '';

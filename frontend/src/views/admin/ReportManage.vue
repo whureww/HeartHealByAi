@@ -113,9 +113,9 @@
                 </span>
               </td>
               <td @click.stop>
-                <button v-if="r.status === 0" class="btn-handle" @click="toggleOpen(r)">
-                  <AppIcon name="warning" :size="13" />
-                  {{ $t('admin.report.handle') }}
+                <button class="btn-handle" :class="{ 'btn-modify': r.status !== 0 }" @click="toggleOpen(r)">
+                  <AppIcon :name="r.status === 0 ? 'warning' : 'edit'" :size="13" />
+                  {{ r.status === 0 ? $t('admin.report.handle') : $t('admin.report.modifyHandle') }}
                 </button>
                 <button
                   v-if="canLift(r)"
@@ -162,56 +162,10 @@
                     </div>
                   </div>
 
-                  <!-- 右：处置面板 / 处置结果 -->
+                  <!-- 右：处置面板 / 处置结果 + 重新处置 -->
                   <div class="action-panel">
-                    <template v-if="r.status === 0">
-                      <div class="panel-title">
-                        <AppIcon name="warning" :size="14" />
-                        {{ $t('admin.report.handleAction') }}
-                      </div>
-                      <div class="action-cards">
-                        <button
-                          v-for="a in ACTIONS"
-                          :key="a.value"
-                          :class="['action-card', `ac-${a.value}`, { selected: form.action === a.value }]"
-                          @click="form.action = a.value"
-                        >
-                          <AppIcon :name="a.icon" :size="16" />
-                          <b>{{ $t(a.labelKey) }}</b>
-                          <span>{{ $t(a.descKey) }}</span>
-                        </button>
-                      </div>
-                      <div v-if="form.action !== 'dismiss'" class="duration-block">
-                        <span class="duration-label">{{ $t('admin.report.durationLabel') }}</span>
-                        <div class="duration-pills">
-                          <button
-                            v-for="d in DURATIONS"
-                            :key="d.value"
-                            :class="['duration-pill', { selected: form.duration === d.value }]"
-                            @click="form.duration = d.value"
-                          >
-                            {{ $t(d.labelKey) }}
-                          </button>
-                        </div>
-                        <p class="duration-tip">
-                          {{ form.action === 'ban' ? $t('admin.report.tipBan') : $t('admin.report.tipMute') }}
-                        </p>
-                      </div>
-                      <textarea
-                        v-model="form.note"
-                        class="note-input"
-                        rows="2"
-                        :placeholder="form.action === 'dismiss' ? $t('admin.report.phDismissNote') : $t('admin.report.phNote')"
-                        maxlength="255"
-                      ></textarea>
-                      <div class="action-foot">
-                        <button class="btn-ghost" @click="toggleOpen(r)">{{ $t('admin.report.collapse') }}</button>
-                        <button class="btn-primary" :disabled="handling" @click="submitHandle(r)">
-                          {{ handling ? $t('admin.report.submitting') : $t('admin.report.confirmHandle') }}
-                        </button>
-                      </div>
-                    </template>
-                    <template v-else>
+                    <!-- 已处置/已驳回：展示当前结果，允许重新处置修正 -->
+                    <template v-if="r.status !== 0">
                       <div class="panel-title">
                         <AppIcon :name="r.status === 1 ? 'check' : 'close'" :size="14" />
                         {{ $t('admin.report.result') }}
@@ -221,14 +175,53 @@
                         <p>{{ r.handle_note || $t('admin.report.noHandleNote') }}</p>
                         <span v-if="r.handled_at" class="result-time">{{ formatDate(r.handled_at) }}</span>
                       </div>
-                      <div v-if="canLift(r)" class="lift-block">
-                        <p class="lift-tip">{{ $t('admin.report.liftTip') }}</p>
-                        <button class="btn-lift full" @click="lift(r)">
-                          <AppIcon name="check" :size="13" />
-                          {{ $t('admin.report.lift') }}
+                      <p class="rehandle-tip">{{ $t('admin.report.rehandleTip') }}</p>
+                    </template>
+                    <div class="panel-title">
+                      <AppIcon name="warning" :size="14" />
+                      {{ r.status === 0 ? $t('admin.report.handleAction') : $t('admin.report.rehandleAction') }}
+                    </div>
+                    <div class="action-cards">
+                      <button
+                        v-for="a in ACTIONS"
+                        :key="a.value"
+                        :class="['action-card', `ac-${a.value}`, { selected: form.action === a.value }]"
+                        @click="form.action = a.value"
+                      >
+                        <AppIcon :name="a.icon" :size="16" />
+                        <b>{{ $t(a.labelKey) }}</b>
+                        <span>{{ $t(a.descKey) }}</span>
+                      </button>
+                    </div>
+                    <div v-if="form.action !== 'dismiss'" class="duration-block">
+                      <span class="duration-label">{{ $t('admin.report.durationLabel') }}</span>
+                      <div class="duration-pills">
+                        <button
+                          v-for="d in DURATIONS"
+                          :key="d.value"
+                          :class="['duration-pill', { selected: form.duration === d.value }]"
+                          @click="form.duration = d.value"
+                        >
+                          {{ $t(d.labelKey) }}
                         </button>
                       </div>
-                    </template>
+                      <p class="duration-tip">
+                        {{ form.action === 'ban' ? $t('admin.report.tipBan') : $t('admin.report.tipMute') }}
+                      </p>
+                    </div>
+                    <textarea
+                      v-model="form.note"
+                      class="note-input"
+                      rows="2"
+                      :placeholder="form.action === 'dismiss' ? $t('admin.report.phDismissNote') : $t('admin.report.phNote')"
+                      maxlength="255"
+                    ></textarea>
+                    <div class="action-foot">
+                      <button class="btn-ghost" @click="toggleOpen(r)">{{ $t('admin.report.collapse') }}</button>
+                      <button class="btn-primary" :disabled="handling" @click="submitHandle(r)">
+                        {{ handling ? $t('admin.report.submitting') : (r.status === 0 ? $t('admin.report.confirmHandle') : $t('admin.report.confirmRehandle')) }}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </td>
@@ -968,6 +961,24 @@ onMounted(load)
 .btn-handle:hover {
   background: var(--accent-strong);
   transform: translateY(-1px);
+}
+
+/* 修改处置按钮（已处置/已驳回行的重新处置入口） */
+.btn-modify {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.btn-modify:hover {
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.rehandle-tip {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .btn-lift {

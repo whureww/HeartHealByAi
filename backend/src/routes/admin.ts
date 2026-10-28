@@ -78,6 +78,57 @@ router.put('/users/:id/role', authenticate, requireAdmin, asyncHandler(async (re
 
     res.json({ success: true, message: '角色修改成功' });
 }));
+
+// 管理员协助修改用户账号资料（用户名 / 邮箱 / 手机号）
+router.put('/users/:id/profile', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.id);
+    const { username, email, phone } = req.body || {};
+
+    if (!username || !String(username).trim()) {
+        throw new BusinessError('用户名不能为空', 400);
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+        throw new BusinessError('邮箱格式不正确', 400);
+    }
+
+    const [exists] = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
+    if ((exists as any[]).length === 0) {
+        throw new BusinessError('用户不存在', 404);
+    }
+
+    // 邮箱唯一性（排除本人）
+    const [dup] = await pool.execute('SELECT id FROM users WHERE email = ? AND id != ?', [String(email).trim(), userId]);
+    if ((dup as any[]).length > 0) {
+        throw new BusinessError('该邮箱已被其他账号使用', 409);
+    }
+
+    await pool.execute(
+        'UPDATE users SET username = ?, email = ?, phone = ? WHERE id = ?',
+        [String(username).trim(), String(email).trim(), phone ? String(phone).trim() : null, userId]
+    );
+
+    res.json({ success: true, message: '用户账号资料已更新' });
+}));
+
+// 管理员重置用户密码（协助用户找回，仅新密码生效；密码不可见，不提供查询）
+router.put('/users/:id/password', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const userId = parseInt(req.params.id);
+    const { password } = req.body || {};
+
+    if (!password || String(password).length < 6) {
+        throw new BusinessError('密码至少 6 位', 400);
+    }
+
+    const [exists] = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
+    if ((exists as any[]).length === 0) {
+        throw new BusinessError('用户不存在', 404);
+    }
+
+    const hashed = await bcrypt.hash(String(password), 12);
+    await pool.execute('UPDATE users SET password_hash = ? WHERE id = ?', [hashed, userId]);
+
+    res.json({ success: true, message: '密码已重置，请将新密码告知用户' });
+}));
 // admin.ts - 平台统计（口径与后台各管理页一致）
 router.get('/stats', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     try {
@@ -179,10 +230,10 @@ router.put('/tests/:id/status', authenticate, requireAdmin, asyncHandler(async (
         throw new BusinessError('无效的状态', 400);
     }
 
-    // AI 智能测评由系统自动维护（用户端单独入口），不允许从后台改变上下架状态
+    // AI 智能测评：仅允许管理员上架/下架（1/2），其余编辑删除均由服务端拦截
     const [aiRows] = await pool.execute('SELECT code FROM psychological_tests WHERE id = ?', [testId]);
-    if (((aiRows as any[])[0]?.code || '') === 'AI-GEN') {
-        throw new BusinessError('AI 智能测评由系统自动维护，不允许上架或下架', 403);
+    if (((aiRows as any[])[0]?.code || '') === 'AI-GEN' && ![1, 2].includes(status)) {
+        throw new BusinessError('AI 智能测评仅允许上架或下架', 400);
     }
 
     await pool.execute('UPDATE psychological_tests SET status = ? WHERE id = ?', [status, testId]);
@@ -449,6 +500,7 @@ router.get('/reports', authenticate, requireAdmin, asyncHandler(async (req: Requ
 }));
 
 // 处置举报：禁言 / 封禁 / 驳回（禁言封禁实时生效：即时通知目标用户，封禁强制踢线）
+// 已处置/已驳回的举报同样允许重新处置（管理员可修正结果），每次以最新一次处置为准
 router.post('/reports/:id/handle', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const reportId = parseInt(req.params.id);
     const { action, duration, note } = req.body || {};
@@ -457,9 +509,6 @@ router.post('/reports/:id/handle', authenticate, requireAdmin, asyncHandler(asyn
     const report = (rows as any[])[0];
     if (!report) {
         throw new BusinessError('举报不存在', 404);
-    }
-    if (Number(report.status) !== 0) {
-        throw new BusinessError('该举报已处理，请勿重复操作', 400);
     }
 
     if (!['mute', 'ban', 'dismiss'].includes(action)) {

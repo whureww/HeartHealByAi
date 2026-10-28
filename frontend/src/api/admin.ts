@@ -10,6 +10,10 @@ export const getAllAppointments = () => request.get('/admin/appointments')
 export const getAdminStats = () => request.get('/admin/stats')
 export const createUser = (data: { username: string; email: string; password: string; role: number; phone?: string }) => request.post('/admin/users', data)
 export const deleteUser = (id: number) => request.delete(`/admin/users/${id}`)
+// 管理员协助用户修改账号资料 / 重置密码（均需二次确认后调用）
+export const updateUserProfile = (id: number, data: { username: string; email: string; phone?: string }) =>
+  request.put(`/admin/users/${id}/profile`, data)
+export const resetUserPassword = (id: number, password: string) => request.put(`/admin/users/${id}/password`, { password })
 export const createAppointment = (data: { user_id: number; doctor_id: number; status?: string }) => request.post('/admin/appointments', data)
 export const deleteAppointment = (id: number) => request.delete(`/admin/appointments/${id}`)
 

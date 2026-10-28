@@ -74,6 +74,13 @@
             </td>
             <td>
               <button
+                class="btn-info"
+                :title="$t('admin.user.viewDetail')"
+                @click="openDetail(user)"
+              >
+                <AppIcon name="eye" :size="14" />
+              </button>
+              <button
                 v-if="activeRestriction(user)"
                 class="btn-lift"
                 :title="$t('admin.user.liftTitle')"
@@ -164,6 +171,77 @@
         </div>
       </div>
     </div>
+
+    <!-- 用户详情弹窗：查看信息 + 协助修改账号/重置密码 -->
+    <div v-if="showDetail" class="modal-mask" @click.self="showDetail = false">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>{{ $t('admin.user.detailTitle') }}</h3>
+          <button class="modal-close" @click="showDetail = false"><AppIcon name="close" :size="16" /></button>
+        </div>
+        <div class="modal-body">
+          <!-- 只读概要 -->
+          <div class="detail-meta">
+            <div class="meta-item">
+              <span class="meta-label">ID</span>
+              <span>#{{ detailUser?.id }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">{{ $t('admin.user.th.role') }}</span>
+              <span :class="['role-tag', `role-${detailUser?.role}`]">{{ roleText(detailUser?.role) }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">{{ $t('admin.user.th.status') }}</span>
+              <span v-if="detailUser && activeRestriction(detailUser)" class="restrict-tag">{{ activeRestriction(detailUser) }}</span>
+              <span v-else class="restrict-tag normal">{{ $t('admin.user.normal') }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">{{ $t('admin.user.th.createdAt') }}</span>
+              <span>{{ detailUser ? formatDate(detailUser.created_at) : '' }}</span>
+            </div>
+          </div>
+
+          <!-- 密码：仅占位展示，不可见 -->
+          <div class="pwd-row">
+            <span class="meta-label">{{ $t('admin.user.fPassword') }}</span>
+            <span class="pwd-dots">· · · · · ·</span>
+            <span class="pwd-tip">{{ $t('admin.user.passwordHidden') }}</span>
+          </div>
+
+          <!-- 账号资料修改 -->
+          <div class="section-title">{{ $t('admin.user.editProfile') }}</div>
+          <div class="form-item">
+            <label>{{ $t('admin.user.th.username') }}</label>
+            <input v-model="detailForm.username" :placeholder="$t('admin.user.phUsername')" />
+          </div>
+          <div class="form-item">
+            <label>{{ $t('admin.user.th.email') }}</label>
+            <input v-model="detailForm.email" type="email" placeholder="user@example.com" />
+          </div>
+          <div class="form-item">
+            <label>{{ $t('admin.user.th.phone') }}</label>
+            <input v-model="detailForm.phone" :placeholder="$t('admin.user.phOptional')" />
+          </div>
+          <div class="modal-foot inline">
+            <button class="btn-primary" :disabled="savingProfile" @click="saveProfile">
+              {{ savingProfile ? $t('admin.user.saving') : $t('admin.user.saveProfile') }}
+            </button>
+          </div>
+
+          <!-- 重置密码 -->
+          <div class="section-title">{{ $t('admin.user.resetPwd') }}</div>
+          <div class="form-item">
+            <label>{{ $t('admin.user.newPassword') }}</label>
+            <input v-model="newPassword" type="password" :placeholder="$t('admin.user.phPassword')" />
+          </div>
+          <div class="modal-foot inline">
+            <button class="btn-primary" :disabled="resettingPwd || !newPassword" @click="submitResetPassword">
+              {{ resettingPwd ? $t('admin.user.resetting') : $t('admin.user.resetPwd') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -171,7 +249,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import request from '@/api/request'
-import { createUser, deleteUser, unrestrictUser } from '@/api/admin'
+import { createUser, deleteUser, unrestrictUser, updateUserProfile, resetUserPassword } from '@/api/admin'
 import { success, error, confirm } from '@/utils/dialog'
 import { useUserStore } from '@/stores/user'
 import AppIcon from '@/components/AppIcon.vue'
@@ -187,6 +265,69 @@ const searchKeyword = ref('')
 const showCreate = ref(false)
 const creating = ref(false)
 const createForm = ref({ username: '', email: '', password: '', role: 1, phone: '' })
+
+// ===== 用户详情弹窗：查看信息 + 协助修改账号 / 重置密码 =====
+const showDetail = ref(false)
+const detailUser = ref<any>(null)
+const detailForm = ref({ username: '', email: '', phone: '' })
+const newPassword = ref('')
+const savingProfile = ref(false)
+const resettingPwd = ref(false)
+
+const openDetail = (user: any) => {
+  detailUser.value = user
+  detailForm.value = { username: user.username || '', email: user.email || '', phone: user.phone || '' }
+  newPassword.value = ''
+  showDetail.value = true
+}
+
+const saveProfile = async () => {
+  const u = detailUser.value
+  if (!u) return
+  const f = detailForm.value
+  if (!f.username.trim() || !f.email.trim()) {
+    await error(t('admin.user.errProfileRequired'))
+    return
+  }
+  // 防误操作：二次确认
+  const ok = await confirm(t('admin.user.confirmProfile', { name: u.username }), t('admin.user.confirmProfileTitle'))
+  if (!ok) return
+  try {
+    savingProfile.value = true
+    await updateUserProfile(u.id, { username: f.username.trim(), email: f.email.trim(), phone: f.phone.trim() || undefined })
+    await success(t('admin.user.profileUpdated'))
+    u.username = f.username.trim()
+    u.email = f.email.trim()
+    u.phone = f.phone.trim() || null
+    showDetail.value = false
+  } catch (e: any) {
+    await error(e?.response?.data?.message || e?.message || t('admin.user.profileSaveFailed'))
+  } finally {
+    savingProfile.value = false
+  }
+}
+
+const submitResetPassword = async () => {
+  const u = detailUser.value
+  if (!u || !newPassword.value) return
+  if (newPassword.value.length < 6) {
+    await error(t('admin.user.errPasswordMin'))
+    return
+  }
+  // 防误操作：二次确认
+  const ok = await confirm(t('admin.user.confirmPasswordReset', { name: u.username }), t('admin.user.confirmPasswordResetTitle'))
+  if (!ok) return
+  try {
+    resettingPwd.value = true
+    await resetUserPassword(u.id, newPassword.value)
+    await success(t('admin.user.passwordReset'))
+    newPassword.value = ''
+  } catch (e: any) {
+    await error(e?.response?.data?.message || e?.message || t('admin.user.pwdResetFailed'))
+  } finally {
+    resettingPwd.value = false
+  }
+}
 
 const openCreate = () => {
   createForm.value = { username: '', email: '', password: '', role: 1, phone: '' }
@@ -279,6 +420,16 @@ const loadUsers = async () => {
 
 const updateRole = async (user: any) => {
   if (user.newRole === user.role) return
+
+  // 防误操作：角色调整二次确认
+  const ok = await confirm(
+    t('admin.user.confirmRoleChange', { name: user.username, role: roleText(user.newRole) }),
+    t('admin.user.confirmRoleChangeTitle')
+  )
+  if (!ok) {
+    user.newRole = user.role
+    return
+  }
 
   try {
     await request.put(`/admin/users/${user.id}/role`, { role: user.newRole })
@@ -380,6 +531,88 @@ onMounted(loadUsers)
 .btn-del:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* 详情按钮与详情弹窗内容 */
+.btn-info {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  border-radius: var(--radius-ctl);
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-right: 6px;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-info:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.detail-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 18px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border-radius: var(--radius-ctl);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.meta-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 56px;
+}
+
+.pwd-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-ctl);
+}
+
+.pwd-dots {
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.pwd-tip {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.section-title {
+  margin-top: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
+
+.modal-foot.inline {
+  padding: 0;
+  justify-content: flex-end;
 }
 
 /* ===== 弹窗 ===== */

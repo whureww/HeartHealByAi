@@ -56,22 +56,31 @@
             <td class="date-cell">{{ formatDate(test.created_at) }}</td>
             <td>
               <div class="action-btns">
-                <!-- AI 智能测评由系统自动维护：不提供上架/下架/删除入口（服务端同步拦截） -->
+                <!-- AI 智能测评：仅允许上架/下架（其余编辑删除由服务端拦截），用户端同步生效 -->
                 <template v-if="test.code === 'AI-GEN'">
                   <span class="system-tag">{{ $t('admin.test.systemProtected') }}</span>
                   <button
+                    v-if="test.status !== 1"
                     class="btn-action"
-                    @click="$router.push(`/admin/tests/edit/${test.id}`)"
+                    @click="updateStatus(test, 1)"
                   >
-                    <AppIcon name="edit" :size="13" />
-                    {{ $t('admin.test.editBtn') }}
+                    <AppIcon name="upload" :size="13" />
+                    {{ $t('admin.test.publish') }}
+                  </button>
+                  <button
+                    v-else
+                    class="btn-action"
+                    @click="updateStatus(test, 2)"
+                  >
+                    <AppIcon name="download" :size="13" />
+                    {{ $t('admin.test.unpublish') }}
                   </button>
                 </template>
                 <template v-else>
                   <button
                     v-if="test.status === 0"
                     class="btn-action"
-                    @click="updateStatus(test.id, 1)"
+                    @click="updateStatus(test, 1)"
                   >
                     <AppIcon name="upload" :size="13" />
                     {{ $t('admin.test.publish') }}
@@ -79,7 +88,7 @@
                   <button
                     v-if="test.status === 1"
                     class="btn-action"
-                    @click="updateStatus(test.id, 2)"
+                    @click="updateStatus(test, 2)"
                   >
                     <AppIcon name="download" :size="13" />
                     {{ $t('admin.test.unpublish') }}
@@ -87,7 +96,7 @@
                   <button
                     v-if="test.status === 2"
                     class="btn-action"
-                    @click="updateStatus(test.id, 1)"
+                    @click="updateStatus(test, 1)"
                   >
                     <AppIcon name="refresh" :size="13" />
                     {{ $t('admin.test.republish') }}
@@ -171,9 +180,17 @@ const loadTests = async () => {
   }
 }
 
-const updateStatus = async (id: number, status: number) => {
+const updateStatus = async (test: any, status: number) => {
+  // 防误操作：上下架二次确认（下架后用户端同步不可用）
+  const ok = await confirm(
+    status === 1
+      ? t('admin.test.confirmPublish', { name: test.name })
+      : t('admin.test.confirmUnpublish', { name: test.name }),
+    t('admin.test.confirmStatusTitle')
+  )
+  if (!ok) return
   try {
-    await request.put(`/admin/tests/${id}/status`, { status })
+    await request.put(`/admin/tests/${test.id}/status`, { status })
     await success(t('admin.test.statusUpdated'))
     loadTests()
   } catch (e: any) {
