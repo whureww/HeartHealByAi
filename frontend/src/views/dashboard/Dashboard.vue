@@ -3026,6 +3026,9 @@ const scrollToBottom = () => {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
+  /* 保留 AI 回复中的换行：分段排版（段落间空行）在气泡内正常呈现 */
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .msg-user {
@@ -3036,6 +3039,8 @@ const scrollToBottom = () => {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* AI 输入中动画 */

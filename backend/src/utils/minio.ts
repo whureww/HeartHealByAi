@@ -64,6 +64,43 @@ function avatarObjectKey(userId: number): string {
     return `avatar/${userId}.jpg`;
 }
 
+/**
+ * 图片数据完整性校验：任何校验失败都会抛错，数据绝不写入 MinIO。
+ * - 文件头 magic number：拦截伪造/错格式数据
+ * - 结束标记 / 声明长度：拦截上传中断、base64 截断导致的残缺图片
+ */
+function validateImageIntegrity(buffer: Buffer, mime: string): void {
+    if (mime === 'jpeg') {
+        // JPEG 头：FF D8 FF；尾：EOI 标记 FF D9（截断的 JPEG 不会有）
+        if (buffer.length < 4 || buffer[0] !== 0xFF || buffer[1] !== 0xD8 || buffer[2] !== 0xFF) {
+            throw new Error('头像数据校验失败：不是有效的 JPEG 图片');
+        }
+        const tail = buffer.subarray(buffer.length - 2);
+        if (tail[0] !== 0xFF || tail[1] !== 0xD9) {
+            throw new Error('头像数据不完整（上传可能已中断），已放弃保存');
+        }
+    } else if (mime === 'png') {
+        // PNG 头：8 字节签名；尾：IEND 块（缺失即截断）
+        const PNG_SIG = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        if (buffer.length < 12 || !buffer.subarray(0, 8).equals(PNG_SIG)) {
+            throw new Error('头像数据校验失败：不是有效的 PNG 图片');
+        }
+        if (!buffer.subarray(buffer.length - 8, buffer.length - 4).equals(Buffer.from('IEND', 'ascii'))) {
+            throw new Error('头像数据不完整（上传可能已中断），已放弃保存');
+        }
+    } else if (mime === 'webp') {
+        // WebP：RIFF 容器，头部声明的长度必须与实际字节数一致（不一致即截断）
+        const RIFF = Buffer.from('RIFF', 'ascii');
+        const WEBP = Buffer.from('WEBP', 'ascii');
+        if (buffer.length < 12 || !buffer.subarray(0, 4).equals(RIFF) || !buffer.subarray(8, 12).equals(WEBP)) {
+            throw new Error('头像数据校验失败：不是有效的 WebP 图片');
+        }
+        if (buffer.readUInt32LE(4) + 8 !== buffer.length) {
+            throw new Error('头像数据不完整（上传可能已中断），已放弃保存');
+        }
+    }
+}
+
 /** 用户头像的公网访问 URL（不含存在性判断） */
 function avatarPublicUrl(userId: number): string {
     if (!MINIO_PUBLIC_BASE) return '';
@@ -115,6 +152,8 @@ export async function uploadAvatarFromDataUrl(userId: number, dataUrl: string): 
     if (buffer.length > 2 * 1024 * 1024) {
         throw new Error('头像文件过大（压缩后应小于 2MB）');
     }
+    // 完整性校验：伪造格式 / 上传中断 / base64 截断的数据一律拒绝，不写入对象存储
+    validateImageIntegrity(buffer, mime);
     await getClient().putObject(MINIO_BUCKET, avatarObjectKey(userId), buffer, buffer.length, {
         'Content-Type': 'image/' + mime,
         'Cache-Control': 'no-cache, max-age=0'
