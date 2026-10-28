@@ -1,12 +1,12 @@
 ; ============================================================
-; 心愈 XinYu 0.6.8 —— Inno Setup 7 安装包脚本
+; 心愈 XinYu 0.6.9 —— Inno Setup 7 安装包脚本
 ; 机器级安装（默认 Program Files，UAC 提权；无管理员权限时可在向导中切换为仅当前用户安装）
 ; 打包命令: ISCC.exe D:\AIHeartHealProject\frontend\src-tauri\windows\xinyu.iss
 ; ============================================================
 
 #define MyAppName "心愈"
 #define MyAppNameEn "XinYu"
-#define MyAppVersion "0.6.8"
+#define MyAppVersion "0.6.9"
 #define MyAppPublisher "XinYu"
 #define MyAppExeName "心愈.exe"
 #define MyAppRoot "D:\AIHeartHealProject\frontend\src-tauri"
