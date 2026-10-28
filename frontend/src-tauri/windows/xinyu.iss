@@ -58,7 +58,10 @@ Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.xinyu.heart"; ValueType
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; 交互安装：装完可选立即启动（以原登录用户身份运行，托盘/通知归属用户会话）
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+; 静默更新安装（程序内「立即安装」→ /VERYSILENT）：装完自动拉起新版本，全程无需用户再点击
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [Code]
 const
@@ -94,22 +97,15 @@ begin
   Result := '';
   if not IsWebView2Installed then
   begin
-    // 检测到缺失：先询问用户，同意才安装；拒绝则中止并给出手动安装指引
-    if MsgBox('检测到系统缺少 WebView2 运行时，心愈的界面渲染依赖此组件。' + #13#10#13#10 +
-              '是否现在为您安装？需要联网下载运行时（通常数十秒完成）。' + #13#10 +
-              '选择「否」将中止安装，您可手动安装后重新运行本程序。',
-              mbConfirmation, MB_YESNO) = IDYES then
+    // 检测到缺失：立即静默安装（免询问，安装器已提权故无二次 UAC）；
+    // 仅在静默安装失败或装完仍检测不到时才中止并给出手动安装指引
+    ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');
+    if Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/install /silent /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
     begin
-      ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');
-      if Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/install /silent /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
-      begin
-        if not IsWebView2Installed then
-          Result := 'WebView2 运行时安装未完成（需要联网），请检查网络后重新运行安装程序。';
-      end
-      else
-        Result := 'WebView2 运行时安装器启动失败，请手动访问 https://developer.microsoft.com/microsoft-edge/webview2/ 安装。';
+      if not IsWebView2Installed then
+        Result := 'WebView2 运行时安装未完成（需要联网），请检查网络后重新运行安装程序。';
     end
     else
-      Result := '您选择暂不安装 WebView2 运行时，心愈无法启动。请访问 https://developer.microsoft.com/microsoft-edge/webview2/ 手动安装后重新运行本安装程序。';
+      Result := 'WebView2 运行时安装器启动失败，请手动访问 https://developer.microsoft.com/microsoft-edge/webview2/ 安装。';
   end;
 end;

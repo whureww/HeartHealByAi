@@ -1101,7 +1101,7 @@ fn urldecode(s: &str) -> String {
 }
 
 /// 退出程序并启动新版本安装器。
-/// Windows：直接执行 Inno Setup 安装器；macOS：用 open 挂载 DMG 引导安装。
+/// Windows：静默执行 Inno Setup 安装器（免向导点击，装完自动重启应用）；macOS：用 open 挂载 DMG 引导安装。
 #[tauri::command]
 fn install_update(app: tauri::AppHandle, installer_path: String) -> Result<(), String> {
     let path = std::path::PathBuf::from(&installer_path);
@@ -1109,12 +1109,17 @@ fn install_update(app: tauri::AppHandle, installer_path: String) -> Result<(), S
         return Err("安装包无效".into());
     }
 
-    // Windows：exe 可直接执行；macOS：open 挂载 dmg（Finder 接管拖拽安装）。
+    // Windows：静默安装——/VERYSILENT 免向导、/SUPPRESSMSGBOXES 免弹窗、
+    // /CLOSEAPPLICATIONS 兜底关闭残留进程；装完由安装脚本 [Run] 的静默条目自动拉起新版本。
+    // （提权确认由 Windows UAC 负责，属系统级行为无法绕过，用户最多确认一次）
+    // macOS：open 挂载 dmg（Finder 接管拖拽安装）。
     // 子进程独立于父进程，本程序退出不影响其运行
     #[cfg(target_os = "macos")]
     let spawn = std::process::Command::new("open").arg(&path).spawn();
     #[cfg(not(target_os = "macos"))]
-    let spawn = std::process::Command::new(&path).spawn();
+    let spawn = std::process::Command::new(&path)
+        .args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"])
+        .spawn();
 
     match spawn {
         Ok(_) => {

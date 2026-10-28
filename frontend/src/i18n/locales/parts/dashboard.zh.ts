@@ -253,7 +253,7 @@ export default {
       appVersion: '心愈 AI心理系统 v{version}',
       availableDesc: '发现新版本 v{latest}（当前 v{current}）· 点击右侧下载更新',
       downloadingDesc: '正在下载 v{latest} · 下载完成后可安装',
-      readyDesc: 'v{latest} 安装包已就绪 · 点击右侧立即安装（会关闭程序并启动安装向导）',
+      readyDesc: 'v{latest} 安装包已就绪 · 点击右侧立即安装，程序将自动完成更新并重新启动',
       upToDate: '已是最新版本',
       browserMode: '浏览器模式暂不支持',
       noAttachment: '新版本缺少安装包附件',

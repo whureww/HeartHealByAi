@@ -253,7 +253,7 @@ export default {
       appVersion: 'XinYu AI Mental Health v{version}',
       availableDesc: 'New version v{latest} available (current v{current}) · Click Download update on the right',
       downloadingDesc: 'Downloading v{latest} · Install when finished',
-      readyDesc: 'v{latest} installer is ready · Click Install now on the right (the app will close and the installer will start)',
+      readyDesc: 'v{latest} installer is ready · Click Install now, the app will update silently and restart automatically',
       upToDate: 'Up to date',
       browserMode: 'Not available in browser mode',
       noAttachment: 'The new version is missing the installer attachment',
