@@ -314,9 +314,14 @@ router.get('/list', authenticate, asyncHandler(async (req: Request, res: Respons
         "SELECT id, code, name, description, category, total_questions, estimated_minutes, scoring_method FROM psychological_tests WHERE status = 1 AND code != 'AI-GEN'"
     );
 
+    // AI 智能测评上下架状态同步：管理员下架后用户端隐藏入口（上架即恢复）
+    const [aiRows] = await pool.execute("SELECT status FROM psychological_tests WHERE code = 'AI-GEN' LIMIT 1");
+    const aiAvailable = Number((aiRows as any[])[0]?.status ?? 1) === 1;
+
     res.json({
         success: true,
-        data: rows
+        data: rows,
+        aiTest: { available: aiAvailable }
     });
 }));
 

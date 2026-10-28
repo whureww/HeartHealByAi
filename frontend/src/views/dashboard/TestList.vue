@@ -21,8 +21,8 @@
     </div>
 
     <div v-else class="test-list">
-      <!-- AI 智能测评：固定置顶，内容由 AI 实时生成 -->
-      <div class="test-row ai-row" @click="onStartAiTest">
+      <!-- AI 智能测评：固定置顶，内容由 AI 实时生成；管理员下架后隐藏（状态由列表接口同步） -->
+      <div v-if="aiAvailable" class="test-row ai-row" @click="onStartAiTest">
         <div class="test-icon ai-icon"><AppIcon name="edit" :size="19" /></div>
         <div class="test-body">
           <h3>{{ $t('tests.aiTitle') }}<span class="ai-badge">AI</span></h3>
@@ -81,6 +81,8 @@ const emit = defineEmits(['view-history', 'start-test', 'start-ai-test'])
 const tests = ref<any[]>([])
 const loading = ref(false)
 const errorMsg = ref('')
+// AI 智能测评入口可用性（跟随管理后台的上架/下架状态，默认可用；接口异常时不隐藏）
+const aiAvailable = ref(true)
 
 const loadTests = async () => {
   loading.value = true
@@ -94,6 +96,9 @@ const loadTests = async () => {
       tests.value = res
     } else {
       tests.value = []
+    }
+    if (res && res.aiTest && typeof res.aiTest.available === 'boolean') {
+      aiAvailable.value = res.aiTest.available
     }
   } catch (e: any) {
     console.error('获取测评列表失败:', e)
