@@ -8,6 +8,7 @@ import { invalidateWords } from '../utils/moderation';
 import { notifyUserRestricted, notifyRestrictionLifted, disconnectUser, Restriction, getActiveRestriction } from '../utils/restrict';
 import { ensureAuditSchema } from '../utils/auditLog';
 import { getAvatarUrl } from '../utils/minio';
+import { ensureKnowledgeSeeds, listKnowledgeArticles, addKnowledgeArticle, deleteKnowledgeArticle } from '../utils/knowledge';
 
 const router = Router();
 
@@ -781,6 +782,38 @@ router.get('/chat-audit-logs', authenticate, requireAdmin, asyncHandler(async (r
         success: true,
         data: { list: rows, total, page, pageSize }
     });
+}));
+
+// ========== 心理知识库（AI 对话与出题的公共知识检索源） ==========
+
+// 文档列表（按文档分组）
+router.get('/knowledge', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    await ensureKnowledgeSeeds();   // 首次访问自动播种内置文档
+    const list = await listKnowledgeArticles();
+    res.json({ success: true, data: list });
+}));
+
+// 新增文档：切分向量化入库，返回内容块数
+router.post('/knowledge', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { title, category, content } = req.body || {};
+    if (!title || !String(title).trim()) {
+        throw new BusinessError('文档标题不能为空', 400);
+    }
+    if (!content || !String(content).trim()) {
+        throw new BusinessError('文档内容不能为空', 400);
+    }
+    const chunks = await addKnowledgeArticle(String(title).trim(), String(category || 'general').trim(), String(content));
+    res.json({ success: true, message: `文档已入库（切分为 ${chunks} 个内容块）`, data: { chunks } });
+}));
+
+// 删除整篇文档
+router.delete('/knowledge/:articleId', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const articleId = parseInt(req.params.articleId);
+    if (!Number.isInteger(articleId) || articleId <= 0) {
+        throw new BusinessError('无效的文档标识', 400);
+    }
+    await deleteKnowledgeArticle(articleId);
+    res.json({ success: true, message: '文档已删除' });
 }));
 
 export default router;

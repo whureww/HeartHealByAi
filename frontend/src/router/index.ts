@@ -114,6 +114,10 @@ const routes = [
         component: () => import('../views/admin/SensitiveWordManage.vue')
       },
       {
+        path: 'knowledge',
+        component: () => import('../views/admin/KnowledgeManage.vue')
+      },
+      {
         path: 'chats',
         component: () => import('../views/admin/ChatAudit.vue')
       }

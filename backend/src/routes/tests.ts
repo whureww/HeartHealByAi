@@ -5,6 +5,7 @@ import { asyncHandler } from '../middleware/error';
 import { BusinessError } from '../middleware/error';
 import { callAIJson } from '../utils/aiClient';
 import { ensureScaleTemplates, ScaleItem } from '../utils/aiScaleSeed';
+import { retrieveKnowledge } from '../utils/knowledge';
 
 const router = Router();
 
@@ -63,6 +64,13 @@ router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res
             const tplItems: ScaleItem[] = JSON.parse(tpl.items);
             const itemCount = tplItems.length;
 
+            // 知识库参考：按蓝本量表主题检索专业知识片段，帮 AI 把握措辞与场景（fail-open，检索不到不影响出题）
+            const kRefs = await retrieveKnowledge(`${tpl.name} ${tpl.category} ${tpl.intro}`.slice(0, 200), 2).catch(() => []);
+            const kPrompt = kRefs.length
+                ? `\n【知识库参考资料】以下是平台心理知识库中与该量表主题相关的内容，仅供把握专业措辞与生活化场景，不必逐条对应：\n`
+                    + kRefs.map((k) => `《${k.title}》${k.text}`).join('\n') + '\n'
+                : '';
+
             // 出题提示词：完整真实条目作为蓝本，AI 逐条对应改写题干（只输出题干列表）
             const itemList = tplItems
                 .map((it) => {
@@ -77,7 +85,7 @@ router.post('/ai/questions', authenticate, asyncHandler(async (req: Request, res
 【量表说明】${tpl.intro}
 【标准化条目（共 ${itemCount} 条）】
 ${itemList}
-
+${kPrompt}
 生成要求：
 1. 输出恰好 ${itemCount} 条题干，第 i 条题干必须对应蓝本第 i 条目，逐一对应，不得增删、合并、跳过或调换测评维度
 2. 每条题干的语义必须与蓝本条目保持专业一致，允许且仅允许做适度的温和化、口语化改写（更贴近日常表达），禁止改变测评方向或替换成无关问题

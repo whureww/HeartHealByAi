@@ -46,6 +46,7 @@ const menuItems = [
   { path: '/admin/doctor-cards', labelKey: 'admin.nav.doctorCards', icon: 'stethoscope' },
   { path: '/admin/reports', labelKey: 'admin.nav.reports', icon: 'warning' },
   { path: '/admin/sensitive-words', labelKey: 'admin.nav.words', icon: 'shield' },
+  { path: '/admin/knowledge', labelKey: 'admin.nav.knowledge', icon: 'book' },
   { path: '/admin/chats', labelKey: 'admin.nav.chats', icon: 'chat' }
 ]
 

@@ -8,6 +8,7 @@ import {
 import { decryptSecret } from '../utils/secretBox';
 import { pool } from '../db/mysql';
 import { retrieveRagContext, extractAndStoreMemories, backfillChatEmbeddings } from '../utils/memory';
+import { retrieveKnowledge } from '../utils/knowledge';
 import { isSupportedLang, translateText, translateTextLong, TRANSLATE_LANG_NAMES } from '../utils/translate';
 
 const router = Router();
@@ -82,6 +83,16 @@ function buildRagPrompt(rag: { memories: string[]; history: { type: string; cont
     return parts.join('\n\n');
 }
 
+/** 知识库参考段：与话题相关的平台心理知识片段，供 AI 自然引用（公共内容，与用户个人记忆分开注入） */
+function buildKnowledgePrompt(knowledge: { title: string; text: string }[], isEn: boolean): string {
+    if (!knowledge || knowledge.length === 0) return '';
+    const lines = knowledge.map((k) => `《${k.title}》${k.text}`);
+    return (isEn
+        ? '【Reference knowledge】Professional mental-health reference from the platform knowledge base. Weave it in naturally in the user\'s language; never recite it mechanically:\n'
+        : '【相关知识】以下是平台心理知识库中与话题相关的专业参考内容，请自然融入回答，不要生硬罗列或提及知识库本身：\n')
+        + lines.join('\n');
+}
+
 function buildChatMessages(
     messages: any[],
     context: any,
@@ -106,6 +117,11 @@ function buildChatMessages(
     if (ragPrompt) {
         system += '\n\n' + ragPrompt;
     }
+    // 知识库参考注入：平台公共心理知识中与话题相关的片段（独立于用户个人记忆）
+    const knowledgePrompt = rag && (rag as any).knowledge ? buildKnowledgePrompt((rag as any).knowledge, isEn) : '';
+    if (knowledgePrompt) {
+        system += '\n\n' + knowledgePrompt;
+    }
     const chatMessages: { role: string; content: string }[] = [
         { role: 'system', content: system },
         ...windowed.map((msg: any) => ({
@@ -121,7 +137,7 @@ function buildChatMessages(
 }
 
 /**
- * RAG 前置检索：以最后一条用户消息为查询，拉取记忆 + 历史片段。
+ * RAG 前置检索：以最后一条用户消息为查询，拉取记忆 + 历史片段 + 知识库参考。
  * 检索内部 fail-open（失败返回空），这里再兜一层 try 保证对话绝不因 RAG 中断。
  * 同时顺手触发历史消息一次性补嵌（老数据）。
  */
@@ -130,9 +146,12 @@ async function retrieveContextSafe(userId: number, messages: any[]) {
         const lastUser = [...(messages || [])].reverse().find((m) => m.role === 'user');
         const query = String(lastUser?.content || '').trim();
         if (!query) return null;
-        const rag = await retrieveRagContext(userId, query);
+        const [rag, knowledge] = await Promise.all([
+            retrieveRagContext(userId, query),
+            retrieveKnowledge(query, 3).catch(() => [])
+        ]);
         void backfillChatEmbeddings(userId);
-        return rag;
+        return { ...rag, knowledge };
     } catch (e: any) {
         console.error('[ai] RAG 上下文检索异常（跳过注入）:', e.message);
         return null;

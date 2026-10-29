@@ -28,6 +28,12 @@ export const addSensitiveWord = (data: { word: string; category: string; is_shor
   request.post('/admin/sensitive-words', data)
 export const deleteSensitiveWord = (id: number) => request.delete(`/admin/sensitive-words/${id}`)
 
+// 心理知识库（AI 对话与出题的公共知识检索源，按文档分组管理）
+export const getKnowledgeList = () => request.get('/admin/knowledge')
+export const addKnowledge = (data: { title: string; category: string; content: string }) =>
+  request.post('/admin/knowledge', data)
+export const deleteKnowledge = (articleId: number) => request.delete(`/admin/knowledge/${articleId}`)
+
 // 举报管理（聊天举报核查与处置，禁言/封禁实时生效）
 export const getReports = (status?: string) => request.get('/admin/reports', { params: { status: status ?? '' } })
 export const handleReport = (id: number, data: { action: 'mute' | 'ban' | 'dismiss'; duration?: string; note?: string }) =>
