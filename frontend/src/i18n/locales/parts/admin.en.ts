@@ -296,12 +296,17 @@ export default {
       me: 'User',
       ai: 'AI',
       auditTitle: 'Audit Trail',
-      auditSubtitle: 'All view records (admin / target user / session / time); this visit is included',
+      auditSubtitle: 'View & handling records of this conversation only (per-session trail; this visit included)',
       auditTh: {
         admin: 'Reviewed By',
-        target: 'Target User',
-        session: 'Session ID',
-        time: 'Viewed At'
+        action: 'Action',
+        time: 'Time'
+      },
+      auditAction: {
+        view: 'Viewed conversation',
+        mute: 'Muted account',
+        ban: 'Banned account',
+        delete: 'Deleted conversation'
       },
       auditEmpty: 'No audit records yet',
       auditLoadFailed: 'Failed to load audit records',

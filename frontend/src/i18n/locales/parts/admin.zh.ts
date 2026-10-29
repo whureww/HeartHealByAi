@@ -296,12 +296,17 @@ export default {
       me: '用户',
       ai: 'AI',
       auditTitle: '审查留痕',
-      auditSubtitle: '全部查看记录（管理员 / 目标用户 / 会话 / 时间），本次查看也已计入',
+      auditSubtitle: '本会话的查看与处置记录（按会话独立留存，本次查看也已计入）',
       auditTh: {
         admin: '审查人',
-        target: '被审查用户',
-        session: '会话 ID',
-        time: '查看时间'
+        action: '操作',
+        time: '时间'
+      },
+      auditAction: {
+        view: '查看会话',
+        mute: '禁言账号',
+        ban: '封禁账号',
+        delete: '删除会话'
       },
       auditEmpty: '暂无审查记录',
       auditLoadFailed: '审查记录加载失败',

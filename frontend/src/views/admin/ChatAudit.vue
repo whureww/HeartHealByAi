@@ -171,7 +171,7 @@
         </div>
       </div>
 
-      <!-- 审查留痕（可追溯：管理员查看行为全记录，含本次） -->
+      <!-- 审查留痕（仅当前会话：查看与处置记录，含本次查看） -->
       <div class="audit-card">
         <h3>
           <AppIcon name="shield" :size="15" />
@@ -182,20 +182,18 @@
           <thead>
             <tr>
               <th>{{ $t('admin.chats.auditTh.admin') }}</th>
-              <th>{{ $t('admin.chats.auditTh.target') }}</th>
-              <th>{{ $t('admin.chats.auditTh.session') }}</th>
+              <th>{{ $t('admin.chats.auditTh.action') }}</th>
               <th>{{ $t('admin.chats.auditTh.time') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="log in auditLogs" :key="log.id">
               <td>{{ log.admin_name }}</td>
-              <td>{{ log.target_name }}</td>
-              <td class="session-id-cell">{{ log.session_id }}</td>
+              <td>{{ auditActionText(log.action) }}</td>
               <td class="date-cell">{{ formatFull(log.created_at) }}</td>
             </tr>
             <tr v-if="auditLogs.length === 0">
-              <td colspan="4" class="empty-cell"><p>{{ $t('admin.chats.auditEmpty') }}</p></td>
+              <td colspan="3" class="empty-cell"><p>{{ $t('admin.chats.auditEmpty') }}</p></td>
             </tr>
           </tbody>
         </table>
@@ -328,12 +326,30 @@ const doDeleteSession = async () => {
 }
 
 const loadAuditLogs = async () => {
+  if (!detail.value) return
   try {
-    const res = await getChatAuditLogs({ page: 1, pageSize: 50 }) as any
+    // 会话级留痕：只拉取当前会话的查看/处置记录（后端按 targetUserId+sessionId 过滤），不再全局混杂
+    const res = await getChatAuditLogs({
+      page: 1,
+      pageSize: 50,
+      targetUserId: detail.value.session.user_id,
+      sessionId: detail.value.session.session_id
+    }) as any
     auditLogs.value = res.data.list
   } catch {
     auditLogs.value = []
   }
+}
+
+// 留痕动作文案映射（view/mute/ban/delete）
+const auditActionText = (action: string) => {
+  const map: Record<string, string> = {
+    view: t('admin.chats.auditAction.view'),
+    mute: t('admin.chats.auditAction.mute'),
+    ban: t('admin.chats.auditAction.ban'),
+    delete: t('admin.chats.auditAction.delete')
+  }
+  return map[action] || action
 }
 
 const formatDate = (date: string) => {

@@ -754,21 +754,28 @@ router.delete('/chats/:userId/:sessionId', authenticate, requireAdmin, asyncHand
 }));
 
 // 审查审计日志（分页倒序，谁在何时查看了谁的会话）
+// 支持会话级过滤：targetUserId + sessionId 同时提供时只返回该会话的查看/处置留痕（详情页按会话展示，不再全局混杂）
 router.get('/chat-audit-logs', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = Math.min(parseInt(req.query.pageSize as string) || 20, 50);
     const offset = (page - 1) * pageSize;
 
-    const [countRows] = await pool.query('SELECT COUNT(*) as total FROM ai_audit_logs');
+    const targetUserId = parseInt(req.query.targetUserId as string) || 0;
+    const sessionId = String(req.query.sessionId || '').trim();
+    const scoped = targetUserId > 0 && sessionId.length > 0 && sessionId.length <= 40;
+    const where = scoped ? ' WHERE a.target_user_id = ? AND a.session_id = ?' : '';
+    const params: any[] = scoped ? [targetUserId, sessionId] : [];
+
+    const [countRows] = await pool.query(`SELECT COUNT(*) as total FROM ai_audit_logs a${where}`, params);
     const total = (countRows as any[])[0].total;
 
     const sql = `SELECT a.id, a.admin_id, a.target_user_id, a.session_id, a.action, a.created_at,
                 u1.username AS admin_name, u2.username AS target_name
                 FROM ai_audit_logs a
                 JOIN users u1 ON u1.id = a.admin_id
-                JOIN users u2 ON u2.id = a.target_user_id
+                JOIN users u2 ON u2.id = a.target_user_id${where}
                 ORDER BY a.created_at DESC, a.id DESC LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`;
-    const [rows] = await pool.query(sql);
+    const [rows] = await pool.query(sql, params);
 
     res.json({
         success: true,

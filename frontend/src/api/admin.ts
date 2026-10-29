@@ -39,7 +39,7 @@ export const getAdminChats = (params: { page?: number; pageSize?: number; keywor
   request.get('/admin/chats', { params })
 export const getAdminChatDetail = (userId: number, sessionId: string) =>
   request.get(`/admin/chats/${userId}/${encodeURIComponent(sessionId)}`)
-export const getChatAuditLogs = (params?: { page?: number; pageSize?: number }) =>
+export const getChatAuditLogs = (params?: { page?: number; pageSize?: number; targetUserId?: number; sessionId?: string }) =>
   request.get('/admin/chat-audit-logs', { params })
 // 审查处置：禁言/封禁会话归属账号（实时生效，封禁强制踢线）、删除违规会话
 export const restrictChatUser = (userId: number, sessionId: string, data: { action: 'mute' | 'ban'; duration?: string }) =>
