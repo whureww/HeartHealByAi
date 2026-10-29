@@ -1,7 +1,11 @@
 {
   "name": "xin-yu-frontend",
   "private": true,
-  "version": "0.7.2",
+<<<<<<< HEAD
+  "version": "0.7.3",
+=======
+  "version": "0.7.3",
+>>>>>>> e1a69c2 (fix(tray): 菜单栏托盘图标缩小——图形缩至 32px 画布 70% 并留透明边距（crate 显示高固定 18pt，满幅方图撑满显大），可见约 12~13pt；版本号统一 0.7.3（六处）)
   "type": "module",
   "scripts": {
     "dev": "vite",

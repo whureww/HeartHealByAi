@@ -1,12 +1,20 @@
 ; ============================================================
-; 心愈 XinYu 0.7.2 —— Inno Setup 7 安装包脚本
+<<<<<<< HEAD
+; 心愈 XinYu 0.7.3 —— Inno Setup 7 安装包脚本
+=======
+; 心愈 XinYu 0.7.3 —— Inno Setup 7 安装包脚本
+>>>>>>> e1a69c2 (fix(tray): 菜单栏托盘图标缩小——图形缩至 32px 画布 70% 并留透明边距（crate 显示高固定 18pt，满幅方图撑满显大），可见约 12~13pt；版本号统一 0.7.3（六处）)
 ; 机器级安装（默认 Program Files，UAC 提权；无管理员权限时可在向导中切换为仅当前用户安装）
 ; 打包命令: ISCC.exe D:\AIHeartHealProject\frontend\src-tauri\windows\xinyu.iss
 ; ============================================================
 
 #define MyAppName "心愈"
 #define MyAppNameEn "XinYu"
-#define MyAppVersion "0.7.2"
+<<<<<<< HEAD
+#define MyAppVersion "0.7.3"
+=======
+#define MyAppVersion "0.7.3"
+>>>>>>> e1a69c2 (fix(tray): 菜单栏托盘图标缩小——图形缩至 32px 画布 70% 并留透明边距（crate 显示高固定 18pt，满幅方图撑满显大），可见约 12~13pt；版本号统一 0.7.3（六处）)
 #define MyAppPublisher "XinYu"
 #define MyAppExeName "心愈.exe"
 #define MyAppRoot "D:\AIHeartHealProject\frontend\src-tauri"
