@@ -532,12 +532,16 @@ fn badge_image(n: usize) -> Option<tauri::image::Image<'static>> {
     Some(img)
 }
 
-/// macOS 菜单栏状态图标按约 22pt 显示：内置角标图为 32×32，直接使用会撑高菜单栏，
-/// 这里统一缩放到 22×22（Retina 下由系统放大，视觉可接受）
+/// macOS 菜单栏托盘图标适配：tray-icon 0.24 会把状态图标显示高度固定为 18pt，
+/// 内置角标图（32×32）与应用图标（512×512）都是满幅方形，缩放后仍撑满 18pt 框，
+/// 菜单栏里看着比系统原生图标（约 16pt 线形图标）大一圈。
+/// 这里把图形缩到画布约 70% 并居中，四周留透明边距，使可见尺寸约 12~13pt，
+/// 同时用 32px 画布作为 Retina 位图后备，避免 18pt 显示时被系统放大发糊。
 #[cfg(target_os = "macos")]
 fn resize_for_menu_bar(img: &tauri::image::Image<'_>) -> Option<tauri::image::Image<'static>> {
-    use image::{imageops, ImageBuffer, Rgba};
-    const MENU_BAR_SIZE: u32 = 22;
+    use image::{imageops, DynamicImage, ImageBuffer, Rgba};
+    const CANVAS: u32 = 32; // backing pixels（显示高度由 crate 固定为 18pt）
+    const CONTENT_FRAC: f64 = 0.7; // 图形占画布比例，留出透明边距
     let w = img.width() as u32;
     let h = img.height() as u32;
     let rgba = img.rgba();
@@ -545,11 +549,16 @@ fn resize_for_menu_bar(img: &tauri::image::Image<'_>) -> Option<tauri::image::Im
         return None;
     }
     let src = ImageBuffer::<Rgba<u8>, &[u8]>::from_raw(w, h, rgba)?;
-    let resized = imageops::resize(&src, MENU_BAR_SIZE, MENU_BAR_SIZE, imageops::FilterType::Lanczos3);
+    let content = ((CANVAS as f64 * CONTENT_FRAC) as u32).max(1);
+    let resized = imageops::resize(&src, content, content, imageops::FilterType::Lanczos3);
+    let offset = ((CANVAS - content) / 2) as i64;
+    let mut canvas = DynamicImage::new_rgba8(CANVAS, CANVAS);
+    imageops::overlay(&mut canvas, &DynamicImage::ImageRgba8(resized), offset, offset);
+    let canvas_rgba = canvas.into_rgba8();
     Some(tauri::image::Image::new_owned(
-        resized.into_raw(),
-        MENU_BAR_SIZE.into(),
-        MENU_BAR_SIZE.into(),
+        canvas_rgba.into_raw(),
+        CANVAS.into(),
+        CANVAS.into(),
     ))
 }
 
