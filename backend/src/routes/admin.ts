@@ -222,6 +222,113 @@ router.post('/tests', authenticate, requireAdmin, asyncHandler(async (req: Reque
     res.json({ success: true, message: '问卷创建成功，默认未上架', data: { id: testId } });
 }));
 
+// 题目校验规整（与专家端 normalizeTestQuestions 同规则：题干必填、每题至少 2 个选项、question_number 服务端重排）
+const normalizeAdminTestQuestions = (questions: any): { ok: boolean; data: any[]; message?: string } => {
+    const list = Array.isArray(questions)
+        ? questions.map((q: any, i: number) => {
+            const content = String(q?.content || '').trim();
+            const options = (Array.isArray(q?.options) ? q.options : [])
+                .map((o: any) => ({ score: Number(o?.score) || 0, text: String(o?.text || '').trim() }))
+                .filter((o: any) => o.text);
+            return {
+                question_number: i + 1,
+                content,
+                dimension: String(q?.dimension || ''),
+                reverse_scoring: q?.reverse_scoring ? 1 : 0,
+                options
+            };
+        })
+        : [];
+
+    if (list.length === 0) {
+        return { ok: false, data: [], message: '请至少添加一道题目' };
+    }
+    if (list.some((q: any) => !q.content || q.options.length < 2)) {
+        return { ok: false, data: [], message: '每道题目需填写题干，且至少 2 个选项' };
+    }
+    return { ok: true, data: list };
+};
+
+// 问卷详情（含全部题目与选项：审核/编辑回填用，完整展示问卷内容）
+router.get('/tests/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const testId = parseInt(req.params.id);
+    if (isNaN(testId)) {
+        throw new BusinessError('无效的问卷ID', 400);
+    }
+
+    const [rows] = await pool.execute('SELECT * FROM psychological_tests WHERE id = ?', [testId]);
+    const test = (rows as any[])[0];
+    if (!test) {
+        throw new BusinessError('问卷不存在', 404);
+    }
+
+    const [qRows] = await pool.execute(
+        `SELECT id, question_number, content, dimension, reverse_scoring, options
+         FROM test_questions WHERE test_id = ? ORDER BY question_number ASC`,
+        [testId]
+    );
+    const questions = (qRows as any[]).map((q: any) => ({
+        id: q.id,
+        question_number: q.question_number,
+        content: q.content,
+        dimension: q.dimension || '',
+        reverse_scoring: !!q.reverse_scoring,
+        options: JSON.parse(q.options || '[]')
+    }));
+
+    res.json({ success: true, data: { ...test, questions } });
+}));
+
+// 编辑问卷（整卷更新：基本信息 + 结果等级 + 题目全量替换；AI-GEN 由系统维护不允许编辑）
+router.put('/tests/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const testId = parseInt(req.params.id);
+    if (isNaN(testId)) {
+        throw new BusinessError('无效的问卷ID', 400);
+    }
+
+    const [rows] = await pool.execute('SELECT code FROM psychological_tests WHERE id = ?', [testId]);
+    if ((rows as any[]).length === 0) {
+        throw new BusinessError('问卷不存在', 404);
+    }
+    if (((rows as any[])[0]?.code || '') === 'AI-GEN') {
+        throw new BusinessError('AI 智能测评由系统自动维护，不允许编辑', 403);
+    }
+
+    const { name, description, category, estimated_minutes, scoring_method, result_levels, questions } = req.body || {};
+    if (!name || !String(name).trim()) {
+        throw new BusinessError('问卷名称不能为空', 400);
+    }
+    const norm = normalizeAdminTestQuestions(questions);
+    if (!norm.ok) {
+        throw new BusinessError(norm.message!, 400);
+    }
+
+    await pool.execute(
+        `UPDATE psychological_tests
+         SET name = ?, description = ?, category = ?, total_questions = ?, estimated_minutes = ?, scoring_method = ?, result_levels = ?
+         WHERE id = ?`,
+        [
+            String(name).trim(), String(description || ''), String(category || 'emotion'),
+            norm.data.length, Number(estimated_minutes) || 5,
+            String(scoring_method || 'sum'),
+            JSON.stringify(Array.isArray(result_levels) ? result_levels : []),
+            testId
+        ]
+    );
+
+    await pool.execute('DELETE FROM test_questions WHERE test_id = ?', [testId]);
+    for (const q of norm.data) {
+        await pool.execute(
+            `INSERT INTO test_questions
+             (test_id, question_number, content, dimension, reverse_scoring, options)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [testId, q.question_number, q.content, q.dimension, q.reverse_scoring, JSON.stringify(q.options)]
+        );
+    }
+
+    res.json({ success: true, message: '问卷已更新' });
+}));
+
 // 设置问卷状态（上架 / 下架）
 router.put('/tests/:id/status', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const testId = parseInt(req.params.id);

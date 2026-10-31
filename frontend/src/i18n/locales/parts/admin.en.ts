@@ -456,6 +456,7 @@ export default {
       errCodeName: 'Please fill in the test code and name',
       errNeedQuestion: 'Please add at least one question',
       created: 'Test created, pending review',
+      updated: 'Test updated',
       saveFailed: 'Failed to save'
     }
   }

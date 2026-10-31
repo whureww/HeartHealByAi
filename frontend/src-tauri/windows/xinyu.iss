@@ -6,7 +6,7 @@
 
 #define MyAppName "心愈"
 #define MyAppNameEn "XinYu"
-#define MyAppVersion "0.7.4"
+#define MyAppVersion "0.7.5"
 #define MyAppPublisher "XinYu"
 #define MyAppExeName "心愈.exe"
 #define MyAppRoot "D:\AIHeartHealProject\frontend\src-tauri"

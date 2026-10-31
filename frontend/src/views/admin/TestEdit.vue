@@ -181,7 +181,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { createTest } from '@/api/admin'
+import { createTest, getTestDetail, updateTest } from '@/api/admin'
 import { createMyTest, getMyTestDetail, updateMyTest, getTestTemplates, getTestTemplatePresets, saveTestTemplate, deleteTestTemplate } from '@/api/expert'
 import { alert, confirm, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
@@ -422,8 +422,14 @@ const submit = async () => {
       if (isEmbedded) emit('saved')
       else router.push('/expert/my-tests')
     } else {
-      await createTest(form.value)
-      await success(t('admin.test.created'))
+      // 管理员：编辑态走整卷更新接口（不再误建重复问卷），新建走创建接口
+      if (isEdit.value && effectiveId.value != null) {
+        await updateTest(effectiveId.value, form.value)
+        await success(t('admin.test.updated'))
+      } else {
+        await createTest(form.value)
+        await success(t('admin.test.created'))
+      }
       router.push('/admin/tests')
     }
   } catch (e: any) {
@@ -433,30 +439,44 @@ const submit = async () => {
   }
 }
 
+// 编辑回填：把问卷详情（含全部题目选项）填充进表单，管理员与专家共用
+const fillForm = (test: any) => {
+  form.value = {
+    code: test.code || '',
+    name: test.name || '',
+    description: test.description || '',
+    category: test.category || 'emotion',
+    total_questions: test.total_questions || 0,
+    estimated_minutes: test.estimated_minutes || 5,
+    scoring_method: test.scoring_method || 'sum',
+    result_levels: test.result_levels ? (Array.isArray(test.result_levels) ? test.result_levels : JSON.parse(test.result_levels)) : [],
+    questions: (test.questions || []).map((q: any) => ({
+      question_number: q.question_number,
+      content: q.content || '',
+      dimension: q.dimension || '',
+      reverse_scoring: !!q.reverse_scoring,
+      options: (q.options || []).map((o: any) => ({ score: Number(o.score) || 0, text: o.text || '' }))
+    }))
+  }
+}
+
 // 专家编辑回填：拉取自己的待审核问卷详情填充表单
 const loadExpertTest = async () => {
   try {
     const res: any = await getMyTestDetail(effectiveId.value as number)
-    const test = res.data
-    form.value = {
-      code: test.code || '',
-      name: test.name || '',
-      description: test.description || '',
-      category: test.category || 'emotion',
-      total_questions: test.total_questions || 0,
-      estimated_minutes: test.estimated_minutes || 5,
-      scoring_method: test.scoring_method || 'sum',
-      result_levels: test.result_levels ? JSON.parse(test.result_levels) : [],
-      questions: (test.questions || []).map((q: any) => ({
-        question_number: q.question_number,
-        content: q.content || '',
-        dimension: q.dimension || '',
-        reverse_scoring: !!q.reverse_scoring,
-        options: (q.options || []).map((o: any) => ({ score: Number(o.score) || 0, text: o.text || '' }))
-      }))
-    }
+    fillForm(res.data)
   } catch (e: any) {
     await error(e.message || t('expert.myTests.loadDetailFailed'))
+  }
+}
+
+// 管理员编辑/审核回填：拉取问卷完整详情（题目、选项、分级全部展示）
+const loadAdminTest = async () => {
+  try {
+    const res: any = await getTestDetail(effectiveId.value as number)
+    fillForm(res.data)
+  } catch (e: any) {
+    await error(e.message || t('admin.test.loadFailed'))
   }
 }
 
@@ -465,6 +485,8 @@ onMounted(() => {
     isEdit.value = true
     if (isExpert) {
       loadExpertTest()
+    } else {
+      loadAdminTest()
     }
   }
   // 专家模式：加载私人模板列表（套用/删除用）

@@ -456,6 +456,7 @@ export default {
       errCodeName: '请填写问卷编码和名称',
       errNeedQuestion: '请至少添加一道题目',
       created: '问卷创建成功，等待审核',
+      updated: '问卷已更新',
       saveFailed: '保存失败'
     }
   }
