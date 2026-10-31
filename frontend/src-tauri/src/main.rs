@@ -1059,8 +1059,27 @@ fn download_update_blocking(app: tauri::AppHandle, download_url: String) -> Resu
         let _ = std::fs::remove_file(&partial_path);
         return Err("下载内容异常（体积过小），已放弃安装".into());
     }
+    // 完整性校验一：字节数与服务器声明不一致 = 传输被截断（连接优雅断开时 read 返回 Ok(0)，
+    // 若不校验会把半截安装包当完整文件保存，安装时报「16 位应用程序」错误）
+    if total > 0 && received != total {
+        let _ = std::fs::remove_file(&partial_path);
+        return Err(format!("下载不完整（{}/{} 字节），请重新下载", received, total));
+    }
 
     drop(file);
+    // 完整性校验二：Windows PE 文件必须以 MZ 头开始，损坏/被篡改的文件在此拦截
+    let mut head = [0u8; 2];
+    let head_ok = std::fs::File::open(&partial_path)
+        .and_then(|mut f| std::io::Read::read_exact(&mut f, &mut head))
+        .is_ok()
+        && head == [0x4D, 0x5A];
+    if !head_ok {
+        let _ = std::fs::remove_file(&partial_path);
+        return Err("下载内容异常（非有效的安装包文件），已放弃安装".into());
+    }
+
+    // Windows 的 rename 不覆盖已存在文件：先清掉旧残留（如上次损坏的包）再落盘
+    let _ = std::fs::remove_file(&path);
     std::fs::rename(&partial_path, &path).map_err(|e| format!("保存安装包失败: {e}"))?;
     let _ = app.emit("update-progress", serde_json::json!({
         "received": received,
@@ -1107,6 +1126,16 @@ fn install_update(app: tauri::AppHandle, installer_path: String) -> Result<(), S
     let path = std::path::PathBuf::from(&installer_path);
     if !path.exists() || !INSTALLER_SUFFIXES.iter().any(|s| path.to_string_lossy().ends_with(s)) {
         return Err("安装包无效".into());
+    }
+    // 兜底校验：防止历史版本下载的损坏残留包进入安装（PE 文件必以 MZ 头开始）
+    let mut head = [0u8; 2];
+    let head_ok = std::fs::File::open(&path)
+        .and_then(|mut f| std::io::Read::read_exact(&mut f, &mut head))
+        .is_ok()
+        && head == [0x4D, 0x5A];
+    if !head_ok {
+        let _ = std::fs::remove_file(&path);
+        return Err("安装包文件已损坏，请删除后重新下载更新".into());
     }
 
     // Windows：静默安装——/VERYSILENT 免向导、/SUPPRESSMSGBOXES 免弹窗、
