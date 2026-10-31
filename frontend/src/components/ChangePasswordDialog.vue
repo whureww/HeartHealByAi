@@ -13,19 +13,10 @@
         </div>
 
         <div class="dialog-body">
-          <!-- 步骤1：验证邮箱 -->
+          <!-- 步骤1：验证码发送至当前登录账号邮箱（不允许指定其他邮箱，防止越权重置） -->
           <div v-if="step === 1" class="step-content">
             <div class="form-group">
-              <label>{{ $t('ui.changePwd.emailLabel') }}</label>
-              <input
-                v-model="form.email"
-                type="email"
-                :placeholder="$t('ui.changePwd.emailPlaceholder')"
-                :disabled="isLoading"
-              />
-            </div>
-            <div class="form-group">
-              <label>{{ $t('common.code') }}</label>
+              <label>{{ $t('ui.changePwd.codeSentTo', { email: accountEmail || '-' }) }}</label>
               <div class="code-row">
                 <input
                   v-model="form.code"
@@ -36,7 +27,7 @@
                 />
                 <button
                   class="btn-code"
-                  :disabled="codeCountdown > 0 || isLoading || !form.email"
+                  :disabled="codeCountdown > 0 || isLoading || !accountEmail"
                   @click="sendCode"
                 >
                   {{ codeCountdown > 0 ? $t('common.resendIn', { sec: codeCountdown }) : $t('ui.changePwd.getCode') }}
@@ -99,10 +90,12 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { sendResetCode, resetPassword } from '@/api/user'
+import { useUserStore } from '@/stores/user'
 import { alert, success, error } from '@/utils/dialog'
 import AppIcon from '@/components/AppIcon.vue'
 
 const { t } = useI18n()
+const userStore = useUserStore()
 
 const visible = ref(false)
 const step = ref(1)
@@ -110,8 +103,13 @@ const isLoading = ref(false)
 const codeCountdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
+// 验证码固定发送至当前登录账号邮箱：不允许自行填写其他邮箱，
+// 杜绝「在个人中心用他人邮箱重置密码」的越权入口
+const accountEmail = computed(() => {
+  return userStore.userInfo?.email || localStorage.getItem('accountEmail') || ''
+})
+
 const form = ref({
-  email: '',
   code: '',
   newPassword: '',
   confirmPassword: ''
@@ -119,7 +117,7 @@ const form = ref({
 
 const canSubmit = computed(() => {
   return (
-    form.value.email &&
+    accountEmail.value &&
     form.value.code &&
     form.value.newPassword &&
     form.value.confirmPassword &&
@@ -130,7 +128,7 @@ const canSubmit = computed(() => {
 
 const show = () => {
   step.value = 1
-  form.value = { email: '', code: '', newPassword: '', confirmPassword: '' }
+  form.value = { code: '', newPassword: '', confirmPassword: '' }
   codeCountdown.value = 0
   if (countdownTimer) {
     clearInterval(countdownTimer)
@@ -148,20 +146,11 @@ const hide = () => {
 }
 
 const sendCode = async () => {
-  if (!form.value.email) {
-    await alert(t('ui.changePwd.emailRequired'))
-    return
-  }
-
-  const emailRegex = /^[^\\s@]+@[^\\s@]+\.[^\\s@]+$/
-  if (!emailRegex.test(form.value.email)) {
-    await alert(t('ui.changePwd.emailInvalid'))
-    return
-  }
+  if (!accountEmail.value) return
 
   isLoading.value = true
   try {
-    await sendResetCode({ email: form.value.email })
+    await sendResetCode({ email: accountEmail.value })
     await success(t('ui.changePwd.codeSent'))
     codeCountdown.value = 60
     countdownTimer = setInterval(() => {
@@ -189,7 +178,7 @@ const onSubmit = async () => {
   isLoading.value = true
   try {
     await resetPassword({
-      email: form.value.email,
+      email: accountEmail.value,
       code: form.value.code,
       newPassword: form.value.newPassword
     })

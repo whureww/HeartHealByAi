@@ -92,8 +92,15 @@ const unlock = async () => {
       return
     }
 
-    // 1) 当前账户密码验证：锁定时旧 token 已被注销，密码正确即重新登录换取新 token
-    const rel = await userStore.login({ email, password: pwd })
+    // 1) 当前账户密码验证：锁定时旧 token 已被注销，密码正确即重新登录换取新 token。
+    //    密码错误时 axios 拦截器会 reject（401 是业务结果），必须就地吞掉，
+    //    否则异常直接跳到外层 catch 显示「网络异常」，万能钥匙永远走不到
+    let rel: { success?: boolean } | null = null
+    try {
+      rel = await userStore.login({ email, password: pwd })
+    } catch {
+      rel = null
+    }
     if (rel?.success) {
       clearLockFlag()
       password.value = ''

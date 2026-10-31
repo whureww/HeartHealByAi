@@ -239,7 +239,9 @@ export default {
     },
     notifyTest: {
       title: 'XinYu Reminder',
-      body: 'This is a test system notification — you will also see it in the notification center while the window is minimized'
+      body: 'This is a test system notification — you will also see it in the notification center while the window is minimized',
+      sentTitle: 'Test notification sent',
+      sentBody: 'System notification sent — check the Windows notification center; an in-app toast is used as the fallback channel'
     },
     update: {
       cancel: 'Cancel',

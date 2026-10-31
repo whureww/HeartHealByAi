@@ -9,8 +9,7 @@ export default {
     },
     changePwd: {
       title: 'Change Password',
-      emailLabel: 'Email Address',
-      emailPlaceholder: 'Enter your registered email',
+      codeSentTo: 'Code will be sent to your account email: {email}',
       codePlaceholder: 'Enter verification code',
       getCode: 'Get Code',
       newPwdLabel: 'New Password',
@@ -20,8 +19,6 @@ export default {
       successTitle: 'Password Changed',
       successMsg: 'Please sign in again with your new password',
       submit: 'Confirm Change',
-      emailRequired: 'Please enter your email address',
-      emailInvalid: 'Please enter a valid email address',
       codeSent: 'Verification code sent, please check your email',
       sendCodeFailed: 'Failed to send verification code',
       pwdMismatch: 'Passwords do not match',

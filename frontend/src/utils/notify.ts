@@ -45,7 +45,7 @@ export function shouldNotify(important = false): boolean {
 }
 
 /** 发送真实系统通知；成功返回 true，失败/不支持返回 false（调用方降级到应用内 toast） */
-async function sendSystemNotification(title: string, body: string): Promise<boolean> {
+export async function sendSystemNotification(title: string, body: string): Promise<boolean> {
   try {
     if (isTauri()) {
       const plugin = await import('@tauri-apps/plugin-notification')
@@ -83,8 +83,8 @@ function ensureHost(): HTMLElement {
   return host
 }
 
-/** 应用内轻提示：右下角浮出 4s 自动消失（降级通道） */
-function inAppToast(title: string, body: string) {
+/** 应用内轻提示：右下角浮出 4s 自动消失（降级通道，测试通知等场景直接复用） */
+export function inAppToast(title: string, body: string) {
   const el = document.createElement('div')
   el.className = 'xinyu-toast'
 

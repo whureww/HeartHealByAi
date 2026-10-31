@@ -239,7 +239,9 @@ export default {
     },
     notifyTest: {
       title: '心愈提醒',
-      body: '这是一条测试系统通知——窗口最小化时你也能在通知中心看到它'
+      body: '这是一条测试系统通知——窗口最小化时你也能在通知中心看到它',
+      sentTitle: '测试通知已发送',
+      sentBody: '已发送系统通知，请查看 Windows 通知中心；若系统不显示，应用内提示会作为替代通道'
     },
     update: {
       cancel: '取消',

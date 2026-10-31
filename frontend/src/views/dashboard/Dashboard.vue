@@ -808,7 +808,7 @@ import ChangePasswordDialog from "../../components/ChangePasswordDialog.vue"
 import ModelSettingsDialog from "../../components/ModelSettingsDialog.vue"
 import EditProfileDialog from "../../components/EditProfileDialog.vue"
 import AppIcon from '@/components/AppIcon.vue'
-import { showToast } from '@/utils/notify'
+import { showToast, playChime, sendSystemNotification, inAppToast } from '@/utils/notify'
 import { bindChatNotification, registerChatOpener } from '@/utils/taskbar'
 import { checkUpdate, downloadUpdate, cancelDownload, installUpdate, onUpdateProgress, hasRemindedUpdate, markUpdateReminded, type UpdateInfo, type UpdatePhase, type DownloadProgress } from '@/utils/updater'
 import { isTauri } from '@/utils/secureStore'
@@ -1293,9 +1293,20 @@ const disconnectSocket = () => {
   }
 }
 
-// 发送一条真实系统通知，验证通知中心效果
-const sendTestNotification = () => {
-  showToast(t('dashboard.notifyTest.title'), t('dashboard.notifyTest.body'), true)
+// 发送一条真实系统通知，验证通知中心效果。
+// 绕过提醒开关与去重（这是用户的显式点击，必须永远有可见反馈）：
+// 系统通知发送成功 → 应用内回执引导查看通知中心；
+// 发送失败/不可用 → 直接把测试内容以应用内提示展示，杜绝「点了没反应」
+const sendTestNotification = async () => {
+  playChime()
+  const title = t('dashboard.notifyTest.title')
+  const body = t('dashboard.notifyTest.body')
+  const sent = await sendSystemNotification(title, body)
+  if (sent) {
+    inAppToast(t('dashboard.notifyTest.sentTitle'), t('dashboard.notifyTest.sentBody'))
+  } else {
+    inAppToast(title, body)
+  }
 }
 
 // 显示修改密码弹窗

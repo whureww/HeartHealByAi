@@ -9,8 +9,7 @@ export default {
     },
     changePwd: {
       title: '修改密码',
-      emailLabel: '邮箱地址',
-      emailPlaceholder: '请输入注册邮箱',
+      codeSentTo: '验证码将发送至当前账号邮箱：{email}',
       codePlaceholder: '请输入验证码',
       getCode: '获取验证码',
       newPwdLabel: '新密码',
@@ -20,8 +19,6 @@ export default {
       successTitle: '密码修改成功',
       successMsg: '请使用新密码重新登录',
       submit: '确认修改',
-      emailRequired: '请输入邮箱地址',
-      emailInvalid: '请输入有效的邮箱地址',
       codeSent: '验证码已发送，请查收邮件',
       sendCodeFailed: '发送验证码失败',
       pwdMismatch: '两次输入的密码不一致',
