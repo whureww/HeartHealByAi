@@ -917,6 +917,7 @@ fn pick_best_release(json: serde_json::Value) -> Option<serde_json::Value> {
         .iter()
         .find(|(rel, _)| find_installer_asset(rel).is_some())
         .unwrap_or(&candidates[0])
+        .0
         .clone();
     Some(best)
 }
