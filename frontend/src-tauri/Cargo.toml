@@ -5,6 +5,11 @@ description = "心愈 · 心理健康服务平台桌面端"
 authors = ["you"]
 edition = "2021"
 
+# 生产构建必须启用：tauri 以此特性切换为内嵌前端资源（frontendDist），
+# 缺失时运行时会去连 devUrl（http://localhost:5173）导致「localhost 拒绝连接」
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
