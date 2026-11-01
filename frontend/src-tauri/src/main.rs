@@ -827,9 +827,11 @@ fn tray_popup_open_chat(app: tauri::AppHandle) {
 // ===== 检查更新（Gitee + GitHub 双源容灾） =====
 // 任一源不可达时自动使用另一源；两源均可达时取版本号最高的 release，
 // 其版本高于当前程序版本即标记为新版本可下载更新。
+// Gitee 源不用 /latest 接口——其排序不稳定（实测曾返回旧版 v0.7.4），
+// 改用 releases 列表接口自行取版本号最高的条目。
 
-const GITEE_RELEASES_LATEST: &str =
-    "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases/latest";
+const GITEE_RELEASES_LIST: &str =
+    "https://gitee.com/api/v5/repos/yxpil/aisprithill/releases?page=1&per_page=10&direction=desc";
 const GITHUB_RELEASES_LATEST: &str =
     "https://api.github.com/repos/whureww/HeartHealByAi/releases/latest";
 
@@ -888,7 +890,39 @@ fn find_installer_asset(rel: &serde_json::Value) -> Option<String> {
     None
 }
 
-/// 拉取单个更新源的 latest release；网络失败/响应异常/无 tag 均返回 None（由另一源兜底）
+/// 从数组或单对象响应中挑出该源内最优 release：优先「版本号最高且带安装包附件」，
+/// 均无附件时回退版本号最高条目（Gitee /latest 排序不稳定，列表接口自行取最大版本）
+fn pick_best_release(json: serde_json::Value) -> Option<serde_json::Value> {
+    let list: Vec<serde_json::Value> = match json {
+        serde_json::Value::Array(arr) => arr,
+        v => vec![v],
+    };
+    let mut candidates: Vec<(serde_json::Value, String)> = list
+        .into_iter()
+        .map(|rel| {
+            let ver = tag_version(&rel);
+            (rel, ver)
+        })
+        .filter(|(_, ver)| !ver.is_empty())
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+    candidates.sort_by(|(_, va), (_, vb)| match version_is_newer(va, vb) {
+        Some(true) => std::cmp::Ordering::Less, // va 更新 → 排前
+        Some(false) => std::cmp::Ordering::Greater,
+        None => std::cmp::Ordering::Equal,
+    });
+    let best = candidates
+        .iter()
+        .find(|(rel, _)| find_installer_asset(rel).is_some())
+        .unwrap_or(&candidates[0])
+        .clone();
+    Some(best)
+}
+
+/// 拉取单个更新源；网络失败/响应异常/无 release 均返回 None（由另一源兜底）。
+/// 兼容单对象（/latest）与数组（列表接口）响应，统一挑出源内最优条目
 fn fetch_release(client: &reqwest::blocking::Client, url: &str, label: &str) -> Option<serde_json::Value> {
     let resp = match client
         .get(url)
@@ -913,11 +947,11 @@ fn fetch_release(client: &reqwest::blocking::Client, url: &str, label: &str) -> 
             return None;
         }
     };
-    if json.get("tag_name").is_none() {
+    if !json.is_array() && json.get("tag_name").is_none() {
         eprintln!("[检查更新] {label} 尚未发布任何 Release");
         return None;
     }
-    Some(json)
+    pick_best_release(json)
 }
 
 /// 从 tag 提取版本号：形如 v0.2.1_UpDate → 0.2.1
@@ -942,7 +976,7 @@ fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
 
     // 两源并发查询（总耗时≈单源超时上限，而非两源串行累加）
     let (gitee, github) = std::thread::scope(|s| {
-        let g = s.spawn(|| fetch_release(&client, GITEE_RELEASES_LATEST, "Gitee"));
+        let g = s.spawn(|| fetch_release(&client, GITEE_RELEASES_LIST, "Gitee"));
         let h = s.spawn(|| fetch_release(&client, GITHUB_RELEASES_LATEST, "GitHub"));
         (g.join().ok().flatten(), h.join().ok().flatten())
     });
